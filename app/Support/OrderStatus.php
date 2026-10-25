@@ -39,6 +39,26 @@ final class OrderStatus
         self::CANCELLED         => ['Order cancelled', 'This order was cancelled.'],
     ];
 
+    /** Short labels for staff pages (sellers, sorting center, riders, admins). */
+    public const STAFF_LABELS = [
+        self::PLACED            => 'New',
+        self::PREPARING         => 'Preparing',
+        self::PICKED_UP         => 'Picked up',
+        self::AT_SORTING_CENTER => 'At sorting center',
+        self::ASSIGNED_TO_RIDER => 'Rider assigned',
+        self::OUT_FOR_DELIVERY  => 'Out for delivery',
+        self::DELIVERED         => 'Delivered',
+        self::COMPLETED         => 'Completed',
+        self::DELIVERY_FAILED   => 'Delivery failed',
+        self::RETURNED          => 'Returned to seller',
+        self::CANCELLED         => 'Cancelled',
+    ];
+
+    public static function staffLabel(Order $order): string
+    {
+        return self::STAFF_LABELS[$order->canonical_status] ?? ucfirst($order->status);
+    }
+
     /** Tabs on the buyer "My Orders" screen → canonical states. */
     public const TABS = [
         'to_ship'          => [self::PLACED, self::PREPARING],

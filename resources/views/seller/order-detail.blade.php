@@ -11,7 +11,7 @@
         <div class="card">
             <div class="card-header">
                 <span class="card-title">Order Details</span>
-                <span class="badge badge-{{ $order->status }}">{{ $order->status }}</span>
+                <span class="badge badge-{{ $order->status }}">{{ \App\Support\OrderStatus::staffLabel($order) }}</span>
             </div>
             <div class="card-body">
                 <table>

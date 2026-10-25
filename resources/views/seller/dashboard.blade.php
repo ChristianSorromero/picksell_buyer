@@ -69,7 +69,7 @@
                     <td><a href="/seller/orders/{{ $order->id }}" style="color:var(--coral);font-weight:600;">{{ $order->order_number }}</a></td>
                     <td>{{ $order->buyer->full_name ?? '—' }}</td>
                     <td>₱{{ number_format($order->amount, 2) }}</td>
-                    <td><span class="badge badge-{{ $order->status }}">{{ $order->status }}</span></td>
+                    <td><span class="badge badge-{{ $order->status }}">{{ \App\Support\OrderStatus::staffLabel($order) }}</span></td>
                 </tr>
                 @endforeach
                 </tbody>

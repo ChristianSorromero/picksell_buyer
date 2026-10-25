@@ -31,7 +31,7 @@
                 <td>{{ $order->product_name }}</td>
                 <td>{{ $order->quantity }}</td>
                 <td>₱{{ number_format($order->amount, 2) }}</td>
-                <td><span class="badge badge-{{ $order->status }}">{{ $order->status }}</span></td>
+                <td><span class="badge badge-{{ $order->status }}">{{ \App\Support\OrderStatus::staffLabel($order) }}</span></td>
                 <td style="font-size:0.8rem;color:#888;">{{ $order->created_at->forDisplay()->format('M d, Y') }}</td>
                 <td>
                     <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">

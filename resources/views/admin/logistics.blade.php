@@ -41,7 +41,7 @@
                     </td>
                     <td>{{ $order->seller->business_name ?? $order->seller->full_name ?? '—' }}</td>
                     <td>
-                        <span class="badge badge-{{ $order->status }}">{{ ucfirst($order->status) }}</span>
+                        <span class="badge badge-{{ $order->status }}">{{ \App\Support\OrderStatus::staffLabel($order) }}</span>
                         <div style="font-size:0.72rem;color:#888;margin-top:0.25rem;max-width:180px;">{{ $order->tracking_status ?? 'Received from seller' }}</div>
                     </td>
                     <td>
