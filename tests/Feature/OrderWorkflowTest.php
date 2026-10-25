@@ -162,6 +162,22 @@ class OrderWorkflowTest extends TestCase
             ->assertSee('Ana Reyes')->assertSee('Katipunan Ave')->assertSee('09171234567');
     }
 
+    public function test_unrouted_parcels_reach_the_provider_and_other_providers_are_refused(): void
+    {
+        $order = $this->placeOrder();
+        $order->update(['logistics_id' => null, 'status' => 'shipped', 'tracking_status' => 'Handed over to courier']);
+
+        $this->actingAs($this->logistics)->get('/logistics/parcels')->assertOk()->assertSee($order->order_number);
+        $this->actingAs($this->logistics)->patch("/logistics/parcels/{$order->id}/scan")->assertRedirect();
+        $this->assertSame($this->logistics->id, $order->fresh()->logistics_id);
+
+        $other = $this->user('logistics', 'other-logistics@test.ph', ['delivery_area' => 'Davao', 'provider_type' => 'company']);
+        $this->actingAs($other)->get('/logistics/parcels')->assertOk()
+            ->assertViewHas('orders', fn ($orders) => !$orders->contains('id', $order->id));
+        $this->actingAs($other)->patch("/logistics/parcels/{$order->id}/assign", ['courier_id' => $this->courier->id])->assertForbidden();
+        $this->assertNull($order->fresh()->courier_id);
+    }
+
     public function test_orders_without_a_checkout_address_fall_back_to_the_buyer_profile(): void
     {
         $webBuyer = $this->user('buyer', 'web@test.ph', [

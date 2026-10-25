@@ -13,16 +13,30 @@ use Illuminate\Support\Facades\Mail;
 
 class LogisticsController extends Controller
 {
+    /**
+     * Parcels routed to this provider, plus unrouted ones (placed while no
+     * provider was approved) so nothing is stranded; scanning claims them.
+     */
+    private function parcelQuery()
+    {
+        return Order::where(fn ($q) => $q->where('logistics_id', auth()->id())->orWhereNull('logistics_id'));
+    }
+
+    private function authorizeParcel(Order $order): void
+    {
+        abort_if($order->logistics_id && $order->logistics_id !== auth()->id(), 403, 'This parcel is handled by another logistics provider.');
+    }
+
     public function dashboard()
     {
         $stats = [
             'pending_couriers' => User::where('role', 'courier')->where('status', 'pending')->count(),
             'approved_couriers' => User::where('role', 'courier')->where('status', 'approved')->count(),
-            'to_sort' => Order::where('status', 'shipped')->whereNull('courier_id')->count(),
-            'assigned' => Order::where('status', 'shipped')->whereNotNull('courier_id')->count(),
+            'to_sort' => $this->parcelQuery()->where('status', 'shipped')->whereNull('courier_id')->count(),
+            'assigned' => $this->parcelQuery()->where('status', 'shipped')->whereNotNull('courier_id')->count(),
         ];
 
-        $orders = Order::with(['buyer', 'courier'])->where('logistics_id', auth()->id())->whereIn('status', ['shipped', 'completed'])->latest()->take(10)->get();
+        $orders = $this->parcelQuery()->with(['buyer', 'courier'])->whereIn('status', ['shipped', 'completed'])->latest()->take(10)->get();
         return view('logistics.dashboard', compact('stats', 'orders'));
     }
 
@@ -64,7 +78,7 @@ class LogisticsController extends Controller
     public function parcels(Request $request)
     {
         $status = $request->get('status', 'all');
-        $query = Order::with(['buyer', 'seller', 'courier'])->where('logistics_id', auth()->id())->whereIn('status', ['shipped', 'completed']);
+        $query = $this->parcelQuery()->with(['buyer', 'seller', 'courier'])->whereIn('status', ['shipped', 'completed']);
         if ($status !== 'all') {
             $query->where('status', $status);
         }
@@ -76,8 +90,12 @@ class LogisticsController extends Controller
 
     public function scanParcel(Order $order)
     {
+        $this->authorizeParcel($order);
         OrderStatus::ensure($order, 'scan');
-        $order->update(['tracking_status' => 'Received and scanned at sorting center']);
+        $order->update([
+            'logistics_id'    => $order->logistics_id ?? auth()->id(),
+            'tracking_status' => 'Received and scanned at sorting center',
+        ]);
         return back()->with('success', "Parcel {$order->order_number} scanned.");
     }
 
@@ -85,9 +103,11 @@ class LogisticsController extends Controller
     {
         $data = $request->validate(['courier_id' => 'required|exists:users,id']);
         $courier = User::where('id', $data['courier_id'])->where('role', 'courier')->where('status', 'approved')->firstOrFail();
+        $this->authorizeParcel($order);
         OrderStatus::ensure($order, 'assign');
 
         $order->update([
+            'logistics_id' => $order->logistics_id ?? auth()->id(),
             'courier_id' => $courier->id,
             'tracking_status' => 'Sorted for ' . $order->delivery['area'] . '; assigned to ' . $courier->full_name,
         ]);
