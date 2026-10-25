@@ -63,6 +63,26 @@ class AuthService {
     return _api.send('POST', '/login', body: {'email': email, 'password': password});
   }
 
+  /// Emails a six-digit reset code. The answer is the same whether or not
+  /// the email has an account.
+  Future<ApiResult> forgotPassword({required String email}) =>
+      _api.send('POST', '/password/forgot', body: {'email': email});
+
+  /// Sets a new password with the emailed code; signs out every device.
+  Future<ApiResult> resetPassword({
+    required String email,
+    required String code,
+    required String password,
+    required String passwordConfirmation,
+  }) {
+    return _api.send('POST', '/password/reset', body: {
+      'email': email,
+      'code': code,
+      'password': password,
+      'password_confirmation': passwordConfirmation,
+    });
+  }
+
   /// Revokes the token server-side (best effort) and clears the session.
   Future<void> logout() async {
     await _api.send('POST', '/buyer/logout', body: const {});

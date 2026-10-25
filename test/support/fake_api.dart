@@ -197,6 +197,15 @@ class FakeBuyerApi {
       return _json({'order': orderDetail});
     }
 
+    if (r.method == 'POST' && path == '/password/forgot') {
+      return _json({'message': 'If a PickSell account uses that email, we sent it a six-digit code.', 'expires_in': 300, 'resend_in': 60});
+    }
+    if (r.method == 'POST' && path == '/password/reset') {
+      return body['code'] == '123456'
+          ? _json({'message': 'Your password was changed. Log in with your new password.'})
+          : _json({'message': 'The code is incorrect or has expired. Request a new one.', 'errors': {'code': ['The code is incorrect or has expired. Request a new one.']}}, 422);
+    }
+
     // Return cases: accept → resolved, decline → escalated, reply → back to review.
     final returnStep = RegExp(r'^/buyer/returns/(\d+)/(accept|decline|reply)$').firstMatch(path);
     if (returnStep != null && r.method == 'POST') {

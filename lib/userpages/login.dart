@@ -9,6 +9,7 @@ import '../page_transitions.dart';
 import '../services/auth_service.dart';
 import 'buyer/buyer_shell.dart';
 import 'email_verification_page.dart';
+import 'forgot_password_page.dart';
 import 'register.dart';
 
 class LoginPage extends StatefulWidget {
@@ -161,7 +162,7 @@ class _LoginPageState extends State<LoginPage> {
               textInputAction: TextInputAction.done,
               autofillHints: const [AutofillHints.password],
               labelTrailing: GestureDetector(
-                onTap: () => _comingSoon('Password reset'),
+                onTap: () => Navigator.of(context).push(fadeRoute(ForgotPasswordPage(initialEmail: _emailController.text.trim()))),
                 behavior: HitTestBehavior.opaque,
                 child: Text('Forgot password?', style: PsText.link.copyWith(fontSize: 13)),
               ),
