@@ -9,8 +9,8 @@ import '../app_assets.dart';
 import '../app_colors.dart';
 import '../page_transitions.dart';
 import '../services/auth_service.dart';
-import '../widgets/placeholder_image.dart';
-import 'buyer_dashboard.dart';
+import '../components/shared/placeholder_image.dart';
+import 'buyer/buyer_shell.dart';
 import 'landing_page1.dart';
 
 class SplashPage extends StatefulWidget {

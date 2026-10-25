@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'app_colors.dart';
+import 'core/theme/ps_theme.dart';
 import 'userpages/splash_page.dart';
 
 void main() {
@@ -15,14 +15,7 @@ class PickSellApp extends StatelessWidget {
     return MaterialApp(
       title: 'PickSell',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: AppColors.background,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.primary,
-          primary: AppColors.primary,
-        ),
-      ),
+      theme: PsTheme.light,
       home: const SplashPage(),
     );
   }

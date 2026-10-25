@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_assets.dart';
-import '../app_colors.dart';
-import '../app_text_styles.dart';
+import '../components/components.dart';
+import '../components/shared/auth/register_prompt.dart';
+import '../components/shared/auth/social_button.dart';
 import '../page_transitions.dart';
 import '../services/auth_service.dart';
-import '../widgets/primary_button.dart';
-import '../widgets/register_prompt.dart';
-import '../widgets/social_button.dart';
-import 'buyer_dashboard.dart';
+import 'buyer/buyer_shell.dart';
+import 'email_verification_page.dart';
 import 'register.dart';
 
 class LoginPage extends StatefulWidget {
@@ -21,225 +21,174 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
-  bool _isLoading = false;
+  final _passwordFocus = FocusNode();
   final _authService = AuthService();
   final _session = SessionManager();
+
+  bool _isLoading = false;
+  String? _emailError;
+  String? _passwordError;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
-  void _comingSoon(String what) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('$what coming soon')));
-  }
+  void _comingSoon(String what) => PsToast.show(context, '$what coming soon');
 
   Future<void> _login() async {
+    if (_isLoading) return;
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
-    if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('Please enter email and password')));
-      return;
-    }
+    setState(() {
+      _emailError = PsValidators.email(email);
+      _passwordError = password.isEmpty ? 'Password is required.' : null;
+    });
+    if (_emailError != null || _passwordError != null) return;
 
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _isLoading = true);
-
     final result = await _authService.login(email: email, password: password);
-
     if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (!result.success) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(result.message)));
+      await _handleLoginError(result);
       return;
     }
 
-    final user = result.data?['user'] as Map<String, dynamic>?;
-    final token = result.data?['token'] as String?;
-    if (user != null && token != null) {
-      await _session.save(
-        token: token,
-        userId: user['id'] as int,
-        name: user['name']?.toString() ?? '',
-        email: user['email']?.toString() ?? '',
+    final user = result.data?['user'];
+    final token = result.data?['token'];
+    // Never enter the shell without a credential to send.
+    if (user is! Map<String, dynamic> || user['id'] is! int || token is! String || token.isEmpty) {
+      await PsDialog.error(
+        context,
+        title: 'Couldn’t log you in',
+        message: 'Unexpected server response. Please try again.',
       );
+      return;
     }
+    await _session.save(
+      token: token,
+      userId: user['id'] as int,
+      name: user['name']?.toString() ?? '',
+      email: user['email']?.toString() ?? '',
+    );
 
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(fadeRoute(const BuyerDashboardPage()), (_) => false);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      resizeToAvoidBottomInset: true,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-                    const SizedBox(height: 32),
-                    // Replace with your logo (AppAssets.logo).
-                    const Center(
-                      child: Image(
-                        image: AssetImage(AppAssets.logo),
-                        height: 72,
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Welcome Back!',
-                      textAlign: TextAlign.center,
-                      style: AppTextStyles.heading.copyWith(fontSize: 24),
-                    ),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 240),
-                        child: Text(
-                          'Log in to continue shopping and manage your orders.',
-                          textAlign: TextAlign.center,
-                          style: AppTextStyles.small,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-                    Text('EMAIL ADDRESS', style: AppTextStyles.fieldLabel),
-                    const SizedBox(height: 8),
-                    _InputField(
-                      controller: _emailController,
-                      hint: 'name@example.com',
-                      icon: Icons.mail_rounded,
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        Text('PASSWORD', style: AppTextStyles.fieldLabel),
-                        const Spacer(),
-                        GestureDetector(
-                          onTap: () => _comingSoon('Password reset'),
-                          behavior: HitTestBehavior.opaque,
-                          child: Text(
-                            'Forgot Password?',
-                            style: AppTextStyles.linkSmall,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    _InputField(
-                      controller: _passwordController,
-                      hint: '••••••••••••',
-                      icon: Icons.lock_rounded,
-                      obscureText: _obscurePassword,
-                      suffix: IconButton(
-                        splashRadius: 18,
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                          size: 18,
-                          color: AppColors.textHint,
-                        ),
-                        onPressed: () => setState(
-                          () => _obscurePassword = !_obscurePassword,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 22),
-                    PrimaryButton(
-                      label: 'Login',
-                      showArrow: true,
-                      elevated: true,
-                      onPressed: _isLoading ? null : _login,
-                    ),
-                    const SizedBox(height: 22),
-                    const OrContinueWith(),
-                    const SizedBox(height: 16),
-                    SocialButton.google(
-                      label: 'Continue with Google',
-                      onPressed: () => _comingSoon('Google sign-in'),
-                    ),
-                    const SizedBox(height: 12),
-                    SocialButton.facebook(
-                      label: 'Continue with Facebook',
-                      onPressed: () => _comingSoon('Facebook sign-in'),
-                    ),
-                    const SizedBox(height: 24),
-                    RegisterPrompt(
-                      onRegister: () => Navigator.of(context)
-                          .push(fadeRoute(const RegisterPage())),
-                    ),
-                    const SizedBox(height: 16),
-            ],
-          ),
-        ),
-      ),
+  Future<void> _handleLoginError(ApiResult result) async {
+    final data = result.data ?? const {};
+
+    if (data['needs_verification'] == true) {
+      PsToast.show(context, result.message);
+      Navigator.of(context).push(fadeRoute(EmailVerificationPage(
+        email: data['email']?.toString() ?? _emailController.text.trim(),
+        maskedEmail: data['masked_email']?.toString(),
+        expiresIn: Duration(seconds: (data['expires_in'] as num?)?.toInt() ?? 0),
+        // Let them resend straight away; the server still enforces its cooldown.
+        resendIn: Duration.zero,
+      )));
+      return;
+    }
+
+    if (result.statusCode == 401) {
+      setState(() => _passwordError = result.message);
+      return;
+    }
+    if (result.statusCode == 422) {
+      setState(() {
+        _emailError = result.fieldError('email');
+        _passwordError = result.fieldError('password');
+      });
+      if (_emailError != null || _passwordError != null) return;
+    }
+
+    await PsDialog.error(
+      context,
+      title: result.isNetworkError ? 'Can’t reach Picksell' : 'Couldn’t log you in',
+      message: result.message,
     );
   }
-}
-
-class _InputField extends StatelessWidget {
-  const _InputField({
-    required this.controller,
-    required this.hint,
-    required this.icon,
-    this.obscureText = false,
-    this.keyboardType,
-    this.suffix,
-  });
-
-  final TextEditingController controller;
-  final String hint;
-  final IconData icon;
-  final bool obscureText;
-  final TextInputType? keyboardType;
-  final Widget? suffix;
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      obscureText: obscureText,
-      keyboardType: keyboardType,
-      style: AppTextStyles.input,
-      cursorColor: AppColors.primary,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: AppTextStyles.hint,
-        filled: true,
-        fillColor: AppColors.inputFill,
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(vertical: 14),
-        prefixIcon: Icon(icon, size: 16, color: AppColors.textSecondary),
-        prefixIconConstraints: const BoxConstraints(minWidth: 44),
-        suffixIcon: suffix,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.2),
+    return AutofillGroup(
+      child: PsAppShell(
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(PsSpace.gutter, PsSpace.xl, PsSpace.gutter, PsSpace.md),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          children: [
+            const Center(
+              child: Image(image: AssetImage(AppAssets.logo), height: 72, fit: BoxFit.contain),
+            ),
+            const SizedBox(height: PsSpace.lg),
+            Text('Welcome back!', textAlign: TextAlign.center, style: PsText.display),
+            const SizedBox(height: PsSpace.xs),
+            Text(
+              'Log in to continue shopping and manage your orders.',
+              textAlign: TextAlign.center,
+              style: PsText.subtitle,
+            ),
+            const SizedBox(height: PsSpace.xl),
+            PsTextField(
+              label: 'Email',
+              hint: 'name@example.com',
+              controller: _emailController,
+              errorText: _emailError,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email, AutofillHints.username],
+              inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
+              onChanged: (_) {
+                if (_emailError != null) setState(() => _emailError = null);
+              },
+              onSubmitted: (_) => _passwordFocus.requestFocus(),
+            ),
+            const SizedBox(height: 22),
+            PsTextField(
+              label: 'Password',
+              hint: 'Enter your password',
+              controller: _passwordController,
+              focusNode: _passwordFocus,
+              obscure: true,
+              errorText: _passwordError,
+              textInputAction: TextInputAction.done,
+              autofillHints: const [AutofillHints.password],
+              labelTrailing: GestureDetector(
+                onTap: () => _comingSoon('Password reset'),
+                behavior: HitTestBehavior.opaque,
+                child: Text('Forgot password?', style: PsText.link.copyWith(fontSize: 13)),
+              ),
+              onChanged: (_) {
+                if (_passwordError != null) setState(() => _passwordError = null);
+              },
+              onSubmitted: (_) => _login(),
+            ),
+            const SizedBox(height: PsSpace.lg),
+            PsPrimaryButton(label: 'Log in', loading: _isLoading, onPressed: _login),
+            const SizedBox(height: PsSpace.lg),
+            const OrContinueWith(),
+            const SizedBox(height: PsSpace.md),
+            SocialButton.google(
+              label: 'Continue with Google',
+              onPressed: () => _comingSoon('Google sign-in'),
+            ),
+            const SizedBox(height: PsSpace.sm),
+            SocialButton.facebook(
+              label: 'Continue with Facebook',
+              onPressed: () => _comingSoon('Facebook sign-in'),
+            ),
+            const SizedBox(height: PsSpace.lg),
+            RegisterPrompt(
+              onRegister: () => Navigator.of(context).push(fadeRoute(const RegisterPage())),
+            ),
+          ],
         ),
       ),
     );

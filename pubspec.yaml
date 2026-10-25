@@ -39,6 +39,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   google_fonts: ^8.1.0
   font_awesome_flutter: ^11.0.0
+  flutter_secure_storage: 9.2.4
 
 dev_dependencies:
   flutter_test:
@@ -49,9 +50,9 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: 'assets/logo/picksell_bg.png'
+  image_path: 'assets/picksell_bg.png'
   adaptive_icon_background: '#000000'
-  adaptive_icon_foreground: 'assets/logo/picksell_bg.png'
+  adaptive_icon_foreground: 'assets/picksell_bg.png'
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -68,7 +69,6 @@ flutter:
   assets:
     - assets/
     - assets/tiles/
-    - assets/logo/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

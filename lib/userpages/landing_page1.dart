@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../app_assets.dart';
 import '../page_transitions.dart';
-import '../widgets/onboarding_template.dart';
-import '../widgets/placeholder_image.dart';
+import '../components/shared/onboarding_template.dart';
+import '../components/shared/placeholder_image.dart';
 import 'landing_page3.dart';
 import 'landing_page2.dart';
 

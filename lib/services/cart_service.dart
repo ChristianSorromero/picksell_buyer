@@ -1,99 +1,85 @@
 import 'package:flutter/foundation.dart';
 
-import '../models/cart_item.dart';
-import '../models/product.dart';
+import '../core/network/api_client.dart';
+import '../models/cart.dart';
+import '../models/catalog.dart';
+import '../models/json.dart';
 
-/// In-memory cart state shared across the app.
-///
-/// This is a plain [ChangeNotifier] singleton so it works without adding a
-/// state-management package. Widgets that need to rebuild on cart changes
-/// should wrap themselves in an `AnimatedBuilder(animation: CartService.instance, ...)`
-/// or `ListenableBuilder`.
-///
-/// When orders/cart are wired up to the backend, this class is the one place
-/// to swap in real persistence (an API call in each method instead of the
-/// in-memory list).
-class CartService extends ChangeNotifier {
-  CartService._();
+/// API-C04 Cart Service. The server owns the cart; this store keeps the
+/// latest priced snapshot and the badge count so every tab stays in sync.
+class CartStore extends ChangeNotifier {
+  CartStore({ApiClient? client}) : _api = client ?? ApiClient.instance;
 
-  static final CartService instance = CartService._();
+  static CartStore instance = CartStore();
 
-  final List<CartItem> _items = [];
+  final ApiClient _api;
 
-  List<CartItem> get items => List.unmodifiable(_items);
+  CartQuote _quote = const CartQuote();
+  int _count = 0;
 
-  bool get isEmpty => _items.isEmpty;
+  CartQuote get quote => _quote;
 
-  /// Total number of units across all items (used for the cart badge).
-  int get itemCount => _items.fold(0, (sum, item) => sum + item.quantity);
+  /// Units in the cart (bottom-nav badge).
+  int get count => _count;
 
-  /// Items grouped by seller, in the order sellers first appeared.
-  Map<String, List<CartItem>> get groupedBySeller {
-    final map = <String, List<CartItem>>{};
-    for (final item in _items) {
-      map.putIfAbsent(item.product.sellerName, () => []).add(item);
+  void _apply(Json j) {
+    _quote = CartQuote.fromJson(mapOrNull(j['cart']));
+    _count = _quote.itemCount;
+    notifyListeners();
+  }
+
+  Future<CartQuote> load() async {
+    _apply(await _api.getJson('/buyer/cart'));
+    return _quote;
+  }
+
+  /// Cheap badge refresh (no pricing).
+  Future<void> refreshCount() async {
+    try {
+      _count = toInt((await _api.getJson('/buyer/cart/count'))['cart_count']);
+      notifyListeners();
+    } on ApiException {
+      // Badge is best-effort; the cart screen shows real errors.
     }
-    return map;
   }
 
-  void addProduct(Product product, int quantity, {String? variant}) {
-    final index = _items.indexWhere(
-      (item) =>
-          item.product.id == product.id && item.selectedVariant == variant,
-    );
-    if (index != -1) {
-      _items[index].quantity += quantity;
-    } else {
-      _items.add(
-        CartItem(product: product, quantity: quantity, selectedVariant: variant),
-      );
-    }
+  /// COM-C10 Add-to-Cart. Returns the new cart line id (used by Buy Now).
+  Future<int> add(Product product, {required int quantity, List<int> variationIds = const []}) async {
+    final j = await _api.postJson('/buyer/cart', {
+      'product_id': product.id,
+      'quantity': quantity,
+      'variation_ids': variationIds,
+    });
+    _count = toInt(j['cart_count'], _count + quantity);
     notifyListeners();
+    return toInt(j['cart_item_id']);
   }
 
-  void removeItem(CartItem item) {
-    _items.remove(item);
+  Future<CartQuote> setQuantity(CartLine line, int quantity) async {
+    _apply(await _api.patchJson('/buyer/cart/${line.id}', {'quantity': quantity}));
+    return _quote;
+  }
+
+  Future<CartQuote> setVariations(CartLine line, List<int> variationIds) async {
+    _apply(await _api.patchJson('/buyer/cart/${line.id}', {'variation_ids': variationIds}));
+    return _quote;
+  }
+
+  Future<CartQuote> remove(CartLine line) async {
+    _apply(await _api.deleteJson('/buyer/cart/${line.id}'));
+    return _quote;
+  }
+
+  Future<CartQuote> removeMany(Iterable<int> lineIds) async {
+    _apply(await _api.deleteJson('/buyer/cart', {'item_ids': lineIds.toList()}));
+    return _quote;
+  }
+
+  /// Called after checkout so the badge reflects removed lines.
+  void reset() {
+    _quote = const CartQuote();
+    _count = 0;
     notifyListeners();
-  }
-
-  void updateQuantity(CartItem item, int quantity) {
-    if (quantity <= 0) {
-      removeItem(item);
-      return;
-    }
-    item.quantity = quantity;
-    notifyListeners();
-  }
-
-  void toggleSelected(CartItem item, bool value) {
-    item.isSelected = value;
-    notifyListeners();
-  }
-
-  void toggleSeller(String sellerName, bool value) {
-    for (final item in _items) {
-      if (item.product.sellerName == sellerName) item.isSelected = value;
-    }
-    notifyListeners();
-  }
-
-  bool isSellerFullySelected(String sellerName) {
-    final sellerItems =
-        _items.where((item) => item.product.sellerName == sellerName);
-    if (sellerItems.isEmpty) return false;
-    return sellerItems.every((item) => item.isSelected);
-  }
-
-  double get selectedSubtotal => _items
-      .where((item) => item.isSelected)
-      .fold(0.0, (sum, item) => sum + item.lineTotal);
-
-  int get selectedCount => _items
-      .where((item) => item.isSelected)
-      .fold(0, (sum, item) => sum + item.quantity);
-
-  void clear() {
-    _items.clear();
-    notifyListeners();
+    refreshCount();
   }
 }

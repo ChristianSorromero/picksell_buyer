@@ -4,10 +4,10 @@ import '../app_assets.dart';
 import '../app_colors.dart';
 import '../app_text_styles.dart';
 import '../page_transitions.dart';
-import '../widgets/placeholder_image.dart';
-import '../widgets/primary_button.dart';
-import '../widgets/register_prompt.dart';
-import '../widgets/social_button.dart';
+import '../components/shared/placeholder_image.dart';
+import '../components/shared/ps_buttons.dart';
+import '../components/shared/auth/register_prompt.dart';
+import '../components/shared/auth/social_button.dart';
 import 'login.dart';
 import 'register.dart';
 
@@ -98,7 +98,7 @@ class LandingPage3 extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 28),
-                        PrimaryButton(
+                        PsPrimaryButton(
                           label: 'Login',
                           onPressed: () => Navigator.of(context)
                               .push(fadeRoute(const LoginPage())),

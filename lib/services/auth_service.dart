@@ -1,174 +1,76 @@
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// -----------------------------------------------------------------------
-/// API CONFIG
-/// -----------------------------------------------------------------------
-/// Central place for the backend base URL. This is the ONLY line you
-/// should need to change when moving between devices/environments.
-class ApiConfig {
-  /// Real Android device + php artisan serve on your PC.
-  ///
-  /// 1. Make sure your phone and PC are on the SAME WiFi network.
-  /// 2. Find your PC's local IP:
-  ///      Windows:  ipconfig            -> look for "IPv4 Address"
-  ///      Mac/Linux: ifconfig | ip addr -> look for "inet 192.168.x.x"
-  /// 3. Start Laravel so it listens on all interfaces, not just localhost:
-  ///      php artisan serve --host=0.0.0.0 --port=8000
-  /// 4. Replace the IP below with YOUR PC's IP (keep the port :8000).
-  static const String baseUrl = 'https://scurvy-scary-bonding.ngrok-free.dev/api';
+import '../core/network/api_client.dart';
+import '../core/network/token_store.dart';
 
-  // Emulator-only shortcuts, kept for reference:
-  //   Android emulator -> 'http://10.0.2.2:8000/api'
-  //   iOS simulator     -> 'http://127.0.0.1:8000/api'
-}
-
-/// Uniform result wrapper so the UI never has to parse raw http.Response
-/// or jsonDecode itself.
-class ApiResult {
-  final bool success;
-  final String message;
-  final Map<String, dynamic>? data;
-  final Map<String, dynamic>? errors; // field-level Laravel validation errors
-
-  ApiResult({
-    required this.success,
-    required this.message,
-    this.data,
-    this.errors,
-  });
-
-  /// Convenience: first validation error message, if any — handy for a
-  /// quick SnackBar without walking the errors map yourself.
-  String? get firstError {
-    if (errors == null || errors!.isEmpty) return null;
-    final firstList = errors!.values.first;
-    if (firstList is List && firstList.isNotEmpty) {
-      return firstList.first.toString();
-    }
-    return firstList.toString();
-  }
-}
+export '../core/network/api_client.dart' show ApiConfig, ApiResult, ApiException;
 
 class AuthService {
+  AuthService({ApiClient? client}) : _api = client ?? ApiClient.instance;
+
+  final ApiClient _api;
+
+  /// Step 2 of buyer registration: is this email / mobile still free?
+  Future<ApiResult> checkContact({
+    required String email,
+    required String contactNo,
+  }) {
+    return _api.send('POST', '/register/check-contact', body: {
+      'email': email,
+      'contact_no': contactNo,
+    });
+  }
+
+  /// Creates a pending buyer account and emails a six-digit code.
+  /// `contactNo` is the local format (09XXXXXXXXX); `birthday` is yyyy-MM-dd.
   Future<ApiResult> register({
     required String firstName,
     required String lastName,
-    String? middleInitial,
-    required String sex,
+    required String birthday,
     required String email,
+    required String contactNo,
     required String password,
     required String passwordConfirmation,
-    required String contactNo,
-    required String birthday,
-    required String province,
-    required String municipality,
-    required String barangay,
-    String? street,
-    String? houseNo,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/register'),
-        headers: {
-          'Accept': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-        },
-        body: {
-          'first_name': firstName,
-          'last_name': lastName,
-          if (middleInitial != null && middleInitial.isNotEmpty)
-            'middle_initial': middleInitial,
-          'sex': sex,
-          'email': email,
-          'password': password,
-          'password_confirmation': passwordConfirmation,
-          'contact_no': contactNo,
-          'birthday': birthday,
-          'province': province,
-          'municipality': municipality,
-          'barangay': barangay,
-          if (street != null && street.isNotEmpty) 'street': street,
-          if (houseNo != null && houseNo.isNotEmpty) 'house_no': houseNo,
-        },
-      );
-      return _parse(response, successCode: 201);
-    } catch (e) {
-      return ApiResult(success: false, message: 'Network error: $e');
-    }
+    required bool acceptedTerms,
+  }) {
+    return _api.send('POST', '/register', body: {
+      'first_name': firstName,
+      'last_name': lastName,
+      'birthday': birthday,
+      'email': email,
+      'contact_no': contactNo,
+      'password': password,
+      'password_confirmation': passwordConfirmation,
+      if (acceptedTerms) 'terms': '1',
+    });
   }
 
+  /// On success `data` holds `token` + `user`, same shape as [login].
+  Future<ApiResult> verifyEmail({required String email, required String code}) {
+    return _api.send('POST', '/register/verify', body: {'email': email, 'code': code});
+  }
+
+  Future<ApiResult> resendCode({required String email}) {
+    return _api.send('POST', '/register/resend', body: {'email': email});
+  }
+
+  /// A 403 with `data['needs_verification'] == true` means the account
+  /// exists but the emailed code was never entered.
   Future<ApiResult> login({
     required String email,
     required String password,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/login'),
-        headers: {
-          'Accept': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-        },
-        body: {'email': email, 'password': password},
-      );
-      return _parse(response, successCode: 200);
-    } catch (e) {
-      return ApiResult(success: false, message: 'Network error: $e');
-    }
+  }) {
+    return _api.send('POST', '/login', body: {'email': email, 'password': password});
   }
 
-  /// Uploads a valid-ID file (jpg/png/pdf) for the given user using
-  /// multipart/form-data, exactly what Laravel's `$request->file(...)`
-  /// expects.
-  Future<ApiResult> uploadId({
-    required int userId,
-    required File file,
-  }) async {
-    try {
-      final uri = Uri.parse('${ApiConfig.baseUrl}/upload-id');
-      final request = http.MultipartRequest('POST', uri)
-        ..headers['Accept'] = 'application/json'
-        ..headers['ngrok-skip-browser-warning'] = 'true'
-        ..fields['user_id'] = userId.toString()
-        ..files.add(await http.MultipartFile.fromPath('id_file', file.path));
-
-      final streamed = await request.send();
-      final response = await http.Response.fromStream(streamed);
-      return _parse(response, successCode: 200);
-    } catch (e) {
-      return ApiResult(success: false, message: 'Network error: $e');
-    }
+  /// Revokes the token server-side (best effort) and clears the session.
+  Future<void> logout() async {
+    await _api.send('POST', '/buyer/logout', body: const {});
+    await SessionManager().clear();
   }
 
-  /// Shared JSON-parsing logic for every endpoint above.
-  ApiResult _parse(http.Response response, {required int successCode}) {
-    Map<String, dynamic> body;
-    try {
-      body = jsonDecode(response.body) as Map<String, dynamic>;
-    } catch (_) {
-      return ApiResult(
-        success: false,
-        message: 'Unexpected server response (${response.statusCode}).',
-      );
-    }
-
-    if (response.statusCode == successCode) {
-      return ApiResult(
-        success: true,
-        message: body['message']?.toString() ?? 'Success',
-        data: body,
-      );
-    }
-
-    return ApiResult(
-      success: false,
-      message: body['message']?.toString() ?? 'Something went wrong.',
-      errors: (body['errors'] as Map?)?.cast<String, dynamic>(),
-    );
-  }
+  /// Terms of Service / Privacy Policy text managed in the admin panel.
+  Future<ApiResult> legal(String document) => _api.send('GET', '/legal/$document');
 }
 
 /// -----------------------------------------------------------------------
@@ -178,20 +80,19 @@ class AuthService {
 /// doesn't have to log in every time they open the app. Swap this out
 /// (e.g. for flutter_secure_storage) later without touching AuthService.
 class SessionManager {
-  static const _kTokenKey = 'auth_token';
   static const _kUserIdKey = 'user_id';
   static const _kUserNameKey = 'user_name';
   static const _kUserEmailKey = 'user_email';
 
   Future<String?> getName() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getString(_kUserNameKey);
-}
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_kUserNameKey);
+  }
 
-Future<String?> getEmail() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getString(_kUserEmailKey);
-}
+  Future<String?> getEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_kUserEmailKey);
+  }
 
   Future<void> save({
     required String token,
@@ -199,17 +100,14 @@ Future<String?> getEmail() async {
     required String name,
     required String email,
   }) async {
+    await TokenStore.write(token);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kTokenKey, token);
     await prefs.setInt(_kUserIdKey, userId);
     await prefs.setString(_kUserNameKey, name);
     await prefs.setString(_kUserEmailKey, email);
   }
 
-  Future<String?> getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_kTokenKey);
-  }
+  Future<String?> getToken() => TokenStore.read();
 
   Future<int?> getUserId() async {
     final prefs = await SharedPreferences.getInstance();
@@ -222,8 +120,8 @@ Future<String?> getEmail() async {
   }
 
   Future<void> clear() async {
+    await TokenStore.clear();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kTokenKey);
     await prefs.remove(_kUserIdKey);
     await prefs.remove(_kUserNameKey);
     await prefs.remove(_kUserEmailKey);

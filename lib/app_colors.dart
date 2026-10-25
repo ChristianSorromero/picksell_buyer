@@ -1,22 +1,24 @@
 import 'package:flutter/material.dart';
 
+import 'core/theme/ps_colors.dart';
+
 /// Single source of truth for every color used in the app.
 class AppColors {
   AppColors._();
 
   // ── Brand ────────────────────────────────────────────────────────────────
-  static const Color primary = Color(0xFFFF4D4F);
-  static const Color primaryLight = Color(0xFFFFEEEE);
+  static const Color primary = PsColors.primary;
+  static const Color primaryLight = PsColors.primarySoft;
   static const Color brandOrange = Color(0xFFE8632B); // "SELL" on splash
 
   // ── Backgrounds ──────────────────────────────────────────────────────────
-  static const Color background = Color(0xFFFFFFFF);
+  static const Color background = PsColors.background;
   static const Color splashBackground = Color(0xFF121212);
   static const Color inputFill = Color(0xFFF3F4F6);
 
   // ── Text ─────────────────────────────────────────────────────────────────
-  static const Color textPrimary = Color(0xFF111111);
-  static const Color textSecondary = Color(0xFF6B7280);
+  static const Color textPrimary = PsColors.textPrimary;
+  static const Color textSecondary = PsColors.textMuted;
   static const Color textHint = Color(0xFF9CA3AF);
 
   // ── Register page (multi-step form) ──────────────────────────────────────

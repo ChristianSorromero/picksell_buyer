@@ -84,6 +84,9 @@ class Barangay {
 class AddressService {
   static const String _baseUrl = 'https://psgc.gitlab.io/api';
 
+  /// NCR has no province in PSGC; its cities hang off the region code.
+  static const String metroManilaCode = '130000000';
+
   Future<List<Province>> getProvinces() async {
     final response = await http.get(Uri.parse('$_baseUrl/provinces/'));
     if (response.statusCode != 200) {
@@ -92,13 +95,17 @@ class AddressService {
     final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
     final provinces =
         data.map((e) => Province.fromJson(e as Map<String, dynamic>)).toList();
-    provinces.sort((a, b) => a.name.compareTo(b.name));
+    provinces
+      ..add(Province.fromJson(const {'code': metroManilaCode, 'name': 'Metro Manila'}))
+      ..sort((a, b) => a.name.compareTo(b.name));
     return provinces;
   }
 
   Future<List<Municipality>> getMunicipalities(String provinceCode) async {
     final response = await http.get(
-      Uri.parse('$_baseUrl/provinces/$provinceCode/cities-municipalities/'),
+      Uri.parse(provinceCode == metroManilaCode
+          ? '$_baseUrl/regions/$provinceCode/cities-municipalities/'
+          : '$_baseUrl/provinces/$provinceCode/cities-municipalities/'),
     );
     if (response.statusCode != 200) {
       throw Exception(
