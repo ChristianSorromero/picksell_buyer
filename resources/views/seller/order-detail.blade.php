@@ -33,12 +33,25 @@
                 <table>
                     <tr><td style="color:#888;width:140px;">Name</td><td>{{ $order->buyer->full_name }}</td></tr>
                     <tr><td style="color:#888;">Email</td><td>{{ $order->buyer->email }}</td></tr>
-                    <tr><td style="color:#888;">Contact</td><td>{{ $order->buyer->contact_no }}</td></tr>
-                    <tr><td style="color:#888;">Address</td><td>{{ implode(', ', array_filter([$order->buyer->house_no, $order->buyer->street, $order->buyer->barangay, $order->buyer->municipality, $order->buyer->province])) }}</td></tr>
                 </table>
                 @else
                 <p style="color:#aaa;">Buyer info unavailable.</p>
                 @endif
+            </div>
+        </div>
+
+        @php $delivery = $order->delivery; @endphp
+        <div class="card">
+            <div class="card-header"><span class="card-title">Deliver To</span></div>
+            <div class="card-body">
+                <table>
+                    <tr><td style="color:#888;width:140px;">Recipient</td><td>{{ $delivery['name'] ?? '—' }}</td></tr>
+                    <tr><td style="color:#888;">Contact</td><td>{{ $delivery['phone'] ?? '—' }}</td></tr>
+                    <tr><td style="color:#888;">Address</td><td>{{ $delivery['address'] ?? 'Address unavailable' }}</td></tr>
+                    @if($delivery['landmark'])
+                    <tr><td style="color:#888;">Landmark</td><td>{{ $delivery['landmark'] }}</td></tr>
+                    @endif
+                </table>
             </div>
         </div>
     </div>

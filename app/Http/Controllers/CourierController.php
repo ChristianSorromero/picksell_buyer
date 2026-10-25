@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Mail\NewMessageMail;
 use App\Models\Message;
 use App\Models\Order;
+use App\Support\OrderStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -43,6 +44,7 @@ class CourierController extends Controller
         $data = $request->validate([
             'status' => 'required|in:shipped,completed',
         ]);
+        OrderStatus::ensure($order, $data['status'] === 'shipped' ? 'out_for_delivery' : 'deliver');
 
         $updates = ['status' => $data['status']];
         if ($data['status'] === 'shipped') {

@@ -27,7 +27,8 @@
             <tbody>
             @forelse($orders as $order)
                 @php
-                    $area = $order->buyer ? trim(collect([$order->buyer->municipality, $order->buyer->province])->filter()->join(', ')) : 'Unspecified area';
+                    $delivery = $order->delivery;
+                    $area = $delivery['area'];
                 @endphp
                 <tr>
                     <td>
@@ -36,7 +37,7 @@
                     </td>
                     <td>
                         <div>{{ $area }}</div>
-                        <div style="font-size:0.75rem;color:#888;">{{ $order->buyer->barangay ?? 'Address unavailable' }}</div>
+                        <div style="font-size:0.75rem;color:#888;">{{ $delivery['address'] ?? 'Address unavailable' }}</div>
                     </td>
                     <td>{{ $order->seller->business_name ?? $order->seller->full_name ?? '—' }}</td>
                     <td>
@@ -54,12 +55,13 @@
                     <td>
                         @if($order->status !== 'completed')
                         <div style="display:flex;gap:0.4rem;flex-wrap:wrap;min-width:280px;">
-                        @if($order->tracking_status !== 'Received and scanned at sorting center' && !$order->courier_id)
+                        @if(\App\Support\OrderStatus::can($order, 'scan'))
                         <form method="POST" action="{{ route('admin.logistics.scan', $order) }}">
                             @csrf @method('PATCH')
                             <button class="btn btn-outline btn-sm" type="submit">Mark Scanned</button>
                         </form>
                         @endif
+                        @if(\App\Support\OrderStatus::can($order, 'assign'))
                         <form method="POST" action="{{ route('admin.logistics.assign', $order) }}" style="display:flex;gap:0.4rem;">
                             @csrf @method('PATCH')
                             <select name="courier_id" class="filter-select" required>
@@ -72,6 +74,7 @@
                             </select>
                             <button class="btn btn-coral btn-sm" type="submit">Assign</button>
                         </form>
+                        @endif
                             </div>
                         @else
                             <span style="font-size:0.8rem;color:#16a34a;">Completed</span>

@@ -57,6 +57,34 @@ class Order extends Model
         return OrderStatus::of($this);
     }
 
+    /**
+     * Where the parcel goes: the address chosen at checkout (ship_to), or
+     * the buyer's profile address for older web orders without one.
+     */
+    public function getDeliveryAttribute(): array
+    {
+        if ($ship = $this->ship_to) {
+            return [
+                'name'     => $ship['recipient_name'] ?? null,
+                'phone'    => $ship['phone'] ?? null,
+                'address'  => $ship['full_address'] ?? null,
+                'landmark' => $ship['landmark'] ?? null,
+                'barangay' => $ship['barangay'] ?? null,
+                'area'     => collect([$ship['municipality'] ?? null, $ship['province'] ?? null])->filter()->join(', ') ?: 'Unspecified area',
+            ];
+        }
+
+        $buyer = $this->buyer;
+        return [
+            'name'     => $buyer?->full_name,
+            'phone'    => $buyer?->contact_no,
+            'address'  => collect([$buyer?->house_no, $buyer?->street, $buyer?->barangay, $buyer?->municipality, $buyer?->province])->filter()->join(', ') ?: null,
+            'landmark' => null,
+            'barangay' => $buyer?->barangay,
+            'area'     => collect([$buyer?->municipality, $buyer?->province])->filter()->join(', ') ?: 'Unspecified area',
+        ];
+    }
+
     /** Appends a tracking event unless the canonical state didn't move. */
     public function recordEvent(?string $status = null, ?string $description = null): void
     {

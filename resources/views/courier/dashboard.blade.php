@@ -22,20 +22,24 @@
     </div>
     <div style="overflow-x:auto;">
         <table>
-            <thead><tr><th>Parcel</th><th>Buyer / Address</th><th>Seller</th><th>Status</th><th>Action</th></tr></thead>
+            <thead><tr><th>Parcel</th><th>Recipient / Address</th><th>Seller</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
             @forelse($orders as $order)
             <tr>
                 <td><strong>{{ $order->order_number }}</strong><div style="font-size:0.75rem;color:#888;">{{ $order->waybill_number ?? 'No waybill' }}</div></td>
+                @php $delivery = $order->delivery; @endphp
                 <td>
-                    <strong>{{ $order->buyer->full_name ?? '—' }}</strong>
-                    <div style="font-size:0.78rem;color:#888;">{{ $order->buyer->house_no }} {{ $order->buyer->street }}, {{ $order->buyer->barangay }}, {{ $order->buyer->municipality }}, {{ $order->buyer->province }}</div>
-                    <div style="font-size:0.75rem;color:#888;">{{ $order->buyer->contact_no ?? '' }}</div>
+                    <strong>{{ $delivery['name'] ?? '—' }}</strong>
+                    <div style="font-size:0.78rem;color:#888;">{{ $delivery['address'] ?? 'Address unavailable' }}</div>
+                    @if($delivery['landmark'])<div style="font-size:0.75rem;color:#888;">Landmark: {{ $delivery['landmark'] }}</div>@endif
+                    <div style="font-size:0.75rem;color:#888;">{{ $delivery['phone'] ?? '' }}</div>
                 </td>
                 <td>{{ $order->seller->business_name ?? $order->seller->full_name ?? '—' }}</td>
-                <td><span class="badge badge-{{ $order->status }}">{{ $order->status === 'shipped' ? 'Out for delivery' : ucfirst($order->status) }}</span><div style="font-size:0.75rem;color:#888;margin-top:0.2rem;">{{ $order->tracking_status ?? 'Assigned' }}</div></td>
+                <td><span class="badge badge-{{ $order->status }}">{{ $order->canonical_status === \App\Support\OrderStatus::ASSIGNED_TO_RIDER ? 'Assigned' : ($order->status === 'shipped' ? 'Out for delivery' : ucfirst($order->status)) }}</span><div style="font-size:0.75rem;color:#888;margin-top:0.2rem;">{{ $order->tracking_status ?? 'Assigned' }}</div></td>
                 <td>
-                    @if($order->status === 'shipped')
+                    @if(\App\Support\OrderStatus::can($order, 'out_for_delivery'))
+                    <form method="POST" action="{{ route('courier.orders.status', $order) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="shipped"><button class="btn btn-coral" type="submit">Out for Delivery</button></form>
+                    @elseif(\App\Support\OrderStatus::can($order, 'deliver'))
                     <form method="POST" action="{{ route('courier.orders.status', $order) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="completed"><button class="btn btn-success" type="submit">Mark Delivered</button></form>
                     @elseif($order->status === 'completed')
                     <span style="color:#16a34a;font-size:0.8rem;">Completed {{ optional($order->delivered_at)->format('M d, Y') }}</span>

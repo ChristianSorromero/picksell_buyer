@@ -13,6 +13,7 @@ use App\Models\Message;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
+use App\Support\OrderStatus;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -299,16 +300,11 @@ class AdminController extends Controller
             ->where('status', 'approved')
             ->firstOrFail();
 
-        abort_if(!in_array($order->status, ['shipped', 'processing'], true), 422, 'Only prepared parcels can be assigned.');
-        abort_if($order->status === 'shipped' && $order->tracking_status !== 'Received and scanned at sorting center' && !$order->courier_id, 422, 'Scan the parcel before assigning it to a rider.');
-
-        $area = $order->buyer
-            ? trim(collect([$order->buyer->municipality, $order->buyer->province])->filter()->join(', '))
-            : 'Unspecified area';
+        OrderStatus::ensure($order, 'assign');
 
         $order->update([
             'courier_id' => $courier->id,
-            'tracking_status' => 'Sorted for ' . $area . '; assigned to ' . $courier->full_name,
+            'tracking_status' => 'Sorted for ' . $order->delivery['area'] . '; assigned to ' . $courier->full_name,
         ]);
 
         return back()->with('success', "Parcel {$order->order_number} assigned to {$courier->full_name}.");
@@ -316,7 +312,7 @@ class AdminController extends Controller
 
     public function scanParcel(Order $order)
     {
-        abort_if($order->status !== 'shipped', 422, 'Only parcels handed over by the seller can be scanned.');
+        OrderStatus::ensure($order, 'scan');
 
         $order->update([
             'tracking_status' => 'Received and scanned at sorting center',

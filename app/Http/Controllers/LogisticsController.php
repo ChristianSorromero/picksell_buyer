@@ -6,6 +6,7 @@ use App\Mail\RegistrationApprovedMail;
 use App\Mail\RegistrationDisapprovedMail;
 use App\Models\Order;
 use App\Models\User;
+use App\Support\OrderStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -75,7 +76,7 @@ class LogisticsController extends Controller
 
     public function scanParcel(Order $order)
     {
-        abort_if($order->status !== 'shipped', 422, 'Only seller handovers can be scanned.');
+        OrderStatus::ensure($order, 'scan');
         $order->update(['tracking_status' => 'Received and scanned at sorting center']);
         return back()->with('success', "Parcel {$order->order_number} scanned.");
     }
@@ -84,13 +85,11 @@ class LogisticsController extends Controller
     {
         $data = $request->validate(['courier_id' => 'required|exists:users,id']);
         $courier = User::where('id', $data['courier_id'])->where('role', 'courier')->where('status', 'approved')->firstOrFail();
-        abort_if($order->status !== 'shipped', 422, 'Only parcels in the sorting center can be assigned.');
-        abort_if($order->tracking_status !== 'Received and scanned at sorting center' && !$order->courier_id, 422, 'Scan the parcel before assigning it.');
+        OrderStatus::ensure($order, 'assign');
 
-        $area = $order->buyer ? trim(collect([$order->buyer->municipality, $order->buyer->province])->filter()->join(', ')) : 'Unspecified area';
         $order->update([
             'courier_id' => $courier->id,
-            'tracking_status' => 'Sorted for ' . $area . '; assigned to ' . $courier->full_name,
+            'tracking_status' => 'Sorted for ' . $order->delivery['area'] . '; assigned to ' . $courier->full_name,
         ]);
 
         return back()->with('success', "Parcel {$order->order_number} assigned to {$courier->full_name}.");

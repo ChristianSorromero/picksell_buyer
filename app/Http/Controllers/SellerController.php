@@ -7,6 +7,7 @@ use App\Models\Message;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
+use App\Support\OrderStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -132,6 +133,7 @@ class SellerController extends Controller
     public function packOrder(Order $order)
     {
         abort_if($order->seller_id !== $this->seller()->id, 403);
+        OrderStatus::ensure($order, 'pack');
         $order->update(['status' => 'processing', 'packed_at' => now()]);
         return back()->with('success', 'Order marked as packed.');
     }
@@ -139,6 +141,7 @@ class SellerController extends Controller
     public function handoverOrder(Request $request, Order $order)
     {
         abort_if($order->seller_id !== $this->seller()->id, 403);
+        OrderStatus::ensure($order, 'handover');
         $data = $request->validate(['waybill_number' => 'required|string|max:100']);
         $order->update([
             'status'         => 'shipped',

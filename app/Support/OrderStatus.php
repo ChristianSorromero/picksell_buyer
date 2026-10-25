@@ -49,6 +49,31 @@ final class OrderStatus
         'cancelled'        => [self::CANCELLED],
     ];
 
+    /**
+     * Role actions on the web dashboards → the canonical states each may
+     * start from, plus the refusal shown otherwise. Keeps stale pages or
+     * crafted requests from reviving cancelled orders or skipping steps.
+     */
+    public const ACTIONS = [
+        'pack'             => [[self::PLACED], 'Only new orders can be packed.'],
+        'handover'         => [[self::PREPARING], 'Pack the order before handing it over.'],
+        'scan'             => [[self::PICKED_UP], 'Only parcels handed over by the seller can be scanned.'],
+        'assign'           => [[self::AT_SORTING_CENTER, self::ASSIGNED_TO_RIDER], 'Scan the parcel at the sorting center before assigning a rider.'],
+        'out_for_delivery' => [[self::ASSIGNED_TO_RIDER], 'Only parcels assigned to you and not yet on the way can be set out for delivery.'],
+        'deliver'          => [[self::OUT_FOR_DELIVERY], 'Set the parcel out for delivery before marking it delivered.'],
+    ];
+
+    public static function can(Order $order, string $action): bool
+    {
+        return in_array(self::of($order), self::ACTIONS[$action][0], true);
+    }
+
+    /** Aborts with 422 when [$action] isn't allowed from the order's current state. */
+    public static function ensure(Order $order, string $action): void
+    {
+        abort_unless(self::can($order, $action), 422, self::ACTIONS[$action][1]);
+    }
+
     public static function of(Order $order): string
     {
         $tracking = (string) $order->tracking_status;
