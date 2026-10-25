@@ -159,7 +159,7 @@ An order settles only when **all** of these hold:
   for review)
 
 Settlement runs daily (`php artisan picksell:settle-orders`, scheduled for
-02:00) and from Admin → Finance. The 7-day hold is an operational choice,
+02:00 Philippine time) and from Admin → Finance. The 7-day hold is an operational choice,
 not a statement that 7 days satisfies every consumer remedy; late defect
 refunds are handled below.
 
@@ -199,7 +199,37 @@ Safeguards:
   currently owed.
 - It can't be completed twice.
 - A failed or cancelled payout releases exactly its own lines.
-- Payouts are weekly by default (`payout_period`, **provisional**).
+- Payouts are weekly by default (`payout_period`, **provisional**). Periods
+  are Philippine calendar days, Monday to Sunday.
+
+### Two-person approval: recommendation (needs approval; currently off)
+- **Risks it addresses:**
+  - one admin creating and approving a payout to the wrong payee or for
+    the wrong amount, by mistake or on purpose
+  - a compromised admin account emptying what sellers are owed
+- **What it costs:**
+  - two admins must be available, which slows payouts
+  - with only **one** admin account, any payout at or above the threshold
+    can't be approved at all
+- **Recommendation:**
+  1. Create a second admin account first.
+  2. Then set `PICKSELL_PAYOUT_SECOND_ADMIN=true` with
+     `PICKSELL_PAYOUT_SECOND_ADMIN_THRESHOLD=0`, so every payout needs a
+     second admin while weekly volume is small.
+  3. After about three months of payouts, consider raising the threshold to
+     roughly the 80th percentile of payout amounts. Small routine payouts
+     then flow, and large ones still get a second look.
+
+  The threshold stays configurable; no amount is set until you approve it.
+- **Controls outside the software:**
+  - Picksell doesn't store payees' bank or e-wallet details; the transfer
+    happens outside it.
+  - The operator sending money must check the destination against the
+    seller's or rider's verified details.
+  - Any change to those details needs confirmation through a second
+    channel.
+  - Today only "approver ≠ creator" is enforced. The admin who marks a
+    payout completed can be either of them.
 
 ### Reconciliation (Admin → Finance)
 - cash at the sorting center, and cash still with riders
@@ -254,11 +284,26 @@ an arrangement compliant.
   Pag-IBIG registration and safety measures.
   ([Conventus Law](https://conventuslaw.com/report/philippines-labor-advisory-on-working-conditions-of-delivery-riders-in-food-delivery-and-courier-activities/),
   [Mondaq](https://webiis10.mondaq.com/employee-rights-labour-relations/1270430/labor-advisory-on-working-conditions-of-delivery-riders-in-food-delivery-and-courier-activities))
-- **Minimum wage reference:** reports put the NCR non-agriculture minimum at
-  ₱755/day (2026). Sources disagree on which wage order is in force, so
-  verify with the NWPC for each region served.
-  ([DZRH](https://www.dzrh.com.ph/post/peso60-ncr-minimum-wage-increase-takes-effect-daily-pay-now-at-peso755),
-  [Context.ph](https://context.ph/2026/06/30/metro-manila-minimum-wage-jumps-by-record-p85/))
+- **Minimum wage reference** (checked 2026-10-26): payroll guides report
+  Wage Order NCR-28 at **₱755/day** non-agriculture (₱718 for small retail
+  and service), effective 2026-09-26, up from ₱695.
+  - The NWPC's own NCR page still notes that NCR-27 awaits a final
+    resolution from the Pasig and Navotas regional trial courts.
+  - Confirm the order in force with the NWPC before payroll use, and use
+    each region's own rate outside NCR.
+
+  ([GreatDay HR](https://greatdayhr.ph/blog/ncr-28-wage-order-compliance-guide/),
+  [Mercans](https://mercans.com/resources/statutory-alerts/philippines-rtwpb-ncr-wage-order-ncr-27-raises-metro-manila-floor-to-755-day/),
+  [NWPC NCR](https://nwpc.dole.gov.ph/regionandwages/national-capital-region/))
+- **Fuel** (October 2026, during the 2026 energy crisis): Metro Manila
+  gasoline was about ₱88–94/L before a ₱4.30/L rollback on October 20. Check
+  the DOE's weekly price notices before setting rates.
+  ([DOE](https://doe.gov.ph/liquid-fuels-and-lpg-price-adjustments-for-6-13-october-2026),
+  [Manila Bulletin](https://mb.com.ph/2026/10/19/gasoline-drops-430-but-diesel-jumps-260-per-liter),
+  [Rappler](https://www.rappler.com/business/fuel-prices-adjustments-october-20-2026/))
+- **No per-delivery minimum exists in law.** No 2026 statute or DOLE order
+  sets one; the DOLE advisory's "not lower than the prevailing minimum
+  wage" is the floor that applies.
 - **Industry practice** (dated, secondary sources):
   - Lalamove: ₱49 base fare plus a distance fee, minus a 20% commission.
   - GrabFood (2021): ₱49 fee minus 20%, plus ₱15 per km.
@@ -268,21 +313,55 @@ an arrangement compliant.
   [Inquirer 2021](https://newsinfo.inquirer.net/1430610/lockdown-heroes-face-long-ride-to-basic-pay-safety-nets),
   [Inquirer 2022](https://newsinfo.inquirer.net/1675091/unfair-wages-group-says-some-riders-get-as-low-as-p15-per-delivery-due-to-competition))
 
+### Cost model (illustrative; assumptions to confirm in the pilot)
+A rider's day must cover their costs and still net at least the regional
+daily minimum wage.
+
+| Item (per working day, motorcycle, Metro Manila) | Assumption | ₱/day |
+|---|---|---|
+| Net earnings floor | NCR minimum (see above) | 755 |
+| Fuel | ~80 km at ~40 km/L = 2 L at ~₱85–94/L | 170–190 |
+| Maintenance, tyres, depreciation | estimate | 60–90 |
+| Mobile data and phone | estimate | 20–30 |
+| Social contributions the rider pays as self-employed (SSS, PhilHealth, Pag-IBIG) | spread over ~26 working days; verify current rates | 60–90 |
+| **Gross needed** | | **≈ 1,065–1,155** |
+
+Divided by stops per day, that gross gives the base pay a stop must carry:
+
+| Stops per day | ₱ per stop |
+|---|---|
+| 20 | 53–58 |
+| 25 | 43–46 |
+| 30 | 36–39 |
+
+Market references (₱45–50 per trip before platform commission) sit inside
+this band.
+
 ### Recommendation (needs approval; not activated)
-1. Start in `proposed` status. For 2–4 weeks, measure per rider and zone:
-   stops per day, parcels per stop, kilometres, and hours.
-2. Set `base_per_stop` so that a typical full day's expected earnings,
-   **after fuel and vehicle costs**, are at or above the prevailing daily
-   minimum wage for the region.
-   - Illustration only: at ~20 stops a day, ₱755/day needs roughly ₱38 net
-     per stop before costs.
-   - Market references cluster around ₱45–50 per trip before platform
-     commission.
-3. Use `additional_parcel` for extra parcels at the same stop. They take
-   little extra time, so a lower rate is fair and keeps costs sustainable.
-4. Add zone adjustments only where the pilot shows longer distances.
-5. Review rates when fuel prices or minimum wages change. Have counsel
-   confirm the classification and the contract terms (DOLE LA 14-2021).
+The model is already built: per stop, per extra parcel, zone adjustments
+and an optional failed-attempt fee. These **ranges are for discussion and
+are not configured**:
+
+| Setting | Suggested pilot range | Why |
+|---|---|---|
+| `base_per_stop` (NCR) | ₱45–55 | Covers costs plus the wage floor at 20–25 stops per day |
+| `additional_parcel` | ₱10–15 | Little extra time at the same stop |
+| `failed_attempt` | ₱15–20 | The rider made the trip; discourages skipping hard addresses without penalising genuine failures |
+| `zone_adjustments` | only where the pilot shows longer routes | — |
+
+1. Run 2–4 weeks in `proposed` status, which shows rates but accrues
+   nothing. Measure per rider and zone: stops per day, parcels per stop,
+   kilometres and hours.
+2. Choose rates so that a typical full day nets at or above the regional
+   minimum after the costs above.
+3. Review when the pump price moves by more than about ₱10/L or a new wage
+   order takes effect.
+4. Have counsel confirm the contractor classification and contract terms
+   (DOLE LA 14-2021), including SSS, PhilHealth and Pag-IBIG registration.
+
+**To activate:** set the approved amounts and
+`PICKSELL_RIDER_PAY_STATUS=active`. Pay then accrues from the next cash
+hand-in, never retroactively.
 
 ## 6. Tax withholding (RR 16-2023): available, not enabled
 
@@ -344,9 +423,50 @@ an arrangement compliant.
   order is excluded from settlement and its refunds are blocked until
   evidence turns up; the backfill can still be recorded later.
 
+**Evidence needed to record a historical collection.** At least one
+document showing the cash reached Picksell, plus enough to tie it to this
+order:
+
+| Evidence | Shows | Required? |
+|---|---|---|
+| Sorting-center remittance sheet or hand-in log, signed or initialled by the receiving staff, listing the order number and amount | Cash reached Picksell | One of these three |
+| Bank deposit slip or bank statement line for a deposit that includes the amount, with a deposit sheet listing the order | Cash reached Picksell | One of these three |
+| Rider's cash turnover receipt countersigned by staff | Cash reached Picksell | One of these three |
+| The rider's statement of the delivery date and the amount collected | Collection, and the date if stated | Supporting |
+| Buyer confirmation (receipt, message or call note) that they paid ₱X in cash | Collection | Supporting |
+| Proof of delivery (signature, photo, recipient name) | Delivery | Supporting |
+
+**Rules:**
+- The amount must equal the order total exactly.
+- Record the collection date only if the evidence states it.
+- An admin records the evidence reference and the reason it's trusted. That
+  writes a `cod_backfill` ledger entry, an audit log entry, and
+  `payment_backfilled_at`.
+- With no such evidence, use **Mark unverifiable** and note what was
+  checked.
+
 **PS-51351586 and return #2 (development data).** Delivered 2026-10-20,
 total ₱1,537.88, voucher WELCOME50, `unpaid`. Return #2 is `requested`,
 asking ₱746.44, with a legacy `refund_to = gcash`.
+
+*Findings (read-only check of dev MySQL, 2026-10-26):*
+- Every party on the order is a seeded demo account: `buyer@picksell.ph`,
+  `seller@picksell.ph`, `rider1@picksell.test` and
+  `logistics@picksell.test`.
+- The whole lifecycle took six seconds. It was placed at 22:27:56 UTC,
+  every step from packing to delivery happened between 22:27:59 and
+  22:28:01, and the return was requested at 22:28:02. That is a scripted
+  test run, not a real delivery.
+- There are no delivery attempts, recipient name, proof of delivery, audit
+  log or ledger entries.
+- So there was no real cash: no evidence of a collection can exist.
+- The case is **left unresolved**, as instructed. The auditable way to
+  close it is **Mark unverifiable**, noting "development test data; no
+  cash was collected", then rejecting return #2 with the same note. Both
+  need your decision.
+- Development data must never be migrated to production.
+
+Steps for a real legacy case like this:
 1. Look for evidence the rider's ₱1,537.88 was received: remittance sheet,
    hand-in log, or deposit.
 2. If found: in Admin → Finance, record the historical payment with that
@@ -369,4 +489,8 @@ asking ₱746.44, with a legacy `refund_to = gcash`.
   threshold.
 - Platform vouchers funded by Picksell.
 - Tax withholding activation (section 6).
-- The timezone for displayed times (currently UTC).
+- How to close PS-51351586 / return #2 (development data, section 7).
+
+**Decided:** times are shown, grouped into days and scheduled in
+Philippine time (Asia/Manila). Storage stays UTC, so existing records
+aren't rewritten. See `deployment.md`.

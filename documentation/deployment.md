@@ -18,29 +18,104 @@ root, with PHP 8.4 (`composer.lock` requires PHP 8.4.1 or later).
    left at their safe defaults: rider pay unconfigured, withholding off.
 
 ## 2. Production configuration
-Start from `.env.example`. Required production values:
+Start from **`.env.production.example`**. It lists every production
+setting, with secrets left blank. `.env.example` stays the local
+development template: http, the emulator address, mail to the log.
 
-| Setting | Value |
-|---|---|
-| `APP_ENV` / `APP_DEBUG` | `production` / `false` |
-| `APP_KEY` | Generated once (`php artisan key:generate`) and kept secret. Losing it invalidates sessions and encrypted data. |
-| `APP_URL` | The public `https://` URL |
-| `LOG_LEVEL` | `warning` or `error` |
-| `DB_*` | A least-privilege MySQL user limited to the Picksell schema, never root |
-| `SESSION_SECURE_COOKIE` | `true` |
-| `MAIL_*` | A real SMTP provider. With `log`, buyers never receive verification or reset codes. |
-| `QUEUE_CONNECTION` | `database` plus a worker is recommended. With `sync`, mail is sent inside web requests. |
-| `PICKSELL_RIDER_PAY_STATUS` | `unconfigured` until rates are approved |
-| `PICKSELL_WITHHOLDING_ENABLED` | `false` until professionally reviewed |
+### Where each value lives
+- **Hosting platform's secret store** (never in a file in the
+  repository):
 
-**Secrets** (`APP_KEY`, the DB password, SMTP credentials) live only in the
-server's environment or secret store. Never commit them. Note: commit
-`9dda404` on GitHub contains an old `.env` with the MySQL root password,
-which has since been rotated. Don't reuse it anywhere.
+  | Setting | Notes |
+  |---|---|
+  | `APP_KEY` | Generate once on the server (`php artisan key:generate --show`) and keep it. Changing it logs everyone out and breaks encrypted values. |
+  | `DB_PASSWORD` | — |
+  | `MAIL_USERNAME`, `MAIL_PASSWORD` | — |
+  | Any future error-tracking DSN or push credentials | — |
 
-**Display timezone:** the app runs in UTC, so times on web pages show UTC.
-Decide whether to set `APP_TIMEZONE=Asia/Manila` *before* production data
-exists; changing it later shifts how stored timestamps are read.
+- **Hosting platform's environment** (not secret, but specific to the
+  deployment):
+
+  | Setting | Value |
+  |---|---|
+  | `APP_URL` | The public `https://` address |
+  | `DB_HOST` | — |
+  | `MAIL_HOST` | — |
+  | `MAIL_FROM_ADDRESS` | On your real domain |
+
+- **Safe to keep as in the template:**
+
+  | Setting | Value |
+  |---|---|
+  | `APP_ENV` / `APP_DEBUG` | `production` / `false` |
+  | Logging | `LOG_LEVEL=warning`, `LOG_STACK=daily` |
+  | `DB_USERNAME` | `picksell_app`, least-privilege, never root |
+  | `DB_TIMEZONE` | `+00:00` |
+  | Cache, sessions, queue | `CACHE_STORE`, `SESSION_DRIVER` and `QUEUE_CONNECTION` all `database` |
+  | `SESSION_SECURE_COOKIE` | `true` |
+  | Time zones | `APP_DISPLAY_TIMEZONE` and `APP_SCHEDULE_TIMEZONE` both `Asia/Manila` |
+  | Finance policies | All at their safe defaults: rider pay `unconfigured`, withholding `false`, two-person rule `false` |
+
+`.gitignore` ignores every `.env.*` file except the two templates, so a
+filled-in `.env.production` can't be committed by accident.
+
+**Verified in a safe environment (2026-10-26).** `picksell:preflight` was
+run with the template's values against the development database. It's
+read-only and no secrets were printed.
+- Passed: `APP_ENV`, `APP_DEBUG`, `LOG_LEVEL`, `SESSION_SECURE_COOKIE`,
+  mail driver, UTC storage, non-root DB user, MySQL session in UTC,
+  ledger balanced, no pending migrations.
+- The only blockers left are the two values only the owner can supply:
+  `APP_URL` (the real domain) and `MAIL_HOST` (an SMTP provider).
+- Preflight rejects template placeholders (`CHANGE-ME`, `localhost`,
+  `*.example`), so they can't pass by accident.
+
+### Time zone
+- **Storage stays UTC.** That includes the append-only ledger and audit
+  log.
+- **Philippine time (`Asia/Manila`) is used for:**
+  - pages, and dates people enter
+  - report and payout-period days
+  - delivery estimates and rider-pay stops
+  - the scheduler: settlement at 02:00 Manila
+- **Code:** `App\Support\LocalTime`; views use `->forDisplay()`.
+- **The mobile app** receives ISO-8601 UTC and shows device-local time.
+- **Production MySQL:** set `DB_TIMEZONE=+00:00` on the first deploy.
+  - Development MySQL leaves it unset, because its rows were written under
+    the PC's UTC+8 session setting.
+  - Preflight warns if the session time zone isn't UTC.
+
+### Credentials exposed in Git history (assessed 2026-10-26)
+- **What's exposed:**
+  - The repository `ChristianSorromero/picksell_buyer` is **public**.
+  - `.env` from the initial commit `9dda404` is visible on `main` today,
+    because `main` has no later commits.
+  - It contains `DB_USERNAME=root` and a non-empty `DB_PASSWORD` for
+    `127.0.0.1:3306`. `APP_KEY` is empty.
+  - No other secret files or token patterns were found in any pushed
+    commit.
+- **Is the old password still valid?** No. It was tested without printing
+  it: MySQL rejects it for `root` and for `picksell_app` (error 1045). It
+  also differs from the current app password.
+- **Is MySQL reachable from outside?**
+  - On the development PC MySQL listens on all interfaces, but the Windows
+    firewall's default inbound block applies and no rule allows port 3306.
+    So it isn't reachable from the network.
+  - Recommended anyway: `bind-address=127.0.0.1` in `my.ini`.
+- **Remedy, in order:**
+  1. Merge `feature/buyer-mobile-app` into `main`. That removes `.env` from
+     the current tree and adds the `.env.*` ignore rules.
+  2. Never reuse the old password anywhere.
+  3. Turn on GitHub secret scanning and push protection (repository
+     Settings → Code security).
+  4. *Optional, needs the owner's authorization:* purge the file from
+     history with `git filter-repo --path .env --invert-paths`, then
+     force-push.
+     - This rewrites every commit ID, so every clone must re-clone.
+     - Forks and cached views may still hold the file. GitHub Support can
+       clear cached views.
+     - Because the credential is already invalid, rotation plus removal
+       from `main` is the essential part.
 
 **Mobile app:** release builds must point at the https API:
 ```
@@ -85,9 +160,14 @@ published passwords, so don't run it there.
 ## 5. Monitoring and logging
 - **Health check:** `GET /up` (Laravel) returns 200 when the app boots.
   Point an uptime monitor at it.
-- **Scheduler:** cron `* * * * * php artisan schedule:run`. It runs
-  `picksell:settle-orders` daily and `sanctum:prune-expired`. Alert if
-  settlement hasn't run for 2 days.
+- **Scheduler:** cron `* * * * * php artisan schedule:run`. The server
+  clock can be UTC. Schedules are evaluated in `APP_SCHEDULE_TIMEZONE`
+  (Asia/Manila):
+  - `picksell:settle-orders` at 02:00 Manila
+  - `sanctum:prune-expired` at midnight Manila
+
+  Check with `php artisan schedule:list`. Alert if settlement hasn't run
+  for 2 days.
 - **Queue worker** (if `QUEUE_CONNECTION=database`): a supervised
   `php artisan queue:work`.
 - **Logs:** the `stack` channel. Ship them to the host's log service. Don't
@@ -137,4 +217,4 @@ See the readiness assessment in the latest progress report. In particular:
 - automated backups and error tracking
 - BIR Form 2307 / withholding reporting
 - combination-level variant stock
-- the web buyer has no return-request screen (returns are app-only)
+- the real domain and SMTP provider (the two remaining preflight blockers)
