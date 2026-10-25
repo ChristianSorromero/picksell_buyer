@@ -12,6 +12,7 @@ use App\Services\Deliveries;
 use App\Services\Ledger;
 use App\Services\RiderPay;
 use App\Services\ReturnWorkflow;
+use App\Support\LocalTime;
 use App\Support\Money;
 use App\Support\OrderStatus;
 use Illuminate\Http\Request;
@@ -112,10 +113,10 @@ class CourierController extends Controller
 
     public function reports(Request $request)
     {
-        $from = $request->get('from', now()->startOfMonth()->format('Y-m-d'));
-        $to = $request->get('to', now()->format('Y-m-d'));
+        $from = $request->get('from', LocalTime::today()->startOfMonth()->toDateString());
+        $to = $request->get('to', LocalTime::today()->toDateString());
         $orders = Order::where('courier_id', $this->courier()->id)
-            ->whereBetween('created_at', [$from, $to . ' 23:59:59'])
+            ->whereBetween('created_at', LocalTime::dayRange($from, $to))
             ->latest()
             ->get();
 

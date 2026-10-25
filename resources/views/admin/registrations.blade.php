@@ -32,7 +32,7 @@
             <td><span class="badge badge-{{ $user->role }}">{{ ucfirst($user->role) }}</span></td>
             <td>{{ $user->email }}</td>
             <td>{{ $user->contact_no }}</td>
-            <td>{{ $user->created_at->format('M d, Y') }}</td>
+            <td>{{ $user->created_at->forDisplay()->format('M d, Y') }}</td>
             <td><span class="badge badge-{{ $user->status }}">{{ ucfirst($user->status) }}</span></td>
             <td><a href="/admin/registrations/{{ $user->id }}" class="btn btn-coral btn-sm">Review</a></td>
         </tr>

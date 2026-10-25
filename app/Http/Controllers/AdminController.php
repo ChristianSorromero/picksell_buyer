@@ -13,6 +13,7 @@ use App\Models\Message;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
+use App\Support\LocalTime;
 use App\Support\OrderStatus;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -193,12 +194,12 @@ class AdminController extends Controller
     public function commission(Request $request)
     {
         $rate = (string) \Brick\Math\BigDecimal::of((string) config('picksell.commission_rate'))->multipliedBy(100)->strippedOfTrailingZeros(); // percent, for display
-        $from = $request->get('from', now()->startOfMonth()->format('Y-m-d'));
-        $to   = $request->get('to', now()->format('Y-m-d'));
+        $from = $request->get('from', LocalTime::today()->startOfMonth()->toDateString());
+        $to   = $request->get('to', LocalTime::today()->toDateString());
 
         $orders = Order::with('seller')
             ->where('status', 'completed')
-            ->whereBetween('created_at', [$from, $to . ' 23:59:59'])
+            ->whereBetween('created_at', LocalTime::dayRange($from, $to))
             ->latest()->get();
 
         $totalSales      = $orders->sum('amount');
@@ -210,16 +211,16 @@ class AdminController extends Controller
     // Reports
     public function reports(Request $request)
     {
-        $from = $request->get('from', now()->startOfMonth()->format('Y-m-d'));
-        $to   = $request->get('to', now()->format('Y-m-d'));
+        $from = $request->get('from', LocalTime::today()->startOfMonth()->toDateString());
+        $to   = $request->get('to', LocalTime::today()->toDateString());
         $data = $this->getReportData($from, $to);
         return view('admin.reports', compact('data', 'from', 'to'));
     }
 
     public function exportPdf(Request $request)
     {
-        $from = $request->get('from', now()->startOfMonth()->format('Y-m-d'));
-        $to   = $request->get('to', now()->format('Y-m-d'));
+        $from = $request->get('from', LocalTime::today()->startOfMonth()->toDateString());
+        $to   = $request->get('to', LocalTime::today()->toDateString());
         $type = $request->get('type', 'sales');
         $data = $this->getReportData($from, $to);
         $pdf  = Pdf::loadView('admin.pdf.report', compact('data', 'from', 'to', 'type'))
@@ -229,12 +230,13 @@ class AdminController extends Controller
 
     private function getReportData($from, $to): array
     {
+        $range  = LocalTime::dayRange($from, $to);
         $orders = Order::where('status', 'completed')
-            ->whereBetween('created_at', [$from, $to . ' 23:59:59'])
+            ->whereBetween('created_at', $range)
             ->with('seller')->get();
 
         $topSellers = Order::where('status', 'completed')
-            ->whereBetween('created_at', [$from, $to . ' 23:59:59'])
+            ->whereBetween('created_at', $range)
             ->with('seller')
             ->get()
             ->groupBy('seller_id')
@@ -254,7 +256,7 @@ class AdminController extends Controller
         while ($start->lte($end)) {
             $weekEnd = $start->copy()->addDays(6)->min($end);
             $weeklySales[] = Order::where('status', 'completed')
-                ->whereBetween('created_at', [$start->format('Y-m-d'), $weekEnd->format('Y-m-d') . ' 23:59:59'])
+                ->whereBetween('created_at', LocalTime::dayRange($start->format('Y-m-d'), $weekEnd->format('Y-m-d')))
                 ->sum('amount');
             $weekLabels[] = 'Week ' . $week++;
             $start->addDays(7);
@@ -264,8 +266,8 @@ class AdminController extends Controller
             'total_sales'      => $orders->sum('amount'),
             'total_orders'     => $orders->count(),
             'total_commission' => $orders->sum('commission'),
-            'new_buyers'       => User::where('role', 'buyer')->whereBetween('created_at', [$from, $to . ' 23:59:59'])->count(),
-            'new_sellers'      => User::where('role', 'seller')->whereBetween('created_at', [$from, $to . ' 23:59:59'])->count(),
+            'new_buyers'       => User::where('role', 'buyer')->whereBetween('created_at', $range)->count(),
+            'new_sellers'      => User::where('role', 'seller')->whereBetween('created_at', $range)->count(),
             'monthly_sales'    => $weeklySales ?: [0],
             'months'           => $weekLabels ?: ['No Data'],
             'top_sellers'      => $topSellers,

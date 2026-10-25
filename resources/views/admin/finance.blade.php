@@ -71,7 +71,7 @@
                             @endif
                             @if(in_array($p->status, ['approved', 'processing'], true))
                                 <input type="text" name="reference" class="form-control" placeholder="Transfer reference" style="width:150px;">
-                                <input type="date" name="disbursed_on" class="form-control" max="{{ now()->toDateString() }}" title="Date the money was sent" style="width:150px;">
+                                <input type="date" name="disbursed_on" class="form-control" max="{{ \App\Support\LocalTime::today()->toDateString() }}" title="Date the money was sent" style="width:150px;">
                                 <button name="action" value="complete" class="btn btn-coral btn-sm">Mark paid</button>
                                 <input type="text" name="reason" class="form-control" placeholder="Failure reason" style="width:130px;">
                                 <button name="action" value="fail" class="btn btn-outline btn-sm">Failed</button>
@@ -143,7 +143,7 @@
         @forelse($rec['legacy_orders'] as $o)
             <tr>
                 <td>{{ $o->order_number }}@if($o->returnRequest)<div style="font-size:0.75rem;color:#b45309;">Return #{{ $o->returnRequest->id }} ({{ \App\Models\ReturnRequest::STAGE_LABELS[$o->returnRequest->status] ?? $o->returnRequest->status }})</div>@endif</td>
-                <td>{{ $o->delivered_at?->format('M d, Y') ?? '—' }}</td>
+                <td>{{ $o->delivered_at?->forDisplay()->format('M d, Y') ?? '—' }}</td>
                 <td>{{ Money::format($o->totalCents()) }}</td>
                 <td>{{ $o->payment_review === 'unverifiable' ? 'Unverifiable: ' . $o->payment_review_note : 'Not reviewed' }}</td>
                 <td>
@@ -152,7 +152,7 @@
                         <input type="number" name="amount" step="0.01" min="0" class="form-control" placeholder="Amount per evidence" required>
                         <input type="text" name="evidence" class="form-control" placeholder="Evidence reference" required>
                         <input type="text" name="reason" class="form-control" placeholder="Why this is trustworthy" required>
-                        <input type="date" name="collected_on" class="form-control" max="{{ now()->toDateString() }}" title="Collection date, only if the evidence shows it">
+                        <input type="date" name="collected_on" class="form-control" max="{{ \App\Support\LocalTime::today()->toDateString() }}" title="Collection date, only if the evidence shows it">
                         <button class="btn btn-coral btn-sm" onclick="return confirm('Record this historical payment? It must match verified evidence.')">Record historical payment</button>
                     </form>
                 </td>
@@ -191,7 +191,7 @@
                     @if($tp)
                         TIN {{ $tp->tin ?? '—' }} · COR {{ $tp->bir_cor_number ?? '—' }}<br>
                         Sworn declaration: {{ $tp->sworn_declaration_year ?? '—' }}{{ $tp->sworn_declaration_received_on ? ' (received ' . $tp->sworn_declaration_received_on->format('M d, Y') . ')' : '' }}<br>
-                        {{ $tp->verified_at ? 'Verified by ' . ($tp->verifiedBy->full_name ?? 'admin') . ' on ' . $tp->verified_at->format('M d, Y') : 'Not verified' }}
+                        {{ $tp->verified_at ? 'Verified by ' . ($tp->verifiedBy->full_name ?? 'admin') . ' on ' . $tp->verified_at->forDisplay()->format('M d, Y') : 'Not verified' }}
                     @else
                         <span style="color:#888;">Nothing recorded</span>
                     @endif
@@ -202,7 +202,7 @@
                         <input type="text" name="tin" class="form-control" placeholder="TIN" value="{{ $tp->tin ?? '' }}" style="width:150px;">
                         <input type="text" name="bir_cor_number" class="form-control" placeholder="COR (Form 2303) no." value="{{ $tp->bir_cor_number ?? '' }}" style="width:160px;">
                         <input type="number" name="sworn_declaration_year" class="form-control" placeholder="SD year" value="{{ $tp->sworn_declaration_year ?? '' }}" style="width:100px;">
-                        <input type="date" name="sworn_declaration_received_on" class="form-control" value="{{ $tp?->sworn_declaration_received_on?->toDateString() }}" max="{{ now()->toDateString() }}" style="width:150px;">
+                        <input type="date" name="sworn_declaration_received_on" class="form-control" value="{{ $tp?->sworn_declaration_received_on?->toDateString() }}" max="{{ \App\Support\LocalTime::today()->toDateString() }}" style="width:150px;">
                         <label style="font-size:0.78rem;"><input type="checkbox" name="verified" value="1" @checked($tp?->verified_at)> Documents checked</label>
                         <button class="btn btn-outline btn-sm">Save</button>
                     </form>

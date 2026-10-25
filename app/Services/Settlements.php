@@ -10,6 +10,7 @@ use App\Models\Payout;
 use App\Models\ReturnRequest;
 use App\Models\User;
 use App\Models\Voucher;
+use App\Support\LocalTime;
 use App\Support\Money;
 use Brick\Math\BigDecimal;
 use Carbon\CarbonImmutable;
@@ -156,10 +157,10 @@ class Settlements
 
     // ── Payouts ──────────────────────────────────────────────────────────
 
-    /** [start, end] of the last full payout period before today. */
+    /** [start, end] of the last full payout period before today, in Philippine calendar days. */
     public function lastPeriod(): array
     {
-        $today = CarbonImmutable::today();
+        $today = LocalTime::today();
         return config('picksell.finance.payout_period') === 'daily'
             ? [$today->subDay(), $today->subDay()->endOfDay()]
             : [$today->startOfWeek()->subWeek(), $today->startOfWeek()->subWeek()->endOfWeek()];
@@ -179,7 +180,7 @@ class Settlements
         return DB::transaction(function () use ($start, $end, $admin) {
             $lines = LedgerEntry::whereIn('account', [Ledger::SELLER_PAYABLE, Ledger::RIDER_PAYABLE])
                 ->whereNotNull('user_id')
-                ->whereHas('transaction', fn ($q) => $q->whereIn('type', self::PAYABLE_SOURCES)->where('created_at', '<=', $end))
+                ->whereHas('transaction', fn ($q) => $q->whereIn('type', self::PAYABLE_SOURCES)->where('created_at', '<=', $end->utc()))
                 ->whereDoesntHave('payoutItem')
                 ->lockForUpdate()->get();
 
@@ -190,8 +191,8 @@ class Settlements
                 $payout = Payout::create([
                     'payee_id'     => $first->user_id,
                     'payee_role'   => $first->account === Ledger::SELLER_PAYABLE ? 'seller' : 'courier',
-                    'period_start' => $start->toDateString(),
-                    'period_end'   => $end->toDateString(),
+                    'period_start' => LocalTime::dateOf($start),
+                    'period_end'   => LocalTime::dateOf($end),
                     'amount_cents' => $amount,
                     'status'       => 'pending',
                     'created_by'   => $admin->id,
@@ -241,7 +242,7 @@ class Settlements
      */
     public function complete(Payout $payout, User $admin, string $reference, string $disbursedOn): void
     {
-        abort_if(CarbonImmutable::parse($disbursedOn)->isFuture(), 422, 'The disbursement date can’t be in the future.');
+        abort_if(CarbonImmutable::parse($disbursedOn, LocalTime::zone())->gt(LocalTime::today()), 422, 'The disbursement date can’t be in the future.');
         $this->movePayout($payout, ['approved', 'processing'], 'completed', $admin, function (Payout $p) use ($admin, $reference, $disbursedOn) {
             $amount = (int) $p->items()->sum('amount_cents');
             abort_if($amount !== $p->amount_cents, 422, 'This payout no longer matches its items and needs review.');

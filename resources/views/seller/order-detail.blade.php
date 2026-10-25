@@ -21,7 +21,7 @@
                     <tr><td style="color:#888;">Amount</td><td><strong>₱{{ number_format($order->amount, 2) }}</strong></td></tr>
                     <tr><td style="color:#888;">Commission</td><td>₱{{ number_format($order->commission, 2) }}</td></tr>
                     <tr><td style="color:#888;">Net Profit</td><td><strong style="color:#16a34a;">₱{{ number_format($order->amount - $order->commission, 2) }}</strong></td></tr>
-                    <tr><td style="color:#888;">Order Date</td><td>{{ $order->created_at->format('M d, Y h:i A') }}</td></tr>
+                    <tr><td style="color:#888;">Order Date</td><td>{{ $order->created_at->forDisplay()->format('M d, Y h:i A') }}</td></tr>
                 </table>
             </div>
         </div>
@@ -63,9 +63,9 @@
                 <table>
                     <tr><td style="color:#888;width:140px;">Waybill #</td><td>{{ $order->waybill_number ?? '—' }}</td></tr>
                     <tr><td style="color:#888;">Tracking Status</td><td>{{ $order->tracking_status ?? '—' }}</td></tr>
-                    <tr><td style="color:#888;">Packed At</td><td>{{ $order->packed_at ? $order->packed_at->format('M d, Y h:i A') : '—' }}</td></tr>
-                    <tr><td style="color:#888;">Handed Over</td><td>{{ $order->handed_over_at ? $order->handed_over_at->format('M d, Y h:i A') : '—' }}</td></tr>
-                    <tr><td style="color:#888;">Delivered At</td><td>{{ $order->delivered_at ? $order->delivered_at->format('M d, Y h:i A') : '—' }}</td></tr>
+                    <tr><td style="color:#888;">Packed At</td><td>{{ $order->packed_at ? $order->packed_at->forDisplay()->format('M d, Y h:i A') : '—' }}</td></tr>
+                    <tr><td style="color:#888;">Handed Over</td><td>{{ $order->handed_over_at ? $order->handed_over_at->forDisplay()->format('M d, Y h:i A') : '—' }}</td></tr>
+                    <tr><td style="color:#888;">Delivered At</td><td>{{ $order->delivered_at ? $order->delivered_at->forDisplay()->format('M d, Y h:i A') : '—' }}</td></tr>
                 </table>
 
                 <div style="margin-top:1.2rem;">

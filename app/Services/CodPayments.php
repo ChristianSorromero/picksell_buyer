@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AuditLog;
 use App\Models\Order;
 use App\Models\User;
+use App\Support\LocalTime;
 use App\Support\Money;
 use App\Support\OrderStatus;
 use Illuminate\Support\Collection;
@@ -120,7 +121,9 @@ class CodPayments
             ]);
             $order->update([
                 'payment_status'        => 'paid',
-                'cod_collected_at'      => $collectedOn,   // only when the evidence shows it
+                // Only when the evidence shows it: the start of that Philippine day,
+                // since the evidence gives a date, not a time.
+                'cod_collected_at'      => $collectedOn ? LocalTime::dayRange($collectedOn)[0] : null,
                 'paid_at'               => null,           // hand-in time unknown; see payment_backfilled_at
                 'payment_confirmed_by'  => $admin->id,
                 'payment_backfilled_at' => now(),

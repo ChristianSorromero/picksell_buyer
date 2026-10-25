@@ -69,7 +69,7 @@
             <td>{{ $order->product_name }}</td>
             <td>₱{{ number_format($order->amount, 2) }}</td>
             <td style="color:var(--coral);font-weight:700;">₱{{ number_format($order->commission, 2) }}</td>
-            <td>{{ $order->created_at->format('M d, Y') }}</td>
+            <td>{{ $order->created_at->forDisplay()->format('M d, Y') }}</td>
         </tr>
         @endforeach
         </tbody>

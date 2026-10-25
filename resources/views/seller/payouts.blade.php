@@ -22,7 +22,7 @@
             @forelse($settled as $line)
                 <tr>
                     <td>{{ $line->transaction->order->order_number ?? '—' }}</td>
-                    <td>{{ $line->transaction->created_at->format('M d, Y') }}</td>
+                    <td>{{ $line->transaction->created_at->forDisplay()->format('M d, Y') }}</td>
                     <td><strong>{{ Money::format(-$line->amount_cents) }}</strong></td>
                     <td>{{ $line->payoutItem ? '#' . $line->payoutItem->payout_id . ' · ' . ucfirst($line->payoutItem->payout->status) : 'Not yet' }}</td>
                 </tr>

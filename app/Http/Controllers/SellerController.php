@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Models\ProductVariation;
 use App\Models\User;
 use App\Services\Deliveries;
+use App\Support\LocalTime;
 use App\Support\OrderStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -38,12 +39,11 @@ class SellerController extends Controller
         $months = [];
         $sales  = [];
         for ($i = 5; $i >= 0; $i--) {
-            $date = now()->subMonths($i);
-            $months[] = $date->format('M Y');
+            $month = LocalTime::today()->startOfMonth()->subMonths($i);
+            $months[] = $month->format('M Y');
             $sales[]  = Order::where('seller_id', $seller->id)
                 ->where('status', 'completed')
-                ->whereYear('created_at', $date->year)
-                ->whereMonth('created_at', $date->month)
+                ->whereBetween('created_at', LocalTime::dayRange($month, $month->endOfMonth()))
                 ->sum('amount');
         }
 
@@ -227,12 +227,12 @@ class SellerController extends Controller
     public function reports(Request $request)
     {
         $seller = $this->seller();
-        $from   = $request->get('from', now()->startOfMonth()->format('Y-m-d'));
-        $to     = $request->get('to', now()->format('Y-m-d'));
+        $from   = $request->get('from', LocalTime::today()->startOfMonth()->toDateString());
+        $to     = $request->get('to', LocalTime::today()->toDateString());
 
         $orders = Order::where('seller_id', $seller->id)
             ->where('status', 'completed')
-            ->whereBetween('created_at', [$from, $to . ' 23:59:59'])
+            ->whereBetween('created_at', LocalTime::dayRange($from, $to))
             ->get();
 
         $totalSales  = $orders->sum('amount');
@@ -247,7 +247,7 @@ class SellerController extends Controller
         while ($start->lte($end)) {
             $day = $start->format('Y-m-d');
             $days[] = $start->format('M d');
-            $dailySales[] = $orders->filter(fn($o) => $o->created_at->format('Y-m-d') === $day)->sum('amount');
+            $dailySales[] = $orders->filter(fn($o) => LocalTime::dateOf($o->created_at) === $day)->sum('amount');
             $start->addDay();
         }
 

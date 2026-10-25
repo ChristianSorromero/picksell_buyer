@@ -65,7 +65,15 @@ return [
     |
     */
 
+    // Storage stays UTC: every stored timestamp, including the append-only
+    // ledger and audit log, is UTC. Changing this would misread them.
     'timezone' => 'UTC',
+
+    // Philippine time for what people see (App\Support\LocalTime), for
+    // calendar days in reports and payout periods, and for the scheduler.
+    'display_timezone' => env('APP_DISPLAY_TIMEZONE', 'Asia/Manila'),
+
+    'schedule_timezone' => env('APP_SCHEDULE_TIMEZONE', 'Asia/Manila'),
 
     /*
     |--------------------------------------------------------------------------

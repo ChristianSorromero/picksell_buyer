@@ -9,6 +9,7 @@ use App\Models\ReturnRequest;
 use App\Models\Voucher;
 use App\Services\Ledger;
 use App\Services\Settlements;
+use App\Support\LocalTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\BuildsMarketplace;
@@ -36,10 +37,10 @@ class SettlementPayoutTest extends TestCase
         return app(Ledger::class);
     }
 
-    /** The last month up to yesterday, as of the (travelled) current time. */
+    /** The last month up to yesterday in Manila, as of the (travelled) current time. */
     private function periodToYesterday(): array
     {
-        return ['period_start' => now()->subDays(30)->toDateString(), 'period_end' => now()->subDay()->toDateString()];
+        return ['period_start' => LocalTime::today()->subDays(30)->toDateString(), 'period_end' => LocalTime::today()->subDay()->toDateString()];
     }
 
     public function test_orders_settle_only_after_cash_is_handed_in_and_the_return_window_passes(): void
@@ -157,7 +158,7 @@ class SettlementPayoutTest extends TestCase
         $this->paidOrder();
         $this->paidOrder();
         $this->settleAfterWindow();
-        $period = ['period_start' => now()->subDays(30)->toDateString(), 'period_end' => now()->subDay()->toDateString()];
+        $period = $this->periodToYesterday();
 
         // Only admins manage payouts.
         $this->actingAs($this->seller)->post('/admin/finance/payouts', $period)->assertForbidden();
@@ -174,11 +175,11 @@ class SettlementPayoutTest extends TestCase
         $this->assertSame(2, Payout::count());
 
         // Can't be marked paid before approval, or without a reference.
-        $this->actingAs($this->admin)->patch("/admin/finance/payouts/{$sellerPayout->id}", ['action' => 'complete', 'reference' => 'BDO-1', 'disbursed_on' => now()->toDateString()])->assertStatus(422);
+        $this->actingAs($this->admin)->patch("/admin/finance/payouts/{$sellerPayout->id}", ['action' => 'complete', 'reference' => 'BDO-1', 'disbursed_on' => LocalTime::today()->toDateString()])->assertStatus(422);
         $this->actingAs($this->admin)->patch("/admin/finance/payouts/{$sellerPayout->id}", ['action' => 'approve'])->assertSessionHasNoErrors();
         $this->actingAs($this->admin)->patch("/admin/finance/payouts/{$sellerPayout->id}", ['action' => 'complete'])->assertSessionHasErrors('reference');
-        $this->actingAs($this->admin)->patch("/admin/finance/payouts/{$sellerPayout->id}", ['action' => 'complete', 'reference' => 'BDO-1', 'disbursed_on' => now()->toDateString()])->assertSessionHasNoErrors();
-        $this->actingAs($this->admin)->patch("/admin/finance/payouts/{$sellerPayout->id}", ['action' => 'complete', 'reference' => 'BDO-1', 'disbursed_on' => now()->toDateString()])->assertStatus(422);
+        $this->actingAs($this->admin)->patch("/admin/finance/payouts/{$sellerPayout->id}", ['action' => 'complete', 'reference' => 'BDO-1', 'disbursed_on' => LocalTime::today()->toDateString()])->assertSessionHasNoErrors();
+        $this->actingAs($this->admin)->patch("/admin/finance/payouts/{$sellerPayout->id}", ['action' => 'complete', 'reference' => 'BDO-1', 'disbursed_on' => LocalTime::today()->toDateString()])->assertStatus(422);
 
         $this->assertSame('completed', $sellerPayout->fresh()->status);
         $this->assertSame(0, $this->ledger()->balance(Ledger::SELLER_PAYABLE, $this->seller->id));
@@ -220,11 +221,11 @@ class SettlementPayoutTest extends TestCase
         // Below the threshold the creator may approve.
         $this->actingAs($this->admin)->patch("/admin/finance/payouts/{$payout->id}", ['action' => 'approve'])->assertSessionHasNoErrors();
         // A future disbursement date is refused; the real date is stored.
-        $this->actingAs($this->admin)->patch("/admin/finance/payouts/{$payout->id}", ['action' => 'complete', 'reference' => 'GC-1', 'disbursed_on' => now()->addDay()->toDateString()])
+        $this->actingAs($this->admin)->patch("/admin/finance/payouts/{$payout->id}", ['action' => 'complete', 'reference' => 'GC-1', 'disbursed_on' => LocalTime::today()->addDay()->toDateString()])
             ->assertStatus(422);
-        $this->actingAs($this->admin)->patch("/admin/finance/payouts/{$payout->id}", ['action' => 'complete', 'reference' => 'GC-1', 'disbursed_on' => now()->subDay()->toDateString()])
+        $this->actingAs($this->admin)->patch("/admin/finance/payouts/{$payout->id}", ['action' => 'complete', 'reference' => 'GC-1', 'disbursed_on' => LocalTime::today()->subDay()->toDateString()])
             ->assertSessionHasNoErrors();
-        $this->assertSame(now()->subDay()->toDateString(), $payout->fresh()->disbursed_on->toDateString());
+        $this->assertSame(LocalTime::today()->subDay()->toDateString(), $payout->fresh()->disbursed_on->toDateString());
     }
 
     public function test_reconciliation_and_role_pages_show_balances(): void

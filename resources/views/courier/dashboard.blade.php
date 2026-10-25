@@ -151,7 +151,7 @@
                     @elseif($state === OrderStatus::DELIVERY_FAILED)
                     <span style="color:#b45309;font-size:0.8rem;">Max attempts reached — bring it back to the sorting center.</span>
                     @elseif($order->status === 'completed')
-                    <span style="color:#16a34a;font-size:0.8rem;">Completed {{ optional($order->delivered_at)->format('M d, Y') }}</span>
+                    <span style="color:#16a34a;font-size:0.8rem;">Completed {{ $order->delivered_at?->forDisplay()->format('M d, Y') }}</span>
                     @endif
                 </td>
             </tr>

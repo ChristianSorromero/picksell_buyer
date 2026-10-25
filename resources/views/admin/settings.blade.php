@@ -36,7 +36,7 @@
                     <div style="flex:1;">
                         <div style="font-size:0.88rem;font-weight:700;">{{ $ann->title }} <span style="font-size:0.72rem;font-weight:400;color:#aaa;margin-left:0.4rem;">{{ ucfirst($ann->audience) }}</span></div>
                         <div style="font-size:0.82rem;color:#666;margin-top:0.2rem;">{{ $ann->message }}</div>
-                        <div style="font-size:0.72rem;color:#bbb;margin-top:0.3rem;">{{ $ann->created_at->format('M d, Y h:i A') }} &nbsp;·&nbsp; {{ $ann->active ? 'Active' : 'Hidden' }}</div>
+                        <div style="font-size:0.72rem;color:#bbb;margin-top:0.3rem;">{{ $ann->created_at->forDisplay()->format('M d, Y h:i A') }} &nbsp;·&nbsp; {{ $ann->active ? 'Active' : 'Hidden' }}</div>
                     </div>
                     <div style="display:flex;gap:0.4rem;flex-shrink:0;">
                         <form method="POST" action="/admin/settings/announcements/{{ $ann->id }}/toggle">

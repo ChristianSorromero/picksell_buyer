@@ -35,7 +35,7 @@
             <td>{{ $user->email }}</td>
             <td>{{ $user->contact_no }}</td>
             <td><span class="badge badge-{{ $user->status }}">{{ ucfirst($user->status) }}</span></td>
-            <td>{{ $user->created_at->format('M d, Y') }}</td>
+            <td>{{ $user->created_at->forDisplay()->format('M d, Y') }}</td>
             <td>
                 <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
                     @if($user->status !== 'approved')

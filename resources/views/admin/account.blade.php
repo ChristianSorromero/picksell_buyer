@@ -75,7 +75,7 @@
         <table style="font-size:0.88rem;">
             <tr><td style="font-weight:600;color:#888;padding:0.4rem 1rem 0.4rem 0;width:160px;">Role</td><td><span class="badge" style="background:#fff3f0;color:var(--coral);">Administrator</span></td></tr>
             <tr><td style="font-weight:600;color:#888;padding:0.4rem 1rem 0.4rem 0;">Status</td><td><span class="badge badge-approved">Active</span></td></tr>
-            <tr><td style="font-weight:600;color:#888;padding:0.4rem 1rem 0.4rem 0;">Member Since</td><td>{{ auth()->user()->created_at->format('F d, Y') }}</td></tr>
+            <tr><td style="font-weight:600;color:#888;padding:0.4rem 1rem 0.4rem 0;">Member Since</td><td>{{ auth()->user()->created_at->forDisplay()->format('F d, Y') }}</td></tr>
         </table>
     </div>
 </div>

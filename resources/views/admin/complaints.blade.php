@@ -35,7 +35,7 @@
                 @endphp
                 <span class="badge {{ $badgeMap[$c->status] ?? 'badge-pending' }}">{{ ucfirst(str_replace('_',' ',$c->status)) }}</span>
             </td>
-            <td>{{ $c->created_at->format('M d, Y') }}</td>
+            <td>{{ $c->created_at->forDisplay()->format('M d, Y') }}</td>
             <td><a href="/admin/complaints/{{ $c->id }}" class="btn btn-coral btn-sm">Review</a></td>
         </tr>
         @empty

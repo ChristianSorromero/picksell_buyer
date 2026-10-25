@@ -6,6 +6,7 @@ use App\Models\CartItem;
 use App\Models\ProductVariation;
 use App\Models\Voucher;
 use App\Support\BuyerPresenter;
+use App\Support\LocalTime;
 use Illuminate\Support\Collection;
 
 /**
@@ -112,8 +113,8 @@ class CheckoutPricing
     private function withEta(array $o): array
     {
         return $o + [
-            'estimated_from' => now()->addDays($o['min_days'])->toDateString(),
-            'estimated_to'   => now()->addDays($o['max_days'])->toDateString(),
+            'estimated_from' => LocalTime::today()->addDays($o['min_days'])->toDateString(),
+            'estimated_to'   => LocalTime::today()->addDays($o['max_days'])->toDateString(),
         ];
     }
 

@@ -6,6 +6,7 @@ use App\Models\DeliveryAttempt;
 use App\Models\LedgerTransaction;
 use App\Models\Order;
 use App\Models\User;
+use App\Support\LocalTime;
 use App\Support\Money;
 
 /**
@@ -93,7 +94,7 @@ class RiderPay
     private function stopKey(Order $order): string
     {
         $address = $order->delivery['address'] ?? '';
-        return $order->cod_collected_by . ':' . md5(mb_strtolower(trim($address))) . ':' . $order->delivered_at?->toDateString();
+        return $order->cod_collected_by . ':' . md5(mb_strtolower(trim($address))) . ':' . LocalTime::dateOf($order->delivered_at);
     }
 
     /** @return array{area: ?string, cents: int} */

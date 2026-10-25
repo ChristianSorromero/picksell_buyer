@@ -137,7 +137,7 @@
                     <tr><td style="color:#888;">Sex</td><td>{{ auth()->user()->sex }}</td></tr>
                     <tr><td style="color:#888;">Birthday</td><td>{{ auth()->user()->birthday ? auth()->user()->birthday->format('M d, Y').' (Age '.auth()->user()->age.')' : '—' }}</td></tr>
                     <tr><td style="color:#888;">Address</td><td>{{ implode(', ', array_filter([auth()->user()->house_no, auth()->user()->street, auth()->user()->barangay, auth()->user()->municipality, auth()->user()->province])) }}</td></tr>
-                    <tr><td style="color:#888;">Member Since</td><td>{{ auth()->user()->created_at->format('M d, Y') }}</td></tr>
+                    <tr><td style="color:#888;">Member Since</td><td>{{ auth()->user()->created_at->forDisplay()->format('M d, Y') }}</td></tr>
                 </table>
             </div>
         </div>

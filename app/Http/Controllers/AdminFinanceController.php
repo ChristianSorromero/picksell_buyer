@@ -9,6 +9,7 @@ use App\Models\SellerTaxProfile;
 use App\Models\User;
 use App\Services\CodPayments;
 use App\Services\Settlements;
+use App\Support\LocalTime;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -40,12 +41,9 @@ class AdminFinanceController extends Controller
 
     public function generate(Request $request)
     {
-        $data = $request->validate(['period_start' => 'required|date', 'period_end' => 'required|date|after_or_equal:period_start|before:today']);
-        $payouts = $this->settlements->generatePayouts(
-            CarbonImmutable::parse($data['period_start'])->startOfDay(),
-            CarbonImmutable::parse($data['period_end'])->endOfDay(),
-            $request->user(),
-        );
+        $data = $request->validate(['period_start' => 'required|date', 'period_end' => 'required|date|after_or_equal:period_start|before:' . LocalTime::today()->toDateString()]);
+        [$start, $end] = LocalTime::dayRange($data['period_start'], $data['period_end']);
+        $payouts = $this->settlements->generatePayouts($start, $end, $request->user());
         return back()->with('success', $payouts->isEmpty() ? 'Nothing new to pay out for that period.' : "{$payouts->count()} payout(s) created for review.");
     }
 
@@ -77,7 +75,7 @@ class AdminFinanceController extends Controller
             'amount'       => 'required|numeric|min:0',
             'evidence'     => 'required|string|max:300',
             'reason'       => 'required|string|max:500',
-            'collected_on' => 'nullable|date|before_or_equal:today',
+            'collected_on' => 'nullable|date|before_or_equal:' . LocalTime::today()->toDateString(),
         ]);
         $cod->backfillHistoricalCollection($order, $request->user(), (string) $data['amount'], $data['evidence'], $data['reason'], $data['collected_on'] ?? null);
         return back()->with('success', "Historical payment recorded for {$order->order_number}.");
@@ -98,7 +96,7 @@ class AdminFinanceController extends Controller
             'tin'                           => ['nullable', 'regex:/^\d{3}-?\d{3}-?\d{3}(-?\d{3,5})?$/'],
             'bir_cor_number'                => 'nullable|string|max:40',
             'sworn_declaration_year'        => 'nullable|integer|min:2024|max:2100',
-            'sworn_declaration_received_on' => 'nullable|date|before_or_equal:today',
+            'sworn_declaration_received_on' => 'nullable|date|before_or_equal:' . LocalTime::today()->toDateString(),
             'exemption_type'                => 'nullable|in:lower_rate,exempt_by_law,exempt_by_treaty',
             'exemption_reference'           => 'nullable|string|max:255',
             'notes'                         => 'nullable|string|max:1000',

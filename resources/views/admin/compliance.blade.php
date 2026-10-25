@@ -15,7 +15,7 @@
             <td>{{ $seller->business_name ?? '—' }}</td>
             <td><span class="badge badge-seller">{{ $seller->line_of_business ?? '—' }}</span></td>
             <td>{{ $seller->email }}</td>
-            <td>{{ $seller->created_at->format('M d, Y') }}</td>
+            <td>{{ $seller->created_at->forDisplay()->format('M d, Y') }}</td>
             <td>
                 <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
                     <!-- Warn -->

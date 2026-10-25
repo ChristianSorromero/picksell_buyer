@@ -24,7 +24,7 @@
                     @if($r->resolution_type)
                     <tr><td style="{{ $label }}">{{ $r->status === RR::PROPOSED ? 'Seller proposes' : 'Resolution' }}</td><td>{{ RR::RESOLUTIONS[$r->resolution_type][0] }} — {{ Money::format($r->resolutionCents()) }}</td></tr>
                     @endif
-                    <tr><td style="{{ $label }}">Requested</td><td>{{ $r->created_at->format('M d, Y h:i A') }}</td></tr>
+                    <tr><td style="{{ $label }}">Requested</td><td>{{ $r->created_at->forDisplay()->format('M d, Y h:i A') }}</td></tr>
                 </table>
                 @if($r->details)
                     <div style="margin-top:0.8rem;background:#fafaf8;border:1px solid #f0ebe0;border-radius:8px;padding:0.8rem;font-size:0.86rem;white-space:pre-line;">{{ $r->details }}</div>
@@ -46,13 +46,13 @@
                     <tr><td style="{{ $label }}">Order</td><td>{{ $order->order_number }} · {{ $order->product_name }}{{ $order->variation_label ? ' (' . $order->variation_label . ')' : '' }}</td></tr>
                     <tr><td style="{{ $label }}">Seller</td><td>{{ $order->seller->business_name ?? $order->seller->full_name ?? '—' }}</td></tr>
                     <tr><td style="{{ $label }}">Order total</td><td>{{ Money::format($order->totalCents()) }}</td></tr>
-                    <tr><td style="{{ $label }}">Payment</td><td>{{ ucfirst(str_replace('_', ' ', $order->payment_status)) }} (Cash on Delivery){{ $order->paid_at ? ' · handed in ' . $order->paid_at->format('M d, Y') : '' }}</td></tr>
-                    <tr><td style="{{ $label }}">Delivered</td><td>{{ $order->delivered_at?->format('M d, Y h:i A') ?? '—' }} by {{ $order->courier->full_name ?? '—' }}</td></tr>
+                    <tr><td style="{{ $label }}">Payment</td><td>{{ ucfirst(str_replace('_', ' ', $order->payment_status)) }} (Cash on Delivery){{ $order->paid_at ? ' · handed in ' . $order->paid_at->forDisplay()->format('M d, Y') : '' }}</td></tr>
+                    <tr><td style="{{ $label }}">Delivered</td><td>{{ $order->delivered_at?->forDisplay()->format('M d, Y h:i A') ?? '—' }} by {{ $order->courier->full_name ?? '—' }}</td></tr>
                 </table>
                 <div style="margin-top:0.8rem;font-size:0.82rem;font-weight:600;">Delivery history</div>
                 <ul style="font-size:0.8rem;color:#666;padding-left:1.1rem;margin:0.3rem 0 0;">
                     @foreach($order->events as $event)
-                        <li>{{ $event->occurred_at->format('M d, h:i A') }} — {{ $event->title }}</li>
+                        <li>{{ $event->occurred_at->forDisplay()->format('M d, h:i A') }} — {{ $event->title }}</li>
                     @endforeach
                 </ul>
             </div>
@@ -170,7 +170,7 @@
         <div class="card">
             <div class="card-header"><span class="card-title">Fulfilment</span></div>
             <div class="card-body" style="font-size:0.85rem;">
-                <div>Refund: {{ $r->resolutionCents() > 0 ? ($r->refunded_at ? 'handed over ' . $r->refunded_at->format('M d') : ($r->refund_released_at ? 'cash with ' . ($r->refundCourier->full_name ?? 'rider') : ($r->refundBlocker() ?? 'ready for the sorting center to release cash'))) : 'none' }}</div>
+                <div>Refund: {{ $r->resolutionCents() > 0 ? ($r->refunded_at ? 'handed over ' . $r->refunded_at->forDisplay()->format('M d') : ($r->refund_released_at ? 'cash with ' . ($r->refundCourier->full_name ?? 'rider') : ($r->refundBlocker() ?? 'ready for the sorting center to release cash'))) : 'none' }}</div>
                 @if($r->requires_item_return)<div>Item: {{ $r->item_received_at ? 'received by seller' . ($r->inspection_passed === false ? ' — FAILED inspection' : '') . ($r->restocked ? ' (restocked)' : '') : ($r->item_collected_at ? 'collected from buyer' : ($r->pickupCourier ? 'pickup assigned to ' . $r->pickupCourier->full_name : 'waiting for pickup')) }}</div>@endif
                 @if($r->inspection_note)<div style="color:#888;">Inspection: {{ $r->inspection_note }}</div>@endif
                 @if($r->resolution_type === 'replacement')<div>Replacement: {{ $r->replacement_sent_at ? 'sent' : 'not sent yet' }}</div>@endif
@@ -185,7 +185,7 @@
                     <div style="font-size:0.8rem;padding:0.35rem 0;border-bottom:1px solid #f0ebe0;">
                         <strong>{{ str_replace('_', ' ', $log->action) }}</strong>
                         @if($log->amount_cents !== null) · {{ Money::format($log->amount_cents) }}@endif
-                        <div style="color:#888;">{{ $log->created_at->format('M d, Y h:i A') }} · {{ $log->actor->full_name ?? 'System' }} ({{ $log->actor_role ?? '—' }})</div>
+                        <div style="color:#888;">{{ $log->created_at->forDisplay()->format('M d, Y h:i A') }} · {{ $log->actor->full_name ?? 'System' }} ({{ $log->actor_role ?? '—' }})</div>
                         @if($log->note)<div>{{ $log->note }}</div>@endif
                     </div>
                 @endforeach

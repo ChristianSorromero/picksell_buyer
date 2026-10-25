@@ -14,7 +14,7 @@
                 <tr><td style="font-weight:600;color:#888;padding:0.4rem 0.8rem 0.4rem 0;width:140px;">Filed By</td><td>{{ $complaint->filer->full_name ?? '—' }} ({{ ucfirst($complaint->filer->role ?? '') }})</td></tr>
                 <tr><td style="font-weight:600;color:#888;padding:0.4rem 0.8rem 0.4rem 0;">Against</td><td>{{ $complaint->against->full_name ?? 'N/A' }}</td></tr>
                 <tr><td style="font-weight:600;color:#888;padding:0.4rem 0.8rem 0.4rem 0;">Subject</td><td>{{ $complaint->subject }}</td></tr>
-                <tr><td style="font-weight:600;color:#888;padding:0.4rem 0.8rem 0.4rem 0;">Filed On</td><td>{{ $complaint->created_at->format('M d, Y h:i A') }}</td></tr>
+                <tr><td style="font-weight:600;color:#888;padding:0.4rem 0.8rem 0.4rem 0;">Filed On</td><td>{{ $complaint->created_at->forDisplay()->format('M d, Y h:i A') }}</td></tr>
                 <tr><td style="font-weight:600;color:#888;padding:0.4rem 0.8rem 0.4rem 0;">Status</td>
                     <td>
                         @php $badgeMap = ['open'=>'badge-pending','under_review'=>'badge-pending','resolved'=>'badge-approved','dismissed'=>'badge-deactivated']; @endphp

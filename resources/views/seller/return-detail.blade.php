@@ -104,7 +104,7 @@
             <div class="card-body">
                 @foreach($r->auditLogs as $log)
                     <div style="font-size:0.8rem;padding:0.3rem 0;border-bottom:1px solid #f0ebe0;">
-                        <strong>{{ str_replace('_', ' ', $log->action) }}</strong> · {{ $log->created_at->format('M d, h:i A') }} · {{ $log->actor_role ?? '—' }}
+                        <strong>{{ str_replace('_', ' ', $log->action) }}</strong> · {{ $log->created_at->forDisplay()->format('M d, h:i A') }} · {{ $log->actor_role ?? '—' }}
                         @if($log->note)<div style="color:#666;">{{ $log->note }}</div>@endif
                     </div>
                 @endforeach

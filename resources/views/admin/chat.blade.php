@@ -76,7 +76,7 @@
             @forelse($messages as $msg)
             <div class="msg {{ $msg->sender_id === auth()->id() ? 'sent' : 'received' }}">
                 <div class="msg-bubble">{{ $msg->body }}</div>
-                <div class="msg-time">{{ $msg->created_at->format('M d, h:i A') }}</div>
+                <div class="msg-time">{{ $msg->created_at->forDisplay()->format('M d, h:i A') }}</div>
             </div>
             @empty
             <div style="text-align:center;color:#aaa;font-size:0.85rem;margin-top:2rem;">No messages yet. Start the conversation!</div>

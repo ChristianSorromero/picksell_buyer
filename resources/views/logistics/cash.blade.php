@@ -23,7 +23,7 @@
                         <tr>
                             <td><input type="checkbox" name="order_ids[]" value="{{ $order->id }}" checked></td>
                             <td>{{ $order->order_number }}</td>
-                            <td>{{ $order->cod_collected_at->format('M d, h:i A') }}</td>
+                            <td>{{ $order->cod_collected_at->forDisplay()->format('M d, h:i A') }}</td>
                             <td>{{ Money::format($order->totalCents()) }}</td>
                         </tr>
                     @endforeach
@@ -110,7 +110,7 @@
                 <td>#{{ $r->id }}</td>
                 <td>{{ $r->refundCourier->full_name ?? '—' }}</td>
                 <td>{{ Money::format($r->resolutionCents()) }}</td>
-                <td>{{ $r->refund_released_at->format('M d, h:i A') }}</td>
+                <td>{{ $r->refund_released_at->forDisplay()->format('M d, h:i A') }}</td>
                 <td>
                     <form method="POST" action="{{ route('logistics.refunds.cancel', $r) }}" style="display:flex;gap:.4rem;">
                         @csrf

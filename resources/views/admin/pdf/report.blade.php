@@ -31,7 +31,7 @@
     <div style="text-align:right;">
         <div class="report-title">{{ $type === 'sales' ? 'Sales Summary Report' : 'Commission Report' }}</div>
         <div class="report-meta">Period: {{ \Carbon\Carbon::parse($from)->format('M d, Y') }} — {{ \Carbon\Carbon::parse($to)->format('M d, Y') }}</div>
-        <div class="report-meta">Generated: {{ now()->format('M d, Y h:i A') }}</div>
+        <div class="report-meta">Generated: {{ \App\Support\LocalTime::now()->format('M d, Y h:i A') }}</div>
     </div>
 </div>
 

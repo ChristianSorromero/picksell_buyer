@@ -1,3 +1,5 @@
+import 'json.dart';
+
 class ChatContact {
   const ChatContact({
     required this.id,
@@ -34,9 +36,7 @@ class ChatContact {
         name: json['name'] as String? ?? '',
         initials: json['initials'] as String? ?? '?',
         lastMessage: json['last_message'] as String? ?? '',
-        lastTime: json['last_time'] != null
-            ? DateTime.tryParse(json['last_time'] as String)
-            : null,
+        lastTime: toDate(json['last_time']),
         unread: json['unread'] as int? ?? 0,
       );
 }
@@ -60,7 +60,7 @@ class ChatMessage {
         id: json['id'] as int,
         body: json['body'] as String,
         senderId: json['sender_id'] as int,
-        createdAt: DateTime.parse(json['created_at'] as String),
+        createdAt: toDate(json['created_at']) ?? DateTime.now(),
         isMine: json['is_mine'] as bool,
       );
 }

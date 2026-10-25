@@ -27,7 +27,7 @@
                 'Barangay'     => $user->barangay,
                 'Street'       => $user->street ?? '—',
                 'House No.'    => $user->house_no ?? '—',
-                'Applied'      => $user->created_at->format('M d, Y h:i A'),
+                'Applied'      => $user->created_at->forDisplay()->format('M d, Y h:i A'),
             ];
             if ($user->role === 'seller') {
                 $fields['Business Name']    = $user->business_name;

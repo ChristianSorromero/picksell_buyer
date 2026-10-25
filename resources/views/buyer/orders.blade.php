@@ -42,7 +42,7 @@
         <div>
             <span style="font-size:0.8rem;color:#888;">Order #</span>
             <strong>{{ $order->order_number }}</strong>
-            <span style="margin-left:0.5rem;font-size:0.8rem;color:#aaa;">{{ $order->created_at->format('M d, Y') }}</span>
+            <span style="margin-left:0.5rem;font-size:0.8rem;color:#aaa;">{{ $order->created_at->forDisplay()->format('M d, Y') }}</span>
         </div>
         <div style="display:flex;align-items:center;gap:0.8rem;">
             <span style="font-size:0.8rem;color:#888;">{{ $order->seller->business_name ?? $order->seller->full_name }}</span>

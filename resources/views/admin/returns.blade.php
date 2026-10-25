@@ -32,7 +32,7 @@
                     <td>{{ $r->buyer->full_name ?? '—' }}</td>
                     <td>{{ $r->order->seller->business_name ?? $r->order->seller->full_name ?? '—' }}</td>
                     <td>{{ $r->reason }}</td>
-                    <td>{{ $r->created_at->format('M d, Y') }}</td>
+                    <td>{{ $r->created_at->forDisplay()->format('M d, Y') }}</td>
                     <td><span class="badge {{ $badge[$r->status] ?? 'badge-pending' }}">{{ \App\Models\ReturnRequest::STAGE_LABELS[$r->status] ?? $r->status }}</span></td>
                     <td><a href="{{ route('admin.returns.show', $r) }}" class="btn btn-outline btn-sm">Review</a></td>
                 </tr>
