@@ -27,7 +27,7 @@
                         <tbody>
                         @foreach($items as $item)
                         <tr>
-                            <td><input type="checkbox" name="item_ids[]" value="{{ $item->id }}" class="item-check" onchange="updateSummary()"></td>
+                            <td><input type="checkbox" name="item_ids[]" value="{{ $item->id }}" class="item-check" data-seller="{{ $item->product->seller_id }}" onchange="updateSummary()"></td>
                             <td>
                                 <div style="display:flex;align-items:center;gap:0.6rem;">
                                     @if($item->product->image)
@@ -49,7 +49,7 @@
                                            name="quantity"
                                            value="{{ $item->quantity }}"
                                            min="1"
-                                           max="{{ $item->product->stock }}"
+                                           max="{{ min($item->product->stock, $maxPerItem) }}"
                                            data-item-id="{{ $item->id }}"
                                            class="qty-input"
                                            style="width:55px;padding:0.3rem;border:1.5px solid #ddd6c8;border-radius:6px;text-align:center;font-size:0.85rem;">
@@ -78,17 +78,34 @@
                         <input type="text" name="voucher_code" class="form-control" placeholder="Enter voucher code">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Payment Method *</label>
-                        <select name="payment_method" class="form-control" required>
-                            <option value="cod">Cash on Delivery</option>
-                            <option value="gcash">GCash</option>
-                            <option value="bank_transfer">Bank Transfer</option>
+                        <label class="form-label">Deliver To</label>
+                        @if($shipTo)
+                            <div style="font-size:0.85rem;">{{ $shipTo['recipient_name'] }} · {{ $shipTo['phone'] }}</div>
+                            <div style="font-size:0.8rem;color:#888;">{{ $shipTo['full_address'] }}</div>
+                        @else
+                            <small style="display:block;color:#b45309;">Add your address in <a href="/buyer/account">My Account</a> before placing an order.</small>
+                        @endif
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Shipping Option *</label>
+                        <select name="shipping_option" id="shippingOption" class="form-control" onchange="updateSummary()" required>
+                            @foreach($shippingOptions as $option)
+                                <option value="{{ $option['code'] }}" data-fee="{{ $option['fee'] }}">{{ $option['name'] }} — ₱{{ number_format($option['fee'], 2) }} per store ({{ $option['min_days'] }}–{{ $option['max_days'] }} days)</option>
+                            @endforeach
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">PickSell Logistics *</label>
-                        <select name="logistics_id" class="form-control" required>
-                            <option value="">Select logistics provider</option>
+                        <label class="form-label">Payment Method *</label>
+                        <select name="payment_method" class="form-control" required>
+                            @foreach($paymentMethods as $method)
+                                <option value="{{ $method['code'] }}" @disabled(!$method['available'])>{{ $method['name'] }}{{ $method['available'] ? '' : ' (coming soon)' }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">PickSell Logistics</label>
+                        <select name="logistics_id" class="form-control">
+                            <option value="">Automatic (by delivery area)</option>
                             @foreach($logisticsProviders as $provider)
                                 <option value="{{ $provider->id }}">{{ $provider->business_name ?: $provider->full_name }}</option>
                             @endforeach
@@ -102,11 +119,16 @@
                         <span style="color:#888;">Selected Items</span>
                         <span id="selectedCount">0</span>
                     </div>
-                    <div style="display:flex;justify-content:space-between;font-size:1rem;font-weight:800;margin-bottom:1rem;">
+                    <div style="display:flex;justify-content:space-between;font-size:0.88rem;margin-bottom:0.5rem;">
+                        <span style="color:#888;">Shipping</span>
+                        <span id="shippingAmount">₱0.00</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:1rem;font-weight:800;margin-bottom:0.3rem;">
                         <span>Total</span>
                         <span style="color:var(--coral);" id="totalAmount">₱0.00</span>
                     </div>
-                    <button type="submit" class="btn btn-coral" style="width:100%;justify-content:center;" id="placeOrderBtn" disabled>
+                    <div style="font-size:0.75rem;color:#888;margin-bottom:1rem;">Vouchers are applied when you place the order.</div>
+                    <button type="submit" class="btn btn-coral" style="width:100%;justify-content:center;" id="placeOrderBtn" disabled data-can-order="{{ $shipTo ? '1' : '0' }}">
                         Place Order
                     </button>
                 </div>
@@ -129,13 +151,21 @@ function toggleAll(cb) {
 function updateSummary() {
     const checked = document.querySelectorAll('.item-check:checked');
     let total = 0;
+    const sellers = new Set();
     checked.forEach(c => {
         const row = c.closest('tr');
         total += parseFloat(row.querySelector('[data-subtotal]').dataset.subtotal);
+        sellers.add(c.dataset.seller);
     });
+    // One shipping fee per store parcel, as charged at checkout.
+    const option = document.getElementById('shippingOption').selectedOptions[0];
+    const shipping = sellers.size * parseFloat(option ? option.dataset.fee : 0);
+    const peso = n => '₱' + n.toLocaleString('en-PH', {minimumFractionDigits:2, maximumFractionDigits:2});
     document.getElementById('selectedCount').textContent = checked.length;
-    document.getElementById('totalAmount').textContent = '₱' + total.toLocaleString('en-PH', {minimumFractionDigits:2});
-    document.getElementById('placeOrderBtn').disabled = checked.length === 0;
+    document.getElementById('shippingAmount').textContent = peso(shipping);
+    document.getElementById('totalAmount').textContent = peso(total + shipping);
+    const button = document.getElementById('placeOrderBtn');
+    button.disabled = checked.length === 0 || button.dataset.canOrder !== '1';
     const selectAll = document.getElementById('selectAll');
     if (selectAll) {
         selectAll.checked = checked.length === document.querySelectorAll('.item-check').length;
@@ -157,13 +187,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     'Accept': 'application/json'
                 },
                 body: JSON.stringify({ quantity })
-            }).then(response => {
+            }).then(async response => {
                 if (!response.ok) {
-                    throw new Error('Unable to update quantity');
+                    const body = await response.json().catch(() => ({}));
+                    throw new Error(body.errors?.quantity?.[0] || body.message || 'Unable to update quantity. Please try again.');
                 }
                 window.location.reload();
-            }).catch(() => {
-                alert('Unable to update quantity. Please try again.');
+            }).catch(error => {
+                alert(error.message);
+                window.location.reload();
             });
         });
     });

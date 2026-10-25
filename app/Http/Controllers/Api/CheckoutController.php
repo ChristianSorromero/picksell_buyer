@@ -7,22 +7,18 @@ use App\Models\BuyerAddress;
 use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\Order;
-use App\Models\Product;
-use App\Models\ProductVariation;
-use App\Models\User;
 use App\Models\Voucher;
 use App\Services\CheckoutPricing;
+use App\Services\OrderPlacement;
 use App\Support\BuyerPresenter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /** COM-C14…C19 + API-C05 Checkout Service. */
 class CheckoutController extends Controller
 {
-    public function __construct(private CheckoutPricing $pricing) {}
+    public function __construct(private CheckoutPricing $pricing, private OrderPlacement $placement) {}
 
     public function shippingOptions()
     {
@@ -75,92 +71,28 @@ class CheckoutController extends Controller
             return response()->json(['message' => 'Please choose a delivery address.', 'errors' => ['address_id' => ['Please choose a delivery address.']]], 422);
         }
 
-        return DB::transaction(function () use ($request, $data, $buyer, $address) {
-            $items = $this->selectedItems($request, $data['item_ids']);
-            if ($items->isEmpty()) {
-                return response()->json(['message' => 'Your selected items are no longer in your cart.'], 422);
-            }
+        $placed = $this->placement->place(
+            $buyer, $data['item_ids'], $address->snapshot(), $data['payment_method'],
+            $data['shipping_option'] ?? 'standard', $data['voucher_code'] ?? null,
+        );
 
-            // Lock stock rows so two checkouts can't oversell the last unit.
-            Product::whereIn('id', $items->pluck('product_id'))->lockForUpdate()->get();
-            ProductVariation::whereIn('id', $items->flatMap(fn ($i) => $this->pricing->variationIds($i)))->lockForUpdate()->get();
-            $items->each(fn ($i) => $i->product->refresh());
-
-            $quote = $this->pricing->quote($items, $data['shipping_option'] ?? 'standard', $data['voucher_code'] ?? null);
-
-            if ($quote['has_issues']) {
-                return response()->json([
-                    'message' => 'Some items in your order changed (stock or availability). Please review your cart.',
-                    'quote'   => $quote,
-                ], 409);
-            }
-            if ($quote['voucher_error']) {
-                return response()->json([
-                    'message' => $quote['voucher_error'],
-                    'errors'  => ['voucher_code' => [$quote['voucher_error']]],
-                ], 422);
-            }
-
-            $checkoutRef = 'CO-' . strtoupper(Str::random(10));
-            $shipping = $quote['shipping_option'];
-            $logistics = $this->logisticsFor($address);
-            $rate = (float) config('picksell.commission_rate');
-            $serviceFeeLeft = $quote['totals']['service_fee'];
-            $orders = collect();
-
-            foreach ($quote['groups'] as $group) {
-                foreach ($group['items'] as $index => $line) {
-                    $item = $items->firstWhere('id', $line['cart_item_id']);
-                    $product = $item->product;
-                    $shippingFee = $index === 0 ? $group['shipping_fee'] : 0;  // one parcel fee per seller
-                    $serviceFee = $serviceFeeLeft;
-                    $serviceFeeLeft = 0;
-                    $amount = round($line['line_total'] - $line['discount'], 2);
-
-                    $orders->push(Order::create([
-                        'order_number'            => $this->orderNumber(),
-                        'checkout_ref'            => $checkoutRef,
-                        'product_id'              => $product->id,
-                        'buyer_id'                => $buyer->id,
-                        'seller_id'               => $product->seller_id,
-                        'logistics_id'            => $logistics?->id,
-                        'product_name'            => $product->name,
-                        'quantity'                => $line['quantity'],
-                        'variation_label'         => $line['variation_label'],
-                        'variation_ids'           => $line['variation_ids'] ?: null,
-                        'unit_price'              => $line['unit_price'],
-                        'subtotal'                => $line['line_total'],
-                        'discount'                => $line['discount'],
-                        'voucher_code'            => $line['discount'] > 0 ? $quote['voucher']['code'] : null,
-                        'shipping_fee'            => $shippingFee,
-                        'service_fee'             => $serviceFee,
-                        'amount'                  => $amount,
-                        'total'                   => round($amount + $shippingFee + $serviceFee, 2),
-                        'commission'              => round($amount * $rate, 2),
-                        'status'                  => 'pending',
-                        'shipping_option'         => $shipping['code'],
-                        'estimated_delivery_from' => $shipping['estimated_from'],
-                        'estimated_delivery_to'   => $shipping['estimated_to'],
-                        'payment_method'          => $data['payment_method'],
-                        'payment_status'          => 'unpaid',
-                        'ship_to'                 => $address->snapshot(),
-                    ]));
-
-                    $product->decrement('stock', $line['quantity']);
-                    if ($line['variation_ids']) {
-                        ProductVariation::whereIn('id', $line['variation_ids'])->decrement('stock', $line['quantity']);
-                    }
-                    $item->delete();
-                }
-            }
-
-            return response()->json([
+        return match ($placed['result']) {
+            'empty'   => response()->json(['message' => 'Your selected items are no longer in your cart.'], 422),
+            'changed' => response()->json([
+                'message' => 'Some items in your order changed (stock or availability). Please review your cart.',
+                'quote'   => $placed['quote'],
+            ], 409),
+            'voucher' => response()->json([
+                'message' => $placed['message'],
+                'errors'  => ['voucher_code' => [$placed['message']]],
+            ], 422),
+            'placed'  => response()->json([
                 'message'      => 'Order placed! We’ll notify you as it moves.',
-                'checkout_ref' => $checkoutRef,
-                'totals'       => $quote['totals'],
-                'orders'       => $orders->map(fn ($o) => BuyerPresenter::orderCard($o->load('seller', 'product')))->values(),
-            ], 201);
-        });
+                'checkout_ref' => $placed['checkout_ref'],
+                'totals'       => $placed['totals'],
+                'orders'       => $placed['orders']->map(fn ($o) => BuyerPresenter::orderCard($o->load('seller', 'product')))->values(),
+            ], 201),
+        };
     }
 
     /**
@@ -197,21 +129,5 @@ class CheckoutController extends Controller
             'expired'   => Voucher::with('seller')->whereNotIn('code', $used)->where('expires_at', '<', now())
                 ->where('expires_at', '>', now()->subDays(30))->get()->map(fn ($v) => BuyerPresenter::voucher($v))->values(),
         ]);
-    }
-
-    private function orderNumber(): string
-    {
-        do {
-            $number = 'PS-' . random_int(10000000, 99999999);
-        } while (Order::where('order_number', $number)->exists());
-        return $number;
-    }
-
-    /** Prefer an approved logistics partner serving the buyer's province. */
-    private function logisticsFor(BuyerAddress $address): ?User
-    {
-        $approved = User::where('role', 'logistics')->where('status', 'approved');
-        return (clone $approved)->where('delivery_area', 'like', '%' . $address->province . '%')->first()
-            ?? $approved->orderBy('id')->first();
     }
 }

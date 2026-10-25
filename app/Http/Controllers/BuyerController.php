@@ -9,9 +9,11 @@ use App\Models\Message;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
+use App\Services\OrderPlacement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class BuyerController extends Controller
 {
@@ -63,12 +65,19 @@ class BuyerController extends Controller
             'variation_id' => 'nullable|exists:product_variations,id',
         ]);
 
+        $variationId = $data['variation_id'] ?? null;
+        if ($variationId && !$product->variations()->whereKey($variationId)->exists()) {
+            throw ValidationException::withMessages(['variation_id' => 'Please choose an option for this product.']);
+        }
+
         $cart = $this->getCart();
 
         $existing = CartItem::where('cart_id', $cart->id)
             ->where('product_id', $product->id)
-            ->where('variation_id', $data['variation_id'] ?? null)
+            ->where('variation_id', $variationId)
             ->first();
+
+        $this->assertCartQuantity($product, $variationId, ($existing?->quantity ?? 0) + $data['quantity']);
 
         if ($existing) {
             $existing->increment('quantity', $data['quantity']);
@@ -95,15 +104,42 @@ class BuyerController extends Controller
             ->orderBy('business_name')
             ->orderBy('last_name')
             ->get();
-        return view('buyer.cart', compact('items', 'cartCount', 'logisticsProviders'));
+        $shipTo = $this->deliveryAddress($this->buyer());
+        $paymentMethods = config('picksell.payment_methods');
+        $shippingOptions = config('picksell.shipping_options');
+        $maxPerItem = (int) config('picksell.max_quantity_per_item');
+        return view('buyer.cart', compact('items', 'cartCount', 'logisticsProviders', 'shipTo', 'paymentMethods', 'shippingOptions', 'maxPerItem'));
     }
 
     public function updateCart(Request $request, CartItem $item)
     {
         abort_if($item->cart->buyer_id !== $this->buyer()->id, 403);
         $request->validate(['quantity' => 'required|integer|min:1']);
+        $this->assertCartQuantity($item->product, $item->variation_id, (int) $request->quantity);
         $item->update(['quantity' => $request->quantity]);
         return back();
+    }
+
+    /** Same limits as the mobile cart: active product, in stock, per-item cap. */
+    private function assertCartQuantity(Product $product, ?int $variationId, int $quantity): void
+    {
+        if ($product->status !== 'active') {
+            throw ValidationException::withMessages(['quantity' => 'This product is no longer available.']);
+        }
+
+        $variationStock = $variationId ? (int) $product->variations()->whereKey($variationId)->value('stock') : PHP_INT_MAX;
+        $stock = min((int) $product->stock, $variationStock);
+        $cap = (int) config('picksell.max_quantity_per_item');
+        $max = min($stock, $cap);
+
+        if ($stock <= 0) {
+            throw ValidationException::withMessages(['quantity' => 'This item is out of stock.']);
+        }
+        if ($quantity > $max) {
+            throw ValidationException::withMessages([
+                'quantity' => $max < $cap ? "Only {$max} left in stock." : "Maximum {$max} per order for this item.",
+            ]);
+        }
     }
 
     public function removeFromCart(CartItem $item)
@@ -114,60 +150,60 @@ class BuyerController extends Controller
     }
 
     // Place Order
-    public function placeOrder(Request $request)
+    // Same pricing, stock locking and order records as the mobile app.
+    public function placeOrder(Request $request, OrderPlacement $placement)
     {
-        $request->validate([
-            'item_ids'       => 'required|array',
-            'item_ids.*'     => 'exists:cart_items,id',
-            'payment_method' => 'required|in:cod,gcash,bank_transfer',
-            'logistics_id'   => 'required|exists:users,id',
-            'voucher_code'   => 'nullable|string',
-        ]);
+        $data = $request->validate([
+            'item_ids'        => 'required|array|min:1',
+            'item_ids.*'      => 'integer',
+            'payment_method'  => ['required', Rule::in(collect(config('picksell.payment_methods'))->where('available', true)->pluck('code'))],
+            'shipping_option' => ['nullable', Rule::in(collect(config('picksell.shipping_options'))->pluck('code'))],
+            'logistics_id'    => 'nullable|integer',
+            'voucher_code'    => 'nullable|string|max:40',
+        ], ['payment_method.in' => 'That payment method isn’t available yet. Please choose Cash on Delivery.']);
 
-        $logisticsProvider = User::where('id', $request->logistics_id)
-            ->where('role', 'logistics')
-            ->where('status', 'approved')
-            ->firstOrFail();
-
-        $cart  = $this->getCart();
-        $items = CartItem::whereIn('id', $request->item_ids)
-            ->where('cart_id', $cart->id)
-            ->with('product')
-            ->get();
-
-        if ($items->isEmpty()) return back()->withErrors(['item_ids' => 'No items selected.']);
-
-        foreach ($items as $item) {
-            $product = $item->product;
-            $price   = $product->effective_price;
-
-            // Apply voucher if valid
-            if ($request->voucher_code && $product->voucher_code === $request->voucher_code) {
-                $price = $price * (1 - $product->voucher_discount / 100);
-            }
-
-            $amount     = $price * $item->quantity;
-            $commission = $amount * 0.10;
-
-            Order::create([
-                'order_number'   => 'ORD-' . strtoupper(Str::random(8)),
-                'product_id'     => $product->id,
-                'buyer_id'       => $this->buyer()->id,
-                'seller_id'      => $product->seller_id,
-                'logistics_id'   => $logisticsProvider->id,
-                'product_name'   => $product->name,
-                'quantity'       => $item->quantity,
-                'amount'         => $amount,
-                'commission'     => $commission,
-                'status'         => 'pending',
-            ]);
-
-            // Deduct stock
-            $product->decrement('stock', $item->quantity);
-            $item->delete();
+        $shipTo = $this->deliveryAddress($this->buyer());
+        if (!$shipTo) {
+            return back()->withErrors(['address' => 'Add your delivery address in My Account before placing an order.']);
         }
 
-        return redirect()->route('buyer.orders')->with('success', 'Order placed successfully!');
+        $logistics = empty($data['logistics_id']) ? null : User::where('id', $data['logistics_id'])
+            ->where('role', 'logistics')->where('status', 'approved')->first();
+
+        $placed = $placement->place(
+            $this->buyer(), $data['item_ids'], $shipTo, $data['payment_method'],
+            $data['shipping_option'] ?? 'standard', $data['voucher_code'] ?? null, $logistics,
+        );
+
+        return match ($placed['result']) {
+            'empty'   => back()->withErrors(['item_ids' => 'Your selected items are no longer in your cart.']),
+            'voucher' => back()->withErrors(['voucher_code' => $placed['message']])->withInput(),
+            'changed' => back()->withErrors(['item_ids' => 'Some items changed since you added them: '
+                . collect($placed['quote']['groups'])->flatMap(fn ($g) => $g['items'])->whereNotNull('issue')
+                    ->map(fn ($line) => $line['product']['name'] . ' (' . str_replace('_', ' ', $line['issue']) . ')')->join(', ')
+                . '. Please update your cart.']),
+            'placed'  => redirect()->route('buyer.orders')->with('success',
+                'Order placed! Total charged on delivery: ₱' . number_format($placed['totals']['total'], 2) . '.'),
+        };
+    }
+
+    /** The buyer's default saved address, else the address on their profile. */
+    private function deliveryAddress(User $buyer): ?array
+    {
+        $saved = $buyer->addresses()->orderByDesc('is_default')->first();
+        if ($saved) return $saved->snapshot();
+        if (!$buyer->province || !$buyer->municipality || !$buyer->barangay) return null;
+
+        return [
+            'label'          => 'home',
+            'recipient_name' => $buyer->full_name,
+            'phone'          => $buyer->contact_no,
+            'full_address'   => collect([$buyer->house_no, $buyer->street, $buyer->barangay, $buyer->municipality, $buyer->province])->filter()->join(', '),
+            'landmark'       => null,
+            'province'       => $buyer->province,
+            'municipality'   => $buyer->municipality,
+            'barangay'       => $buyer->barangay,
+        ];
     }
 
     // Orders
