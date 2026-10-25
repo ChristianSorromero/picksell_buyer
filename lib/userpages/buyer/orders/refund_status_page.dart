@@ -146,7 +146,7 @@ class _RefundStatusPageState extends State<RefundStatusPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('REFUND AMOUNT', style: PsText.overline),
+                      Text(r.isAgreed ? 'REFUND AMOUNT' : 'AMOUNT REQUESTED', style: PsText.overline),
                       Text(formatPesoFixed(r.refundAmount), style: PsText.display.copyWith(fontSize: 32, fontWeight: FontWeight.w700)),
                       if (r.stageLabel != null) Text(r.stageLabel!, style: PsText.bodyStrong.copyWith(color: PsColors.primaryStrong)),
                       const Divider(height: PsSpace.lg),

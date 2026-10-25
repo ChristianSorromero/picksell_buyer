@@ -57,6 +57,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Seller proposed a resolution'), findsOneWidget);
+    // Not agreed yet: the header is what the buyer asked for, not a promise.
+    expect(find.text('AMOUNT REQUESTED'), findsOneWidget);
+    expect(find.text('REFUND AMOUNT'), findsNothing);
     expect(find.text('Return item for a refund'), findsOneWidget);
     expect(find.textContaining('refunded to you in cash'), findsOneWidget);
 
@@ -86,5 +89,6 @@ void main() {
 
     expect(api.calls('POST', '/buyer/returns/9/accept'), hasLength(1));
     expect(find.text('Resolution agreed — in progress'), findsOneWidget);
+    expect(find.text('REFUND AMOUNT'), findsOneWidget);
   });
 }

@@ -169,9 +169,13 @@ class ReturnRequest {
   final int quantity;
   final String reason;
   final String? details;
+  /// What the buyer asked for until a resolution is agreed; the agreed
+  /// amount afterwards (see [isAgreed]).
   final double refundAmount;
   final String refundTo;
   final List<String> evidence;
+
+  bool get isAgreed => stage == RefundStage.processing || stage == RefundStage.refunded;
   final DateTime? requestedAt;
   final DateTime? reviewedAt;
   final DateTime? processingAt;
