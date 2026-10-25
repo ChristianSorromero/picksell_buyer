@@ -46,6 +46,10 @@ app.*.map.json
 
 # Laravel / Node
 .env
+# Any filled-in env file (.env.production, .env.backup, …); templates are kept.
+.env.*
+!.env.example
+!.env.production.example
 /node_modules/
 
 # Test runner cache
