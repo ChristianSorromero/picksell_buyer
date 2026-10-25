@@ -197,6 +197,24 @@ class FakeBuyerApi {
       return _json({'order': orderDetail});
     }
 
+    // Return cases: accept → resolved, decline → escalated, reply → back to review.
+    final returnStep = RegExp(r'^/buyer/returns/(\d+)/(accept|decline|reply)$').firstMatch(path);
+    if (returnStep != null && r.method == 'POST') {
+      final (stage, label) = switch (returnStep.group(2)) {
+        'accept' => ('resolved', 'Resolution agreed — in progress'),
+        'decline' => ('escalated', 'Picksell is deciding'),
+        _ => ('requested', 'Waiting for Picksell review'),
+      };
+      return _json({
+        'message': 'ok',
+        'return_request': {
+          'id': int.parse(returnStep.group(1)!), 'status': stage == 'resolved' ? 'processing' : 'under_review', 'stage': stage,
+          'stage_label': label, 'awaiting': null, 'quantity': 1, 'reason': 'Damaged or defective item',
+          'refund_amount': 300, 'refund_to': 'Cash, handed over by a Picksell rider', 'requested_at': '2026-10-24T10:00:00+08:00',
+        },
+      });
+    }
+
     if (r.method == 'GET' && path == '/products/7') {
       return _json({
         'product': {

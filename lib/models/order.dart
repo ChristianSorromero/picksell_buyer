@@ -149,10 +149,23 @@ class ReturnRequest {
     this.refundedAt,
     this.rejectedAt,
     this.resolutionNote,
+    this.stageLabel,
+    this.awaiting,
+    this.infoRequest,
+    this.proposal,
   });
 
   final int id;
   final RefundStage stage;
+
+  /// Detailed step, e.g. "Seller proposed a resolution".
+  final String? stageLabel;
+
+  /// What the buyer has to do next: 'reply' (admin asked a question) or
+  /// 'decide' (accept or decline the seller's proposal).
+  final String? awaiting;
+  final String? infoRequest;
+  final ReturnProposal? proposal;
   final int quantity;
   final String reason;
   final String? details;
@@ -187,6 +200,27 @@ class ReturnRequest {
         refundedAt: toDate(j['refunded_at']),
         rejectedAt: toDate(j['rejected_at']),
         resolutionNote: toStr(j['resolution_note']),
+        stageLabel: toStr(j['stage_label']),
+        awaiting: toStr(j['awaiting']),
+        infoRequest: toStr(j['info_request']),
+        proposal: j['proposal'] is Map ? ReturnProposal.fromJson((j['proposal'] as Map).cast<String, dynamic>()) : null,
+      );
+}
+
+/// The seller's proposed resolution, waiting for the buyer.
+class ReturnProposal {
+  const ReturnProposal({required this.label, required this.amount, required this.itemMustReturn, this.note});
+
+  final String label;
+  final double amount;
+  final bool itemMustReturn;
+  final String? note;
+
+  factory ReturnProposal.fromJson(Json j) => ReturnProposal(
+        label: j['label'] as String? ?? '',
+        amount: toDouble(j['amount']),
+        itemMustReturn: j['item_must_return'] == true,
+        note: toStr(j['note']),
       );
 }
 

@@ -15,7 +15,7 @@ class HelpSupportPage extends StatelessWidget {
     ('How do I track my order?', 'Open Account → My Orders and tap an order. The timeline updates as the seller, sorting center and rider scan your parcel.'),
     ('Can I cancel an order?', 'Yes, until the seller hands the parcel to the courier. Open the order and tap Cancel Order.'),
     ('How do returns work?', 'Within the return window after delivery, open the order and choose Return / Refund. Attach photos so we can review it quickly.'),
-    ('Which payment methods are supported?', 'Cash on Delivery for now. GCash, Maya and cards are coming soon.'),
+    ('Which payment methods are supported?', 'Cash on Delivery only. You pay the rider in cash when your order arrives, and approved refunds are handed back to you in cash.'),
     ('Something is wrong with my order', 'Open the order and tap Report a Problem. Your report goes straight to our support team.'),
   ];
 

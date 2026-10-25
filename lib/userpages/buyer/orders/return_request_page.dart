@@ -23,7 +23,8 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
   final _details = TextEditingController();
   late int _quantity = widget.order.summary.quantity;
   String? _reason;
-  String _refundTo = 'gcash';
+  // Cash on Delivery only: refunds are handed over in cash by a rider.
+  String _refundTo = 'cash';
   List<String> _photos = [];
   final Map<String, String> _errors = {};
   bool _busy = false;

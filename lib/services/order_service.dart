@@ -58,6 +58,23 @@ class OrderService {
     return ReturnRequest.fromJson(mapOrNull(j['return_request']) ?? const {});
   }
 
+  /// Answers Picksell's request for more information on a return.
+  Future<ReturnRequest> replyToReturn(int returnId, {required String details, List<String> photos = const []}) async {
+    final j = await _api.multipartJson(
+      '/buyer/returns/$returnId/reply',
+      fields: {'details': details.trim()},
+      files: {if (photos.isNotEmpty) 'evidence': photos},
+    );
+    return ReturnRequest.fromJson(mapOrNull(j['return_request']) ?? const {});
+  }
+
+  Future<ReturnRequest> acceptReturnProposal(int returnId) async =>
+      ReturnRequest.fromJson(mapOrNull((await _api.postJson('/buyer/returns/$returnId/accept'))['return_request']) ?? const {});
+
+  /// Declining sends the case to Picksell for a final decision.
+  Future<ReturnRequest> declineReturnProposal(int returnId, {required String reason}) async => ReturnRequest.fromJson(
+      mapOrNull((await _api.postJson('/buyer/returns/$returnId/decline', {'reason': reason.trim()}))['return_request']) ?? const {});
+
   /// Adds the order's product back to the cart at today's price.
   Future<({String message, bool priceChanged})> reorder(int id) async {
     final j = await _api.postJson('/buyer/orders/$id/reorder');
