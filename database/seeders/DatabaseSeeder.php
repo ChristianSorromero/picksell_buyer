@@ -73,9 +73,10 @@ class DatabaseSeeder extends Seeder
             'id_upload'      => null,
         ]);
 
-            $this->call([
-                ProductSeeder::class,
-                CourierSeeder::class,
-            ]);
+        $this->call([
+            ProductSeeder::class,
+            CourierSeeder::class,
+            BuyerDemoSeeder::class,
+        ]);
     }
 }

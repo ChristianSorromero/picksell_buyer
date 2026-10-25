@@ -58,19 +58,19 @@
                 @if($user->id_upload)
                 <div>
                     <div style="font-size:0.82rem;font-weight:600;margin-bottom:0.3rem;">Government-Issued ID</div>
-                    <a href="{{ asset('storage/'.$user->id_upload) }}" target="_blank" class="btn btn-outline btn-sm">📎 View ID</a>
+                    <a href="{{ route('documents.user', [$user, 'id']) }}" target="_blank" class="btn btn-outline btn-sm">📎 View ID</a>
                 </div>
                 @endif
                 @if($user->business_permit)
                 <div>
                     <div style="font-size:0.82rem;font-weight:600;margin-bottom:0.3rem;">Business Permit</div>
-                    <a href="{{ asset('storage/'.$user->business_permit) }}" target="_blank" class="btn btn-outline btn-sm">📎 View Permit</a>
+                    <a href="{{ route('documents.user', [$user, 'permit']) }}" target="_blank" class="btn btn-outline btn-sm">📎 View Permit</a>
                 </div>
                 @endif
                 @if($user->or_cr_upload)
                 <div>
                     <div style="font-size:0.82rem;font-weight:600;margin-bottom:0.3rem;">OR/CR & Driver's License</div>
-                    <a href="{{ asset('storage/'.$user->or_cr_upload) }}" target="_blank" class="btn btn-outline btn-sm">📎 View OR/CR</a>
+                    <a href="{{ route('documents.user', [$user, 'orcr']) }}" target="_blank" class="btn btn-outline btn-sm">📎 View OR/CR</a>
                 </div>
                 @endif
             </div>

@@ -85,18 +85,18 @@ class AuthController extends Controller
 
         $age = Carbon::parse($data['birthday'])->age;
 
-        $idPath = $request->file('id_upload')->store('uploads/ids', 'public');
+        $idPath = $request->file('id_upload')->store('uploads/ids', 'local');
 
         $extra = [];
         if (in_array($role, ['seller', 'logistics'], true)) {
             $extra['business_name']    = $data['business_name'];
             $extra['line_of_business'] = $data['line_of_business'];
-            $extra['business_permit']  = $request->file('business_permit')->store('uploads/permits', 'public');
+            $extra['business_permit']  = $request->file('business_permit')->store('uploads/permits', 'local');
         }
         if ($role === 'courier') {
             $extra['vehicle_type'] = $data['vehicle_type'];
             $extra['plate_number'] = $data['plate_number'];
-            $extra['or_cr_upload'] = $request->file('or_cr_upload')->store('uploads/orcr', 'public');
+            $extra['or_cr_upload'] = $request->file('or_cr_upload')->store('uploads/orcr', 'local');
             $extra['delivery_area'] = $data['delivery_area'];
         }
 

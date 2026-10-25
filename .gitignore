@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Laravel / Node
+.env
+/node_modules/
+
+# Test runner cache
+.phpunit.result.cache

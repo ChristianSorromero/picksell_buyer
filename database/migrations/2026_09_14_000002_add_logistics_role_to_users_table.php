@@ -1,17 +1,24 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    // Schema::change() instead of raw "ALTER TABLE … MODIFY" so this also
+    // runs on SQLite (the PHPUnit database).
     public function up(): void
     {
-        DB::statement("ALTER TABLE users MODIFY role ENUM('buyer', 'seller', 'courier', 'logistics', 'admin') NOT NULL DEFAULT 'buyer'");
+        Schema::table('users', function (Blueprint $table) {
+            $table->enum('role', ['buyer', 'seller', 'courier', 'logistics', 'admin'])->default('buyer')->change();
+        });
     }
 
     public function down(): void
     {
-        DB::statement("ALTER TABLE users MODIFY role ENUM('buyer', 'seller', 'courier', 'admin') NOT NULL DEFAULT 'buyer'");
+        Schema::table('users', function (Blueprint $table) {
+            $table->enum('role', ['buyer', 'seller', 'courier', 'admin'])->default('buyer')->change();
+        });
     }
 };

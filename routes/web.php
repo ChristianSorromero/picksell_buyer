@@ -53,6 +53,12 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    // Private identity documents & dispute evidence (authorized per file).
+    Route::get('/documents/users/{user}/{type}', [\App\Http\Controllers\DocumentController::class, 'userDocument'])
+        ->whereIn('type', ['id', 'permit', 'orcr'])->name('documents.user');
+    Route::get('/documents/complaints/{complaint}/{index?}', [\App\Http\Controllers\DocumentController::class, 'complaintEvidence'])
+        ->whereNumber('index')->name('documents.complaint');
+
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     Route::delete('/account', [AuthController::class, 'deleteAccount'])->name('account.delete');
     Route::get('/buyer/dashboard',   fn() => view('dashboard'))->name('buyer.dashboard');

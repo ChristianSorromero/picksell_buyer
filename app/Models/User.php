@@ -22,9 +22,16 @@ class User extends Authenticatable
         'vehicle_type', 'plate_number', 'or_cr_upload', 'delivery_area',
     ];
 
-    protected $hidden = ['password', 'remember_token'];
+    protected $hidden = ['password', 'remember_token', 'email_verification_code'];
 
-    protected $casts = ['birthday' => 'date', 'email_verified_at' => 'datetime'];
+    protected $casts = [
+        'birthday'                      => 'date',
+        'email_verified_at'             => 'datetime',
+        'email_verification_expires_at' => 'datetime',
+        'email_verification_sent_at'    => 'datetime',
+        'terms_accepted_at'             => 'datetime',
+        'notifications_seen_at'         => 'datetime',
+    ];
 
     public function getFullNameAttribute(): string
     {
@@ -47,4 +54,6 @@ class User extends Authenticatable
     public function ordersAsSeller()   { return $this->hasMany(Order::class, 'seller_id'); }
     public function ordersAsCourier()  { return $this->hasMany(Order::class, 'courier_id'); }
     public function products()         { return $this->hasMany(\App\Models\Product::class, 'seller_id'); }
+    public function addresses()        { return $this->hasMany(BuyerAddress::class); }
+    public function wishlist()         { return $this->hasMany(WishlistItem::class); }
 }

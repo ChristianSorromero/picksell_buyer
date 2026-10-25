@@ -2,18 +2,82 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\AddressController;
+use App\Http\Controllers\Api\CartController;
+use App\Http\Controllers\Api\CatalogController;
+use App\Http\Controllers\Api\CheckoutController;
+use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\BuyerController;
 use App\Http\Controllers\MobileAuthController;
 use App\Models\Product;
 
 // Mobile auth routes
-Route::post('/register', [MobileAuthController::class, 'register']);
-Route::post('/login',    [MobileAuthController::class, 'login']);
-Route::post('/upload-id', [MobileAuthController::class, 'uploadId']);
-Route::get('/products',  [MobileAuthController::class, 'products']);
+Route::post('/register', [MobileAuthController::class, 'register'])->middleware('throttle:10,1,register');
+Route::post('/register/check-contact', [MobileAuthController::class, 'checkContact'])->middleware('throttle:20,1,check-contact');
+Route::post('/register/verify', [MobileAuthController::class, 'verifyEmail'])->middleware('throttle:10,1,verify-email');
+Route::post('/register/resend', [MobileAuthController::class, 'resendCode'])->middleware('throttle:5,1,resend-code');
+// Brute-force protection: 10 attempts per minute per IP. Each throttle
+// gets its own prefix so limits don't share one counter.
+Route::post('/login', [MobileAuthController::class, 'login'])->middleware('throttle:10,1,login');
 
-Route::middleware('auth:sanctum')->group(function () {
+// Public catalog (bearer token optional — adds `wishlisted`)
+Route::get('/home', [CatalogController::class, 'home']);
+Route::get('/categories', [CatalogController::class, 'categories']);
+Route::get('/products', [CatalogController::class, 'index']);
+Route::get('/products/{product}', [CatalogController::class, 'show']);
+Route::get('/products/{product}/reviews', [CatalogController::class, 'reviews']);
+Route::get('/sellers/{seller}', [CatalogController::class, 'seller']);
+Route::get('/shipping-options', [CheckoutController::class, 'shippingOptions']);
+Route::get('/payment-methods', [CheckoutController::class, 'paymentMethods']);
+Route::get('/legal/{document}', [NotificationController::class, 'legal'])->whereIn('document', ['terms', 'privacy']);
+
+Route::middleware(['auth:sanctum', 'active.buyer', 'throttle:120,1,buyer-api'])->group(function () {
     Route::patch('/buyer/account', [BuyerController::class, 'updateAccount']);
+
+    // Mobile buyer API
+    Route::prefix('buyer')->group(function () {
+        Route::get('/profile', [ProfileController::class, 'show']);
+        Route::patch('/profile', [ProfileController::class, 'update']);
+        Route::patch('/password', [ProfileController::class, 'password']);
+        Route::post('/logout', [ProfileController::class, 'logout']);
+
+        Route::get('/addresses', [AddressController::class, 'index']);
+        Route::post('/addresses', [AddressController::class, 'store']);
+        Route::patch('/addresses/{address}', [AddressController::class, 'update']);
+        Route::delete('/addresses/{address}', [AddressController::class, 'destroy']);
+
+        Route::get('/wishlist', [WishlistController::class, 'index']);
+        Route::post('/wishlist/{product}', [WishlistController::class, 'store']);
+        Route::delete('/wishlist/{product}', [WishlistController::class, 'destroy']);
+
+        Route::get('/cart', [CartController::class, 'index']);
+        Route::get('/cart/count', [CartController::class, 'summary']);
+        Route::post('/cart', [CartController::class, 'store']);
+        Route::patch('/cart/{item}', [CartController::class, 'update']);
+        Route::delete('/cart/{item}', [CartController::class, 'destroy']);
+        Route::delete('/cart', [CartController::class, 'destroyMany']);
+
+        Route::get('/vouchers', [CheckoutController::class, 'vouchers']);
+        Route::post('/checkout/quote', [CheckoutController::class, 'quote']);
+        Route::post('/checkout', [CheckoutController::class, 'place'])->middleware('throttle:10,1,checkout');
+
+        Route::get('/orders', [OrderController::class, 'index']);
+        Route::get('/orders/options', [OrderController::class, 'options']);
+        Route::get('/orders/{order}', [OrderController::class, 'show']);
+        Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel']);
+        Route::post('/orders/{order}/rate', [OrderController::class, 'rate']);
+        Route::post('/orders/{order}/report', [OrderController::class, 'report'])->middleware('throttle:10,1,report');
+        Route::post('/orders/{order}/return', [OrderController::class, 'requestReturn'])->middleware('throttle:10,1,return');
+        Route::post('/orders/{order}/reorder', [OrderController::class, 'reorder']);
+        Route::get('/reorder', [OrderController::class, 'reorderCandidates']);
+        Route::get('/support/tickets', [OrderController::class, 'tickets']);
+
+        Route::get('/notifications', [NotificationController::class, 'index']);
+        Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
+    });
 
     // Chat
     Route::get('/chat/contacts', function (Request $request) {
@@ -99,7 +163,7 @@ Route::get('/ping', function (Request $request) {
     return response()->json(['ok' => true]);
 });
 
-Route::get('/search-suggestions', function (Request $request) {
+Route::middleware('throttle:60,1,suggestions')->get('/search-suggestions', function (Request $request) {
     $query = trim((string) $request->get('q', ''));
     if (mb_strlen($query) < 2) return response()->json(['products' => [], 'categories' => []]);
 

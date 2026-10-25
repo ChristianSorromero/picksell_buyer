@@ -17,6 +17,10 @@ class SecurityHeaders
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
+        if ($request->is('api/*') && $request->bearerToken()) {
+            $response->headers->set('Cache-Control', 'no-store, private');
+        }
+
         if ($request->getHost() === 'pick-sell.shop' || $request->isSecure()) {
             $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
         }

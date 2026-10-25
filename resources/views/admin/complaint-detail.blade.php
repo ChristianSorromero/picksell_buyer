@@ -29,7 +29,7 @@
             @if($complaint->evidence_path)
             <div style="margin-top:1rem;">
                 <div style="font-size:0.82rem;font-weight:600;margin-bottom:0.4rem;">Evidence</div>
-                <a href="{{ asset('storage/'.$complaint->evidence_path) }}" target="_blank" class="btn btn-outline btn-sm">📎 View Evidence</a>
+                <a href="{{ route('documents.complaint', $complaint) }}" target="_blank" class="btn btn-outline btn-sm">📎 View Evidence</a>
             </div>
             @endif
         </div>

@@ -21,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin'  => \App\Http\Middleware\AdminMiddleware::class,
             'seller' => \App\Http\Middleware\SellerMiddleware::class,
             'buyer'  => \App\Http\Middleware\BuyerMiddleware::class,
+            'active.buyer' => \App\Http\Middleware\EnsureActiveBuyer::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

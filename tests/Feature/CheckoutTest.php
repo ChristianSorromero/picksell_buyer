@@ -73,6 +73,19 @@ class CheckoutTest extends TestCase
             'status' => 'active',
         ]);
 
+        $logistics = User::create([
+            'role' => 'logistics',
+            'status' => 'approved',
+            'first_name' => 'Test',
+            'last_name' => 'Logistics',
+            'business_name' => 'Test Express',
+            'email' => 'logistics.checkout@example.com',
+            'password' => Hash::make('secret123'),
+            'contact_no' => '09111111112',
+            'birthday' => '1990-01-01',
+            'age' => 36,
+        ]);
+
         $cart = Cart::create(['buyer_id' => $buyer->id]);
         $item = CartItem::create([
             'cart_id' => $cart->id,
@@ -85,6 +98,7 @@ class CheckoutTest extends TestCase
             ->post('/buyer/cart/checkout', [
                 'item_ids' => [$item->id],
                 'payment_method' => 'cod',
+                'logistics_id' => $logistics->id,
             ]);
 
         $response->assertRedirect('/buyer/orders');
