@@ -168,10 +168,7 @@ final class BuyerPresenter
         $status = $o->canonical_status;
         $return = $o->returnRequest;
         // Change-of-mind returns follow the return window; defect claims get longer.
-        $returnDays = max((int) config('picksell.return_window_days'), (int) config('picksell.returns.defect_claim_days'));
-
-        $canReturn = $status === OrderStatus::DELIVERED || $status === OrderStatus::COMPLETED;
-        $canReturn = $canReturn && !$return && $o->delivered_at && $o->delivered_at->gt(now()->subDays($returnDays));
+        $canReturn = ReturnRequest::canBeRequestedFor($o);
 
         return self::orderCard($o) + [
             'subtotal'          => self::money($o->subtotal ?? $o->amount),

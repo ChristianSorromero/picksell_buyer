@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\SellerController;
 use App\Http\Controllers\BuyerController;
+use App\Http\Controllers\BuyerReturnController;
 use App\Http\Controllers\CourierController;
 use App\Http\Controllers\LogisticsController;
 use App\Http\Controllers\AdminReturnController;
@@ -127,6 +128,12 @@ Route::middleware(['auth', BuyerMiddleware::class])->prefix('buyer')->group(func
     // Orders
     Route::get('/orders',                           [BuyerController::class, 'orders'])->name('buyer.orders');
     Route::post('/orders/{order}/feedback',         [BuyerController::class, 'submitFeedback'])->name('buyer.feedback');
+
+    // Returns (same workflow as the app)
+    Route::post('/orders/{order}/return',           [BuyerReturnController::class, 'store'])->name('buyer.returns.store');
+    Route::post('/returns/{returnRequest}/reply',    [BuyerReturnController::class, 'reply'])->name('buyer.returns.reply');
+    Route::post('/returns/{returnRequest}/accept',   [BuyerReturnController::class, 'accept'])->name('buyer.returns.accept');
+    Route::post('/returns/{returnRequest}/decline',  [BuyerReturnController::class, 'decline'])->name('buyer.returns.decline');
 
     // Chat
     Route::get('/chat',                             [BuyerController::class, 'chat'])->name('buyer.chat');

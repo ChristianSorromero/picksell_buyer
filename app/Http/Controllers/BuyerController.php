@@ -210,7 +210,7 @@ class BuyerController extends Controller
     public function orders(Request $request)
     {
         $status = $request->get('status', 'all');
-        $query  = Order::where('buyer_id', $this->buyer()->id)->with('product', 'seller');
+        $query  = Order::where('buyer_id', $this->buyer()->id)->with('product', 'seller', 'returnRequest');
         if ($status !== 'all') $query->where('status', $status);
         $orders    = $query->latest()->paginate(10);
         $cartCount = CartItem::whereHas('cart', fn($q) => $q->where('buyer_id', $this->buyer()->id))->count();

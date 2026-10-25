@@ -40,6 +40,10 @@ class ReturnWorkflow
     public function open(Order $order, User $buyer, array $data, array $evidencePaths): R
     {
         return DB::transaction(function () use ($order, $buyer, $data, $evidencePaths) {
+            // One case per order, even if the buyer submits twice at once.
+            $order = Order::lockForUpdate()->findOrFail($order->id);
+            abort_if($order->buyer_id !== $buyer->id, 404);
+            if ($refusal = R::refusalFor($order, $data['reason'])) abort(422, $refusal);
             $requested = BigDecimal::of(Money::cents($order->amount) * (int) $data['quantity'])
                 ->dividedBy(max(1, (int) $order->quantity), 0, RoundingMode::HalfUp)->toInt();
             $return = R::create([

@@ -24,6 +24,7 @@
     .star-rating { display: flex; gap: 0.3rem; font-size: 1.8rem; cursor: pointer; }
     .star { color: #ddd; transition: color 0.15s; }
     .star.active { color: #f59e0b; }
+    .return-box { margin: 0 1.2rem 1rem; padding: 0.8rem 1rem; border: 1px solid #f0ebe0; border-radius: 10px; background: #fffdf9; font-size: 0.85rem; }
 </style>
 @endsection
 
@@ -91,6 +92,82 @@
             @endif
         </div>
     </div>
+
+    {{-- Return case (same workflow as the app) --}}
+    @if($r = $order->returnRequest)
+    <div class="return-box">
+        <div style="display:flex;justify-content:space-between;gap:0.5rem;flex-wrap:wrap;">
+            <strong>Return #{{ $r->id }} · {{ \App\Models\ReturnRequest::STAGE_LABELS[$r->status] ?? $r->status }}</strong>
+            <span style="color:#888;">Requested {{ $r->created_at->forDisplay()->format('M d, Y') }}</span>
+        </div>
+        <div style="color:#666;margin-top:0.3rem;">{{ $r->quantity }} item(s) · {{ $r->reason }}
+            · {{ in_array($r->status, [\App\Models\ReturnRequest::RESOLVED, \App\Models\ReturnRequest::COMPLETED], true)
+                ? 'Agreed refund ' . \App\Support\Money::format(\App\Support\Money::cents($r->resolution_amount ?? 0))
+                : 'Asking ' . \App\Support\Money::format(\App\Support\Money::cents($r->refund_amount)) }}
+            · Refunds are paid in cash by a Picksell rider.</div>
+
+        @if($r->status === \App\Models\ReturnRequest::INFO_REQUESTED)
+            <div class="alert alert-error" style="margin:0.6rem 0;">Picksell asks: {{ $r->info_request }}</div>
+            <form method="POST" action="{{ route('buyer.returns.reply', $r) }}" enctype="multipart/form-data">
+                @csrf
+                <textarea name="details" class="form-control" rows="2" required maxlength="2000" placeholder="Your answer"></textarea>
+                <div style="display:flex;gap:0.6rem;align-items:center;margin-top:0.4rem;flex-wrap:wrap;">
+                    <input type="file" name="evidence[]" accept="image/jpeg,image/png,image/webp" multiple style="font-size:0.78rem;">
+                    <button class="btn btn-coral btn-sm">Send reply</button>
+                </div>
+            </form>
+        @elseif($r->status === \App\Models\ReturnRequest::PROPOSED)
+            <div class="alert alert-success" style="margin:0.6rem 0;">
+                The seller proposes: <strong>{{ \App\Models\ReturnRequest::RESOLUTIONS[$r->resolution_type][0] ?? $r->resolution_type }}</strong>
+                @if(\App\Support\Money::cents($r->resolution_amount ?? 0) > 0) · {{ \App\Support\Money::format(\App\Support\Money::cents($r->resolution_amount)) }} @endif
+                @if($r->requires_item_return) · the item must be returned @endif
+                @if($r->seller_note)<div style="margin-top:0.2rem;">“{{ $r->seller_note }}”</div>@endif
+            </div>
+            <div style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:flex-start;">
+                <form method="POST" action="{{ route('buyer.returns.accept', $r) }}">@csrf<button class="btn btn-coral btn-sm">Accept</button></form>
+                <form method="POST" action="{{ route('buyer.returns.decline', $r) }}" style="display:flex;gap:0.4rem;flex:1;min-width:220px;">
+                    @csrf
+                    <input name="reason" class="form-control" required maxlength="1000" placeholder="Why not? Picksell will decide">
+                    <button class="btn btn-outline btn-sm">Decline</button>
+                </form>
+            </div>
+        @elseif($r->status === \App\Models\ReturnRequest::REJECTED && $r->resolution_note)
+            <div style="color:#c0392b;margin-top:0.3rem;">{{ $r->resolution_note }}</div>
+        @endif
+    </div>
+    @elseif(\App\Models\ReturnRequest::canBeRequestedFor($order))
+    <details class="return-box">
+        <summary style="cursor:pointer;font-weight:600;">Request a return or refund</summary>
+        <form method="POST" action="{{ route('buyer.returns.store', $order) }}" enctype="multipart/form-data" style="margin-top:0.6rem;">
+            @csrf
+            <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
+                <div class="form-group" style="flex:0 0 90px;">
+                    <label class="form-label">Quantity</label>
+                    <input type="number" name="quantity" class="form-control" min="1" max="{{ $order->quantity }}" value="{{ $order->quantity }}" required>
+                </div>
+                <div class="form-group" style="flex:1;min-width:200px;">
+                    <label class="form-label">Reason</label>
+                    <select name="reason" class="form-control" required>
+                        @foreach(\App\Models\ReturnRequest::REASONS as $reason)<option>{{ $reason }}</option>@endforeach
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">What happened? (optional)</label>
+                <textarea name="details" class="form-control" rows="2" maxlength="2000"></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Photos (optional, up to 4)</label>
+                <input type="file" name="evidence[]" accept="image/jpeg,image/png,image/webp" multiple style="font-size:0.8rem;">
+            </div>
+            <div style="font-size:0.75rem;color:#888;margin-bottom:0.5rem;">
+                Change of mind: within {{ config('picksell.return_window_days') }} days of delivery. Damaged, wrong or defective items: within {{ config('picksell.returns.defect_claim_days') }} days.
+                Picksell reviews every request first. Refunds are paid in cash by a rider.
+            </div>
+            <button class="btn btn-coral btn-sm">Submit return request</button>
+        </form>
+    </details>
+    @endif
 
     {{-- Tracking Steps --}}
     @php

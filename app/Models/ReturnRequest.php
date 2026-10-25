@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\Money;
+use App\Support\OrderStatus;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -22,6 +23,41 @@ class ReturnRequest extends Model
     public const REJECTED       = 'rejected';
 
     public const CLOSED = [self::COMPLETED, self::REJECTED];
+
+    /** What a buyer can give as the reason (defect reasons: config picksell.returns.defect_reasons). */
+    public const REASONS = [
+        'Damaged or defective item', 'Wrong item received', 'Item not as described',
+        'Missing parts or accessories', 'Changed my mind',
+    ];
+
+    /**
+     * Whether a return can still be opened for this order at all: delivered,
+     * no case yet, and within the longer (defect claim) window.
+     */
+    public static function canBeRequestedFor(Order $order): bool
+    {
+        $status = $order->canonical_status;
+        $days = max((int) config('picksell.return_window_days'), (int) config('picksell.returns.defect_claim_days'));
+
+        return in_array($status, [OrderStatus::DELIVERED, OrderStatus::COMPLETED], true)
+            && !$order->returnRequest
+            && $order->delivered_at && $order->delivered_at->gt(now()->subDays($days));
+    }
+
+    /** Why a return with this reason can't be opened, or null if it can. Same rules for app and web. */
+    public static function refusalFor(Order $order, string $reason): ?string
+    {
+        $days = (int) config('picksell.return_window_days');
+        if (!self::canBeRequestedFor($order)) {
+            $defectDays = (int) config('picksell.returns.defect_claim_days');
+            return "Returns can be requested once per order: within {$days} days of delivery, or {$defectDays} days for a damaged, wrong or defective item.";
+        }
+        $isDefect = in_array($reason, config('picksell.returns.defect_reasons'), true);
+        if (!$isDefect && $order->delivered_at->lte(now()->subDays($days))) {
+            return "Change-of-mind returns can be requested within {$days} days of delivery.";
+        }
+        return null;
+    }
 
     /** Resolution types: [label, requires the item back, refund rule]. */
     public const RESOLUTIONS = [

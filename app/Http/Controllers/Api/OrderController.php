@@ -9,6 +9,7 @@ use App\Models\Complaint;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariation;
+use App\Models\ReturnRequest;
 use App\Services\ReturnWorkflow;
 use App\Support\BuyerPresenter;
 use App\Support\OrderStatus;
@@ -20,10 +21,7 @@ use Illuminate\Validation\Rule;
 class OrderController extends Controller
 {
     public const REPORT_CATEGORIES = ['Damaged Item', 'Missing Item', 'Wrong Item', 'Quality Issue', 'Delivery Delay', 'Other'];
-    public const RETURN_REASONS = [
-        'Damaged or defective item', 'Wrong item received', 'Item not as described',
-        'Missing parts or accessories', 'Changed my mind',
-    ];
+    public const RETURN_REASONS = ReturnRequest::REASONS;
 
     public function __construct(private ReturnWorkflow $returns) {}
 
@@ -167,17 +165,11 @@ class OrderController extends Controller
             'evidence.*' => 'image|mimes:jpg,jpeg,png,webp|max:5120',
         ], ['refund_to.in' => 'Refunds are paid in cash by a Picksell rider.']);
 
-        $days = (int) config('picksell.return_window_days');
-        $defectDays = (int) config('picksell.returns.defect_claim_days');
-        if (!BuyerPresenter::orderDetail($order->load('events'))['actions']['can_return']) {
-            return response()->json(['message' => "Returns can be requested once per order: within {$days} days of delivery, or {$defectDays} days for a damaged, wrong or defective item."], 422);
+        if (!ReturnRequest::canBeRequestedFor($order)) {
+            return response()->json(['message' => ReturnRequest::refusalFor($order, $data['reason'])], 422);
         }
-        $isDefect = in_array($data['reason'], config('picksell.returns.defect_reasons'), true);
-        if (!$isDefect && $order->delivered_at->lte(now()->subDays($days))) {
-            return response()->json([
-                'message' => "Change-of-mind returns can be requested within {$days} days of delivery.",
-                'errors'  => ['reason' => ["Change-of-mind returns can be requested within {$days} days of delivery."]],
-            ], 422);
+        if ($refusal = ReturnRequest::refusalFor($order, $data['reason'])) {
+            return response()->json(['message' => $refusal, 'errors' => ['reason' => [$refusal]]], 422);
         }
 
         $paths = collect($request->file('evidence', []))->map(fn ($f) => $f->store('uploads/returns', 'local'))->all();
