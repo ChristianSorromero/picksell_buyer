@@ -163,7 +163,7 @@
         <div class="card danger-card">
             <div class="card-header"><span class="card-title">Delete Account</span></div>
             <div class="card-body">
-                <p style="font-size:0.88rem;color:#888;margin-bottom:1rem;">Permanently delete your buyer account and its related records.</p>
+                <p style="font-size:0.88rem;color:#888;margin-bottom:1rem;">Permanently delete your buyer account. Your personal details, addresses and saved items are erased; past orders stay on record without your details. Orders in progress must be completed or cancelled first.</p>
                 <form method="POST" action="{{ route('account.delete') }}" onsubmit="return confirm('Delete your account permanently? This cannot be undone.')">
                     @csrf @method('DELETE')
                     <input type="password" name="password" class="form-control" placeholder="Confirm your password" required style="margin-bottom:.7rem;">

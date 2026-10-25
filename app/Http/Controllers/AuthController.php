@@ -177,8 +177,12 @@ class AuthController extends Controller
             return back()->withErrors(['password' => 'The password is incorrect.']);
         }
 
+        if ($user->hasOpenOrders()) {
+            return back()->withErrors(['account' => 'You still have orders or returns in progress. You can delete your account once they are completed or cancelled.']);
+        }
+
         Auth::logout();
-        $user->delete();
+        $user->anonymize();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 

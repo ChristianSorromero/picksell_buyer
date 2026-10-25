@@ -124,6 +124,9 @@ class AdminController extends Controller
     public function updateUserStatus(Request $request, User $user)
     {
         $request->validate(['status' => 'required|in:approved,suspended,deactivated']);
+        if ($user->isAnonymized()) {
+            return back()->withErrors(['status' => 'This account was deleted by its owner and can’t be reactivated.']);
+        }
         $user->update(['status' => $request->status]);
         $emailSent = true;
         try {
