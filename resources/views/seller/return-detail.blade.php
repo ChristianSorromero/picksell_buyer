@@ -55,20 +55,35 @@
         </div>
         @endif
 
-        @if($r->needsItemReceipt() && ($r->item_collected_at || $r->resolution_type === 'replacement'))
+        @if($r->needsItemReceipt() && $r->item_collected_at)
         <div class="card">
-            <div class="card-header"><span class="card-title">Returned Item</span></div>
+            <div class="card-header"><span class="card-title">Returned Item — Inspection</span></div>
             <div class="card-body">
-                <p style="font-size:0.85rem;color:#888;">Confirm once the item is physically with you and inspected. Only restock it if it can be sold again.</p>
-                <form method="POST" action="{{ route('seller.returns.received', $r) }}" style="display:flex;gap:0.5rem;">
+                <p style="font-size:0.85rem;color:#888;">Confirm once the item is physically with you. {{ $r->refund_timing === 'after_inspection' ? 'The buyer’s refund is released only after it passes inspection.' : '' }} Only restock it if it can be sold again.</p>
+                <form method="POST" action="{{ route('seller.returns.received', $r) }}">
                     @csrf
-                    <button name="restock" value="1" class="btn btn-success">Received — put back in stock</button>
-                    <button name="restock" value="0" class="btn btn-outline">Received — don't restock</button>
+                    <input type="hidden" name="inspection_passed" value="1">
+                    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                        <button name="restock" value="1" class="btn btn-success">Passed — put back in stock</button>
+                        <button name="restock" value="0" class="btn btn-outline">Passed — don't restock</button>
+                    </div>
+                </form>
+                <form method="POST" action="{{ route('seller.returns.received', $r) }}" style="margin-top:0.8rem;">
+                    @csrf
+                    <input type="hidden" name="inspection_passed" value="0">
+                    <label class="form-label">Failed inspection (Picksell will decide)</label>
+                    <textarea name="inspection_note" class="form-control" rows="2" required placeholder="What you found, e.g. damage not caused by a defect"></textarea>
+                    <button class="btn btn-outline" style="margin-top:0.4rem;">Report failed inspection</button>
                 </form>
             </div>
         </div>
         @elseif($r->needsItemReceipt())
-            <div class="card"><div class="card-body" style="font-size:0.85rem;color:#888;">The rider will collect the item from the buyer when handing over the refund.</div></div>
+            <div class="card"><div class="card-body" style="font-size:0.85rem;color:#888;">
+                {{ $r->refund_timing === 'on_pickup' ? 'The rider will collect the item when handing over the refund.' : 'A Picksell rider will pick the item up from the buyer and bring it to you for inspection.' }}
+            </div></div>
+        @endif
+        @if($r->liable_party)
+            <div class="card"><div class="card-body" style="font-size:0.82rem;color:#888;">Picksell's determination: {{ RR::LIABLE_PARTIES[$r->liable_party] }}. A refund is charged to you only when you are recorded as the funder ({{ $r->refund_funded_by ?? 'not decided' }}).</div></div>
         @endif
 
         @if($r->status === RR::RESOLVED && $r->resolution_type === 'replacement' && !$r->replacement_sent_at)

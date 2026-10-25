@@ -56,9 +56,19 @@ class SellerReturnController extends Controller
     public function itemReceived(Request $request, ReturnRequest $returnRequest)
     {
         $this->authorizeSeller($request, $returnRequest);
-        $data = $request->validate(['restock' => 'required|boolean']);
-        $this->workflow->confirmItemReceived($returnRequest, $request->user(), (bool) $data['restock']);
-        return back()->with('success', $data['restock'] ? 'Item received and put back in stock.' : 'Item received (not restocked).');
+        $data = $request->validate([
+            'inspection_passed' => 'required|boolean',
+            'restock'           => 'nullable|boolean',
+            'inspection_note'   => 'required_if:inspection_passed,0|nullable|string|max:1000',
+        ], ['inspection_note.required_if' => 'Describe what failed the inspection.']);
+        $passed = (bool) $data['inspection_passed'];
+        $this->workflow->confirmItemReceived($returnRequest, $request->user(), (bool) ($data['restock'] ?? false), $passed, $data['inspection_note'] ?? null);
+
+        return back()->with('success', match (true) {
+            !$passed                   => 'Inspection failure recorded and sent to Picksell for a decision.',
+            (bool) ($data['restock'] ?? false) => 'Item received, inspected and put back in stock.',
+            default                    => 'Item received and inspected (not restocked).',
+        });
     }
 
     public function replacementSent(Request $request, ReturnRequest $returnRequest)

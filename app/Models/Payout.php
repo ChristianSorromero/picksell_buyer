@@ -14,13 +14,14 @@ class Payout extends Model
     public const ACTIVE = ['pending', 'approved', 'processing'];
 
     protected $fillable = [
-        'payee_id', 'payee_role', 'period_start', 'period_end', 'amount_cents', 'status', 'method', 'reference',
+        'payee_id', 'payee_role', 'period_start', 'period_end', 'amount_cents', 'status', 'method', 'reference', 'disbursed_on',
         'failure_reason', 'created_by', 'approved_by', 'approved_at', 'processing_at', 'completed_by', 'completed_at',
         'failed_at', 'cancelled_at',
     ];
 
     protected $casts = [
         'amount_cents'  => 'integer',
+        'disbursed_on'  => 'date',
         'period_start'  => 'date',
         'period_end'    => 'date',
         'approved_at'   => 'datetime',

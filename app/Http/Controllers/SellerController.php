@@ -7,6 +7,7 @@ use App\Models\Message;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
+use App\Services\Deliveries;
 use App\Support\OrderStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -128,6 +129,15 @@ class SellerController extends Controller
         abort_if($order->seller_id !== $this->seller()->id, 403);
         $order->load('buyer', 'courier');
         return view('seller.order-detail', compact('order'));
+    }
+
+    /** A parcel returned after failed deliveries is back with the seller. */
+    public function receiveReturnedParcel(Request $request, Order $order, Deliveries $deliveries)
+    {
+        abort_if($order->seller_id !== $this->seller()->id, 403);
+        $data = $request->validate(['restock' => 'required|boolean']);
+        $deliveries->receiveReturned($order, $this->seller(), (bool) $data['restock']);
+        return back()->with('success', 'Returned parcel received' . ($data['restock'] ? ' and put back in stock.' : '.'));
     }
 
     public function packOrder(Order $order)

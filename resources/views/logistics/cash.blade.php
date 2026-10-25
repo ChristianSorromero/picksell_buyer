@@ -38,6 +38,34 @@
 </div>
 
 <div class="card">
+    <div class="card-header"><span class="card-title">Return Pickups</span></div>
+    <div style="overflow-x:auto;"><table>
+        <thead><tr><th>Return</th><th>Buyer / Address</th><th>Status</th><th>Assign rider</th></tr></thead>
+        <tbody>
+        @forelse($pickups as $r)
+            <tr>
+                <td>#{{ $r->id }}<div style="font-size:.72rem;color:#888;">{{ $r->order->order_number }} · {{ $r->quantity }} item(s)</div></td>
+                <td>{{ $r->order->delivery['name'] ?? '—' }}<div style="font-size:.75rem;color:#888;">{{ $r->order->delivery['address'] ?? '' }}</div></td>
+                <td>{{ $r->pickupCourier ? 'Assigned to ' . $r->pickupCourier->full_name : 'Not assigned' }}<div style="font-size:.72rem;color:#888;">Item goes to the seller for inspection; no cash on pickup.</div></td>
+                <td>
+                    <form method="POST" action="{{ route('logistics.returns.pickup', $r) }}" style="display:flex;gap:.4rem;">
+                        @csrf
+                        <select name="courier_id" class="filter-select" required>
+                            <option value="">Choose rider</option>
+                            @foreach($couriers as $courier)<option value="{{ $courier->id }}">{{ $courier->full_name }} — {{ $courier->delivery_area ?? 'Area not set' }}</option>@endforeach
+                        </select>
+                        <button class="btn btn-outline">{{ $r->pickupCourier ? 'Reassign' : 'Assign pickup' }}</button>
+                    </form>
+                </td>
+            </tr>
+        @empty
+            <tr><td colspan="4" style="text-align:center;color:#888;padding:1.5rem;">No items waiting for pickup.</td></tr>
+        @endforelse
+        </tbody>
+    </table></div>
+</div>
+
+<div class="card">
     <div class="card-header"><span class="card-title">Refunds to Send Out</span></div>
     <div style="overflow-x:auto;"><table>
         <thead><tr><th>Return</th><th>Buyer / Address</th><th>Refund</th><th>Give cash to rider</th></tr></thead>
@@ -46,9 +74,12 @@
             <tr>
                 <td>#{{ $r->id }}<div style="font-size:.72rem;color:#888;">{{ $r->order->order_number }}</div></td>
                 <td>{{ $r->order->delivery['name'] ?? '—' }}<div style="font-size:.75rem;color:#888;">{{ $r->order->delivery['address'] ?? '' }}</div></td>
-                <td><strong>{{ Money::format($r->resolutionCents()) }}</strong>@if($r->requires_item_return)<div style="font-size:.72rem;color:#b45309;">Rider collects the item</div>@endif
-                    @if($r->order->payment_status !== 'paid')<div style="font-size:.72rem;color:#dc2626;">Buyer's cash not handed in yet</div>@endif</td>
+                @php $blocker = $r->refundBlocker(); @endphp
+                <td><strong>{{ Money::format($r->resolutionCents()) }}</strong>
+                    @if($r->refund_timing === 'on_pickup' && !$r->item_collected_at)<div style="font-size:.72rem;color:#b45309;">Expedited: rider collects the item on the same visit</div>@endif
+                    @if($blocker)<div style="font-size:.72rem;color:#dc2626;">{{ $blocker }}</div>@endif</td>
                 <td>
+                    @if(!$blocker)
                     <form method="POST" action="{{ route('logistics.refunds.release', $r) }}" style="display:flex;gap:.4rem;">
                         @csrf
                         <select name="courier_id" class="filter-select" required>
@@ -57,6 +88,9 @@
                         </select>
                         <button class="btn btn-coral">Release cash</button>
                     </form>
+                    @else
+                    <span style="font-size:.78rem;color:#888;">Not yet</span>
+                    @endif
                 </td>
             </tr>
         @empty

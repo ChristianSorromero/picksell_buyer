@@ -68,7 +68,13 @@
                 <form method="POST" action="{{ route('admin.returns.approve', $r) }}" class="form-group">
                     @csrf
                     <label class="form-label">Approve and send to the seller</label>
-                    <textarea name="note" class="form-control" rows="2" placeholder="Note for the record (optional)"></textarea>
+                    @php $presumed = config("picksell.returns.presumed_liability.{$r->reason}", 'undetermined'); @endphp
+                    <select name="liable_party" class="form-control" style="margin-bottom:0.4rem;">
+                        @foreach(RR::LIABLE_PARTIES as $code => $name)
+                            <option value="{{ $code }}" @selected($code === $presumed)>Responsible: {{ $name }}{{ $code === $presumed ? ' (presumed)' : '' }}</option>
+                        @endforeach
+                    </select>
+                    <textarea name="note" class="form-control" rows="2" placeholder="Basis for this determination (evidence reviewed)"></textarea>
                     <button class="btn btn-coral" style="margin-top:0.5rem;">Approve for seller resolution</button>
                 </form>
                 <form method="POST" action="{{ route('admin.returns.info', $r) }}" class="form-group">
@@ -108,6 +114,14 @@
                         <input type="number" name="resolution_amount" step="0.01" min="0" class="form-control">
                     </div>
                     <div class="form-group">
+                        <label class="form-label">Responsible party</label>
+                        <select name="liable_party" class="form-control">
+                            <option value="">Keep current ({{ RR::LIABLE_PARTIES[$r->liable_party] ?? 'not set' }})</option>
+                            @foreach(RR::LIABLE_PARTIES as $code => $name)<option value="{{ $code }}">{{ $name }}</option>@endforeach
+                        </select>
+                    </div>
+                    @if($r->inspection_passed === false)<p style="font-size:0.82rem;color:#b45309;">The seller reported a failed inspection: {{ $r->inspection_note }}</p>@endif
+                    <div class="form-group">
                         <label class="form-label">Decision note</label>
                         <textarea name="note" class="form-control" rows="2" required></textarea>
                     </div>
@@ -122,12 +136,43 @@
         </div>
         @endif
 
+        @if($r->status !== RR::REQUESTED && $r->status !== RR::INFO_REQUESTED)
+        <div class="card">
+            <div class="card-header"><span class="card-title">Responsibility & Refund Rules</span></div>
+            <div class="card-body" style="font-size:0.85rem;">
+                <p style="margin-top:0;">Responsible: <strong>{{ RR::LIABLE_PARTIES[$r->liable_party] ?? 'Not set' }}</strong> · Refund funded by: <strong>{{ $r->refund_funded_by ? ucfirst($r->refund_funded_by) : 'not decided' }}</strong>
+                    @if($r->liability_note)<br><span style="color:#888;">{{ $r->liability_note }}</span>@endif</p>
+                <p style="color:#888;">The rider who hands over refund cash only holds it; they are never charged for the refund.</p>
+                @if($r->refund_timing)<p>Refund timing: <strong>{{ RR::TIMING_LABELS[$r->refund_timing] }}</strong>{{ $r->expedited_reason ? ' — ' . $r->expedited_reason : '' }}</p>@endif
+                @if($r->status !== RR::REJECTED && !$order->settled_at)
+                <form method="POST" action="{{ route('admin.returns.liability', $r) }}" style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+                    @csrf
+                    <select name="liable_party" class="form-control" style="max-width:280px;">
+                        @foreach(RR::LIABLE_PARTIES as $code => $name)<option value="{{ $code }}" @selected($code === $r->liable_party)>{{ $name }}</option>@endforeach
+                    </select>
+                    <input type="text" name="note" class="form-control" placeholder="Evidence / basis (required)" required style="max-width:280px;">
+                    <button class="btn btn-outline btn-sm">Update responsibility</button>
+                </form>
+                @endif
+                @if($r->status === RR::RESOLVED && $r->refund_timing === 'after_inspection' && !$r->item_collected_at && !$r->refund_released_at)
+                <form method="POST" action="{{ route('admin.returns.expedite', $r) }}" style="margin-top:0.8rem;">
+                    @csrf
+                    <label class="form-label">Exception: refund on pickup (verified damaged, wrong or missing item)</label>
+                    <input type="text" name="reason" class="form-control" placeholder="Why the evidence justifies skipping inspection" required>
+                    <button class="btn btn-outline btn-sm" style="margin-top:0.4rem;">Expedite refund</button>
+                </form>
+                @endif
+            </div>
+        </div>
+        @endif
+
         @if($r->status === RR::RESOLVED)
         <div class="card">
             <div class="card-header"><span class="card-title">Fulfilment</span></div>
             <div class="card-body" style="font-size:0.85rem;">
-                <div>Refund: {{ $r->resolutionCents() > 0 ? ($r->refunded_at ? 'handed over ' . $r->refunded_at->format('M d') : ($r->refund_released_at ? 'cash with ' . ($r->refundCourier->full_name ?? 'rider') : 'waiting for the sorting center to release cash')) : 'none' }}</div>
-                @if($r->requires_item_return)<div>Item: {{ $r->item_received_at ? 'received by seller' . ($r->restocked ? ' (restocked)' : '') : ($r->item_collected_at ? 'collected from buyer' : 'not collected yet') }}</div>@endif
+                <div>Refund: {{ $r->resolutionCents() > 0 ? ($r->refunded_at ? 'handed over ' . $r->refunded_at->format('M d') : ($r->refund_released_at ? 'cash with ' . ($r->refundCourier->full_name ?? 'rider') : ($r->refundBlocker() ?? 'ready for the sorting center to release cash'))) : 'none' }}</div>
+                @if($r->requires_item_return)<div>Item: {{ $r->item_received_at ? 'received by seller' . ($r->inspection_passed === false ? ' — FAILED inspection' : '') . ($r->restocked ? ' (restocked)' : '') : ($r->item_collected_at ? 'collected from buyer' : ($r->pickupCourier ? 'pickup assigned to ' . $r->pickupCourier->full_name : 'waiting for pickup')) }}</div>@endif
+                @if($r->inspection_note)<div style="color:#888;">Inspection: {{ $r->inspection_note }}</div>@endif
                 @if($r->resolution_type === 'replacement')<div>Replacement: {{ $r->replacement_sent_at ? 'sent' : 'not sent yet' }}</div>@endif
             </div>
         </div>

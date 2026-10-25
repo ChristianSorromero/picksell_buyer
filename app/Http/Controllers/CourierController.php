@@ -8,8 +8,9 @@ use App\Models\LedgerEntry;
 use App\Models\Order;
 use App\Models\Payout;
 use App\Models\ReturnRequest;
-use App\Services\CodPayments;
+use App\Services\Deliveries;
 use App\Services\Ledger;
+use App\Services\RiderPay;
 use App\Services\ReturnWorkflow;
 use App\Support\Money;
 use App\Support\OrderStatus;
@@ -24,7 +25,7 @@ class CourierController extends Controller
         return auth()->user();
     }
 
-    public function dashboard(Request $request, Ledger $ledger)
+    public function dashboard(Request $request, Ledger $ledger, RiderPay $riderPay)
     {
         $courier = $this->courier();
         $status = $request->get('status', 'all');
@@ -38,35 +39,67 @@ class CourierController extends Controller
             'assigned' => Order::where('courier_id', $courier->id)->whereIn('status', ['shipped', 'processing'])->count(),
             'in_transit' => Order::where('courier_id', $courier->id)->where('status', 'shipped')->count(),
             'delivered' => Order::where('courier_id', $courier->id)->where('status', 'completed')->count(),
-            // Rider pay accrued at settlement (see config picksell.finance).
-            'earnings' => -$ledger->balance(Ledger::RIDER_PAYABLE, $courier->id) + (int) Payout::where('payee_id', $courier->id)->where('status', 'completed')->sum('amount_cents'),
             'cash_on_hand' => $ledger->balance(Ledger::RIDER_CASH, $courier->id),
+        ];
+        // Rider pay: policy status, accrued, owed now, already paid (never platform commission).
+        $paidOut = (int) Payout::where('payee_id', $courier->id)->where('status', 'completed')->sum('amount_cents');
+        $owed = -$ledger->balance(Ledger::RIDER_PAYABLE, $courier->id);
+        $pay = [
+            'status'  => $riderPay->status(),
+            'rates'   => $riderPay->rates(),
+            'accrued' => $owed + $paidOut,
+            'owed'    => $owed,
+            'paid'    => $paidOut,
         ];
         $refunds = ReturnRequest::with('order')->where('refund_courier_id', $courier->id)
             ->whereNotNull('refund_released_at')->whereNull('refunded_at')->get();
+        $pickups = ReturnRequest::with('order')->where('pickup_courier_id', $courier->id)->whereNull('item_collected_at')
+            ->where('status', ReturnRequest::RESOLVED)->get();
+        $failedReasons = config('picksell.delivery.failed_reasons');
 
-        return view('courier.dashboard', compact('orders', 'status', 'stats', 'refunds'));
+        return view('courier.dashboard', compact('orders', 'status', 'stats', 'refunds', 'pickups', 'pay', 'failedReasons'));
     }
 
-    public function updateStatus(Request $request, Order $order, CodPayments $cod)
+    public function updateStatus(Request $request, Order $order, Deliveries $deliveries)
     {
         abort_if($order->courier_id !== $this->courier()->id, 403);
 
         $data = $request->validate([
             'status'         => 'required|in:shipped,completed',
             'cash_collected' => 'required_if:status,completed|nullable|numeric|min:0',
+            // Proof of delivery: who received it, and optionally a photo.
+            'recipient_name' => 'required_if:status,completed|nullable|string|max:120',
+            'proof_photo'    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'note'           => 'nullable|string|max:500',
         ]);
 
         if ($data['status'] === 'completed') {
-            // Delivery and the COD cash are recorded together, or not at all.
-            $cod->deliverAndCollect($order, $this->courier(), (string) $data['cash_collected']);
+            // Proof of delivery and the COD cash are recorded together, or not at all.
+            $deliveries->deliver($order, $this->courier(), (string) $data['cash_collected'], $data['recipient_name'],
+                $request->file('proof_photo'), $data['note'] ?? null);
             return back()->with('success', 'Parcel delivered and ' . Money::format($order->totalCents()) . ' cash collected. Hand it in at the sorting center.');
         }
 
-        OrderStatus::ensure($order, 'out_for_delivery');
-        $order->update(['status' => 'shipped', 'tracking_status' => 'Out for delivery']);
-
+        $deliveries->setOut($order, $this->courier());
         return back()->with('success', 'Parcel marked as out for delivery.');
+    }
+
+    public function failDelivery(Request $request, Order $order, Deliveries $deliveries)
+    {
+        $data = $request->validate([
+            'reason'      => 'required|string',
+            'note'        => 'nullable|string|max:500',
+            'proof_photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+        ]);
+        $deliveries->fail($order, $this->courier(), $data['reason'], $data['note'] ?? null, $request->file('proof_photo'));
+        return back()->with('success', 'Failed attempt recorded. Bring the parcel and any cash back to the sorting center.');
+    }
+
+    /** The rider collected a returned item from the buyer (inspection-first returns). */
+    public function recordPickup(ReturnRequest $returnRequest, ReturnWorkflow $workflow)
+    {
+        $workflow->recordPickup($returnRequest, $this->courier());
+        return back()->with('success', "Item for return #{$returnRequest->id} recorded as collected. Bring it to the sorting center.");
     }
 
     /** The rider hands an approved refund to the buyer, collecting the item when it must come back. */

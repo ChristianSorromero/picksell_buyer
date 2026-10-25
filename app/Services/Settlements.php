@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AuditLog;
 use App\Models\LedgerEntry;
+use App\Models\LedgerTransaction;
 use App\Models\Order;
 use App\Models\Payout;
 use App\Models\ReturnRequest;
@@ -17,21 +18,26 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Turns paid orders into what is owed to sellers and riders, and records
- * manual payouts. Nothing here sends money: an admin pays outside the
- * system (bank / e-wallet transfer) and records the reference.
+ * Turns paid orders into what is owed to sellers, and records manual
+ * payouts to sellers and riders. Nothing here sends money: an admin pays
+ * outside the system (bank / e-wallet transfer) and records the reference.
+ * Rider pay accrues separately (App\Services\RiderPay) when cash is handed in.
  *
  * Settlement of one order (centavos), once the cash is handed in, the
- * return window has passed and no return is open:
+ * return window has passed, no return is open and the payment isn't under review:
  *
- *   seller gross   = item price before platform vouchers (store vouchers are seller-funded)
- *   refund (items) = refunds handed to the buyer, charged to the seller first
- *   commission     = commission_rate × (seller gross − item refund)
- *   withholding    = RR 16-2023, if enabled: rate × base × (seller gross − item refund)
- *   seller payable = seller gross − item refund − commission − withholding
- *   rider pay      = rider_fee_per_delivery, if configured
- *   platform       = cash kept − seller payable − withholding − rider pay
- *                    (shipping and service fees, commission, minus platform vouchers)
+ *   seller gross   = item price after store vouchers; platform vouchers are
+ *                    funded by Picksell, so the seller keeps the pre-discount price
+ *   seller refund  = refunds whose recorded funder is the seller (capped at seller gross)
+ *   commission     = commission_rate × (seller gross − seller refund); never on shipping
+ *   withholding    = RR 16-2023, only if enabled: rate × base × (seller gross − seller refund)
+ *   seller payable = seller gross − seller refund − commission − withholding
+ *   platform       = cash kept − seller payable − withholding
+ *                    (shipping and service fees, commission, minus platform vouchers
+ *                     and platform-funded refunds)
+ *
+ * Refunds paid after settlement (late defect claims) are booked by
+ * adjustForLateRefund(); posted settlements are never edited.
  */
 class Settlements
 {
@@ -41,6 +47,7 @@ class Settlements
     {
         return Order::whereIn('payment_status', ['paid', 'partially_refunded', 'refunded'])
             ->whereNull('settled_at')
+            ->whereNull('payment_review')
             ->whereNotNull('delivered_at')
             ->where('delivered_at', '<=', now()->subDays((int) config('picksell.return_window_days')))
             ->whereDoesntHave('returnRequest', fn ($q) => $q->whereNotIn('status', ReturnRequest::CLOSED));
@@ -50,29 +57,29 @@ class Settlements
     public function breakdown(Order $order): array
     {
         $total = $order->totalCents();
-        $refunded = $this->refundedCents($order);
+        [$sellerFunded, $platformFunded] = $this->refundsByFunder($order);
+        $refunded = $sellerFunded + $platformFunded;
         $amount = Money::cents($order->amount);
         $sellerGross = $this->platformFundedDiscount($order) ? Money::cents($order->subtotal ?? $order->amount) : $amount;
 
-        $itemRefund = min($refunded, $sellerGross);
-        $base = $sellerGross - $itemRefund;
-        $commission = Money::times($base, (string) config('picksell.commission_rate'));
-        $withholding = $this->withholding($base);
+        $sellerRefund = min($sellerFunded, $sellerGross);
+        $base = $sellerGross - $sellerRefund;
+        $commission = Money::times($base, $this->commissionRate());
+        $withholding = Money::times($base, $this->withholdingRate());
         $seller = $base - $commission - $withholding;
-        $riderFee = $this->riderFee($order);
         $kept = $total - $refunded;
 
         return [
-            'total'        => $total,
-            'refunded'     => $refunded,
-            'seller_gross' => $sellerGross,
-            'item_refund'  => $itemRefund,
-            'commission'   => $commission,
-            'withholding'  => $withholding,
-            'seller'       => $seller,
-            'rider'        => $riderFee,
-            'platform'     => $kept - $seller - $withholding - $riderFee,
-            'kept'         => $kept,
+            'total'           => $total,
+            'refunded'        => $refunded,
+            'seller_refund'   => $sellerRefund,
+            'platform_refund' => $refunded - $sellerRefund,
+            'seller_gross'    => $sellerGross,
+            'commission'      => $commission,
+            'withholding'     => $withholding,
+            'seller'          => $seller,
+            'platform'        => $kept - $seller - $withholding,
+            'kept'            => $kept,
         ];
     }
 
@@ -91,13 +98,45 @@ class Settlements
                 [Ledger::ORDER_FUNDS, null, $b['kept'], $order->id],
                 [Ledger::SELLER_PAYABLE, $order->seller_id, -$b['seller'], $order->id],
                 [Ledger::WITHHOLDING_TAX, $order->seller_id, -$b['withholding'], $order->id],
-                [Ledger::RIDER_PAYABLE, $order->cod_collected_by ?? $order->courier_id, -$b['rider'], $order->id],
                 [Ledger::PLATFORM_REVENUE, null, -$b['platform'], $order->id],
-            ], ['order_id' => $order->id], $actor, "Settlement of {$order->order_number}");
+            ], ['order_id' => $order->id], $actor, "Settlement of {$order->order_number}",
+                $b + ['commission_rate' => $this->commissionRate(), 'withholding_rate' => $this->withholdingRate()]);
 
             $order->update(['settled_at' => now()]);
             AuditLog::record($order, 'settled', null, null, null, $b['seller'], $actor);
         });
+    }
+
+    /**
+     * A refund handed over after the order settled (e.g. a defect claim
+     * inside the warranty period). Reverses the seller's share of a
+     * seller-funded refund — including its commission and withholding at
+     * the rates used at settlement — or charges it to Picksell.
+     */
+    public function adjustForLateRefund(Order $order, ReturnRequest $return, int $cents, ?User $actor = null): void
+    {
+        if (!$order->settled_at) return;
+
+        $settlement = LedgerTransaction::where('idempotency_key', "settlement:order:{$order->id}")->firstOrFail();
+        $rates = $settlement->details ?? [];
+        $lines = [[Ledger::ORDER_FUNDS, null, -$cents, $order->id]];
+        $details = ['funded_by' => $return->refund_funded_by, 'refund_cents' => $cents];
+
+        if ($return->refund_funded_by === 'seller') {
+            $sellerPart = min($cents, max(0, ($rates['seller_gross'] ?? 0) - ($rates['seller_refund'] ?? 0)));
+            $commissionBack = Money::times($sellerPart, $rates['commission_rate'] ?? $this->commissionRate());
+            $withholdingBack = Money::times($sellerPart, $rates['withholding_rate'] ?? '0');
+            $lines[] = [Ledger::SELLER_PAYABLE, $order->seller_id, $sellerPart - $commissionBack - $withholdingBack, $order->id];
+            $lines[] = [Ledger::WITHHOLDING_TAX, $order->seller_id, $withholdingBack, $order->id];
+            $lines[] = [Ledger::PLATFORM_REVENUE, null, $cents - $sellerPart + $commissionBack, $order->id];
+            $details += ['seller_part' => $sellerPart, 'commission_reversed' => $commissionBack, 'withholding_reversed' => $withholdingBack];
+        } else {
+            $lines[] = [Ledger::PLATFORM_REVENUE, null, $cents, $order->id];
+        }
+
+        $this->ledger->post('late_refund_adjustment', "late_refund_adjustment:return:{$return->id}", $lines,
+            ['order_id' => $order->id, 'return_request_id' => $return->id], $actor, "Refund after settlement for {$order->order_number}", $details);
+        AuditLog::record($order, 'late_refund_adjusted', null, null, "Return #{$return->id}, funded by {$return->refund_funded_by}", $cents, $actor);
     }
 
     /** Settles every eligible order; safe to run repeatedly. */
@@ -126,23 +165,28 @@ class Settlements
             : [$today->startOfWeek()->subWeek(), $today->startOfWeek()->subWeek()->endOfWeek()];
     }
 
+    /** Ledger lines that make up what sellers and riders are owed. */
+    private const PAYABLE_SOURCES = ['order_settlement', 'rider_pay_accrued', 'late_refund_adjustment'];
+
     /**
      * Creates one pending payout per seller/rider for their settled, not yet
-     * paid shares up to the end of the period. Shares already in an active or
-     * completed payout are skipped.
+     * paid lines up to the end of the period, netting any later refund
+     * adjustments. Lines already in a payout are skipped; a payee whose net
+     * is zero or negative gets no payout and their lines carry forward.
      */
     public function generatePayouts(CarbonImmutable $start, CarbonImmutable $end, User $admin): Collection
     {
         return DB::transaction(function () use ($start, $end, $admin) {
             $lines = LedgerEntry::whereIn('account', [Ledger::SELLER_PAYABLE, Ledger::RIDER_PAYABLE])
-                ->where('amount_cents', '<', 0)->whereNotNull('user_id')
-                ->whereHas('transaction', fn ($q) => $q->where('type', 'order_settlement')->where('created_at', '<=', $end))
+                ->whereNotNull('user_id')
+                ->whereHas('transaction', fn ($q) => $q->whereIn('type', self::PAYABLE_SOURCES)->where('created_at', '<=', $end))
                 ->whereDoesntHave('payoutItem')
                 ->lockForUpdate()->get();
 
             return $lines->groupBy(fn ($l) => $l->account . ':' . $l->user_id)->map(function ($group) use ($start, $end, $admin) {
                 $first = $group->first();
                 $amount = -$group->sum('amount_cents');
+                if ($amount <= 0) return null;
                 $payout = Payout::create([
                     'payee_id'     => $first->user_id,
                     'payee_role'   => $first->account === Ledger::SELLER_PAYABLE ? 'seller' : 'courier',
@@ -157,17 +201,33 @@ class Settlements
                 }
                 AuditLog::record($payout, 'created', null, 'pending', null, $amount, $admin);
                 return $payout;
-            })->values();
+            })->filter()->values();
         });
     }
 
     public function approve(Payout $payout, User $admin): void
     {
         $this->movePayout($payout, ['pending'], 'approved', $admin, function (Payout $p) use ($admin) {
-            abort_if(config('picksell.finance.payout_requires_second_admin') && $p->created_by === $admin->id, 422,
-                'A different admin must approve this payout.');
+            abort_if($this->needsSecondAdmin($p) && $p->created_by === $admin->id, 422,
+                'This payout needs approval from a different admin than the one who created it.');
+            $this->ensureWithinBalance($p);
             return ['approved_by' => $admin->id, 'approved_at' => now()];
         });
+    }
+
+    /** Two-person rule: on for payouts at or above the configured threshold. */
+    public function needsSecondAdmin(Payout $payout): bool
+    {
+        return (bool) config('picksell.finance.payout_requires_second_admin')
+            && $payout->amount_cents >= Money::cents(config('picksell.finance.second_admin_threshold', '0'));
+    }
+
+    /** A payout may never exceed what the payee is currently owed. */
+    private function ensureWithinBalance(Payout $p): void
+    {
+        $account = $p->payee_role === 'seller' ? Ledger::SELLER_PAYABLE : Ledger::RIDER_PAYABLE;
+        $owed = -$this->ledger->balance($account, $p->payee_id);
+        abort_if($p->amount_cents > $owed, 422, 'This payout is more than the payee is currently owed (' . Money::format($owed) . '). Cancel it and create a new one.');
     }
 
     public function markProcessing(Payout $payout, User $admin): void
@@ -175,19 +235,25 @@ class Settlements
         $this->movePayout($payout, ['approved'], 'processing', $admin, fn () => ['processing_at' => now()]);
     }
 
-    /** Records a transfer the admin actually made, with its bank / e-wallet reference. */
-    public function complete(Payout $payout, User $admin, string $reference): void
+    /**
+     * Records a transfer the admin actually made outside Picksell: its bank /
+     * e-wallet reference and the date the money left. Never before that.
+     */
+    public function complete(Payout $payout, User $admin, string $reference, string $disbursedOn): void
     {
-        $this->movePayout($payout, ['approved', 'processing'], 'completed', $admin, function (Payout $p) use ($admin, $reference) {
+        abort_if(CarbonImmutable::parse($disbursedOn)->isFuture(), 422, 'The disbursement date can’t be in the future.');
+        $this->movePayout($payout, ['approved', 'processing'], 'completed', $admin, function (Payout $p) use ($admin, $reference, $disbursedOn) {
             $amount = (int) $p->items()->sum('amount_cents');
             abort_if($amount !== $p->amount_cents, 422, 'This payout no longer matches its items and needs review.');
+            $this->ensureWithinBalance($p);
             $account = $p->payee_role === 'seller' ? Ledger::SELLER_PAYABLE : Ledger::RIDER_PAYABLE;
             $this->ledger->post('payout', "payout:{$p->id}", [
                 [$account, $p->payee_id, $amount],
                 [Ledger::PLATFORM_CASH, null, -$amount],
-            ], ['payout_id' => $p->id], $admin, "Payout #{$p->id}, reference {$reference}");
-            return ['reference' => $reference, 'completed_by' => $admin->id, 'completed_at' => now()];
-        }, $reference);
+            ], ['payout_id' => $p->id], $admin, "Payout #{$p->id}, reference {$reference}",
+                ['reference' => $reference, 'disbursed_on' => $disbursedOn]);
+            return ['reference' => $reference, 'disbursed_on' => $disbursedOn, 'completed_by' => $admin->id, 'completed_at' => now()];
+        }, "Reference {$reference}, disbursed {$disbursedOn}");
     }
 
     /** The transfer bounced or couldn't be made; the shares become payable again. */
@@ -247,22 +313,45 @@ class Settlements
             'eligible_count'    => $this->eligibleOrders()->count(),
             'waiting_window'    => Order::whereIn('payment_status', ['paid', 'partially_refunded', 'refunded'])->whereNull('settled_at')->count() - $this->eligibleOrders()->count(),
             'refunds_pending'   => ReturnRequest::where('status', ReturnRequest::RESOLVED)->whereNull('refunded_at')->where('resolution_amount', '>', 0)->with('order', 'refundCourier')->get(),
+            'returns_awaiting_admin' => ReturnRequest::whereIn('status', [ReturnRequest::REQUESTED, ReturnRequest::ESCALATED])->count(),
+            'undetermined_liability' => ReturnRequest::where('liable_party', 'undetermined')->whereNotIn('status', ReturnRequest::CLOSED)->count(),
+            'legacy_orders'     => Order::where('status', 'completed')->where('payment_status', 'unpaid')->whereNull('cod_collected_by')
+                ->whereNull('payment_backfilled_at')->with('returnRequest')->orderBy('delivered_at')->get(),
+            'payouts_pending'   => Payout::whereIn('status', Payout::ACTIVE)->count(),
             'discrepancies'     => [
-                'delivered_without_collection' => Order::where('status', 'completed')->where('payment_status', 'unpaid')->pluck('order_number')->all(),
+                'delivered_without_collection' => Order::where('status', 'completed')->where('payment_status', 'unpaid')->whereNull('payment_review')->pluck('order_number')->all(),
                 'settled_with_open_funds'      => Order::whereIn('id', $settledMismatch)->pluck('order_number')->all(),
                 'ledger_out_of_balance'        => (int) LedgerEntry::sum('amount_cents'),
             ],
-            'rider_pay_configured' => config('picksell.finance.rider_fee_per_delivery') !== null,
+            'rider_pay_status'     => app(RiderPay::class)->status(),
+            'rider_pay_rates'      => app(RiderPay::class)->rates(),
             'withholding_enabled'  => (bool) config('picksell.finance.withholding.enabled'),
         ];
     }
 
     // ── Rules ────────────────────────────────────────────────────────────
 
-    private function refundedCents(Order $order): int
+    /** @return array{0: int, 1: int} refunds handed to the buyer, funded by the seller / by Picksell */
+    private function refundsByFunder(Order $order): array
     {
-        return (int) LedgerEntry::where('order_id', $order->id)->where('account', Ledger::ORDER_FUNDS)
-            ->whereHas('transaction', fn ($q) => $q->where('type', 'refund_paid'))->sum('amount_cents');
+        $seller = $platform = 0;
+        foreach (LedgerTransaction::with('entries', 'returnRequest')->where('order_id', $order->id)->where('type', 'refund_paid')->get() as $t) {
+            $cents = (int) $t->entries->where('account', Ledger::ORDER_FUNDS)->sum('amount_cents');
+            ($t->returnRequest?->refund_funded_by === 'seller') ? $seller += $cents : $platform += $cents;
+        }
+        return [$seller, $platform];
+    }
+
+    private function commissionRate(): string
+    {
+        return (string) BigDecimal::of((string) config('picksell.commission_rate'));
+    }
+
+    /** RR 16-2023 effective rate (rate × base), or "0" while withholding is disabled. */
+    private function withholdingRate(): string
+    {
+        if (!config('picksell.finance.withholding.enabled')) return '0';
+        return (string) BigDecimal::of(config('picksell.finance.withholding.rate'))->multipliedBy(config('picksell.finance.withholding.base'));
     }
 
     private function platformFundedDiscount(Order $order): bool
@@ -272,16 +361,4 @@ class Settlements
         return $scope === 'platform' && config('picksell.finance.platform_voucher_funded_by') === 'platform';
     }
 
-    private function withholding(int $base): int
-    {
-        if (!config('picksell.finance.withholding.enabled')) return 0;
-        $rate = BigDecimal::of(config('picksell.finance.withholding.rate'))->multipliedBy(config('picksell.finance.withholding.base'));
-        return Money::times($base, (string) $rate);
-    }
-
-    private function riderFee(Order $order): int
-    {
-        $fee = config('picksell.finance.rider_fee_per_delivery');
-        return $fee === null || $fee === '' || !($order->cod_collected_by ?? $order->courier_id) ? 0 : Money::cents($fee);
-    }
 }

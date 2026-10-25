@@ -55,6 +55,13 @@
                     <td>
                         @if($order->status !== 'completed')
                         <div style="display:flex;gap:0.4rem;flex-wrap:wrap;min-width:280px;">
+                        @if(\App\Support\OrderStatus::can($order, 'return_to_sender'))
+                        <form method="POST" action="{{ route('admin.logistics.rts', $order) }}" style="display:flex;gap:0.4rem;">
+                            @csrf
+                            <input type="text" name="reason" class="form-control" placeholder="Why" required style="width:150px;">
+                            <button class="btn btn-outline btn-sm" type="submit">Return to seller</button>
+                        </form>
+                        @endif
                         @if(\App\Support\OrderStatus::can($order, 'scan'))
                         <form method="POST" action="{{ route('admin.logistics.scan', $order) }}">
                             @csrf @method('PATCH')

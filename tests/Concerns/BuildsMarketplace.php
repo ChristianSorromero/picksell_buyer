@@ -79,6 +79,7 @@ trait BuildsMarketplace
     {
         return $this->actingAs($this->courier)->patch("/courier/orders/{$order->id}/status", [
             'status' => 'completed', 'cash_collected' => $cash ?? \App\Support\Money::pesos($order->totalCents()),
+            'recipient_name' => 'Ana Reyes',
         ]);
     }
 

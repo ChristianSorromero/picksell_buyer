@@ -73,37 +73,166 @@ class ReturnWorkflowTest extends TestCase
         $this->postJson("/api/buyer/returns/{$r->id}/accept")->assertStatus(422);
         $this->useWebGuard();
 
-        // Approval alone moves no money; the sorting center releases cash to a rider.
+        // Default timing: the item is picked up and inspected before any refund goes out.
+        $r->refresh();
+        $this->assertSame('after_inspection', $r->refund_timing);
+        $this->assertSame('seller', $r->liable_party);       // presumed from "Damaged or defective item"
+        $this->assertSame('seller', $r->refund_funded_by);
+        $this->assertSame('cash', $r->refund_to);
+        $this->actingAs($this->logistics)->post("/logistics/refunds/{$r->id}/release", ['courier_id' => $this->courier->id])
+            ->assertStatus(422);
         $this->assertSame('paid', $order->fresh()->payment_status);
-        $this->actingAs($this->courier)->get('/courier/orders')->assertDontSee('Refunds to Hand Over');
+
+        // Pickup: no cash changes hands; only the assigned rider can record it.
+        $this->actingAs($this->logistics)->post("/logistics/returns/{$r->id}/pickup", ['courier_id' => $this->courier->id])->assertSessionHasNoErrors();
+        $this->actingAs($this->otherCourier)->post("/courier/returns/{$r->id}/picked-up")->assertForbidden();
+        $this->actingAs($this->courier)->get('/courier/orders')->assertOk()->assertSee('Items to Pick Up');
+        $this->actingAs($this->courier)->post("/courier/returns/{$r->id}/picked-up")->assertSessionHasNoErrors();
+        $this->actingAs($this->courier)->post("/courier/returns/{$r->id}/picked-up")->assertStatus(422);
+        $this->assertSame(0, app(Ledger::class)->balance(Ledger::RIDER_CASH, $this->courier->id));
+
+        // Seller inspects; stock goes back only now, and only because it passed and was restocked.
+        $this->assertSame(8, $this->mug->fresh()->stock);
+        $this->actingAs($this->seller)->post("/seller/returns/{$r->id}/item-received", ['inspection_passed' => 1, 'restock' => 1])->assertSessionHasNoErrors();
+        $this->assertSame(9, $this->mug->fresh()->stock);
+
+        // Now the refund cash can go out, once.
         $this->actingAs($this->logistics)->post("/logistics/refunds/{$r->id}/release", ['courier_id' => $this->courier->id])->assertSessionHasNoErrors();
         $this->actingAs($this->logistics)->post("/logistics/refunds/{$r->id}/release", ['courier_id' => $this->courier->id])->assertStatus(422);
         $this->assertSame(30000, app(Ledger::class)->balance(Ledger::RIDER_CASH, $this->courier->id));
 
-        // The rider hands over exactly the refund and collects the item.
-        $this->actingAs($this->otherCourier)->post("/courier/refunds/{$r->id}/handover", ['amount' => '300.00', 'item_collected' => 1])->assertForbidden();
-        $this->actingAs($this->courier)->post("/courier/refunds/{$r->id}/handover", ['amount' => '250.00', 'item_collected' => 1])->assertStatus(422);
+        $this->actingAs($this->otherCourier)->post("/courier/refunds/{$r->id}/handover", ['amount' => '300.00'])->assertForbidden();
+        $this->actingAs($this->courier)->post("/courier/refunds/{$r->id}/handover", ['amount' => '250.00'])->assertStatus(422);
+        $this->actingAs($this->courier)->post("/courier/refunds/{$r->id}/handover", ['amount' => '300.00'])->assertSessionHasNoErrors();
         $this->actingAs($this->courier)->post("/courier/refunds/{$r->id}/handover", ['amount' => '300.00'])->assertStatus(422);
-        $this->actingAs($this->courier)->post("/courier/refunds/{$r->id}/handover", ['amount' => '300.00', 'item_collected' => 1])->assertSessionHasNoErrors();
-        $this->actingAs($this->courier)->post("/courier/refunds/{$r->id}/handover", ['amount' => '300.00', 'item_collected' => 1])->assertStatus(422);
 
         $this->assertSame('partially_refunded', $order->fresh()->payment_status);
         $this->assertSame(0, app(Ledger::class)->balance(Ledger::RIDER_CASH, $this->courier->id));
-        $this->assertSame(ReturnRequest::RESOLVED, $r->fresh()->status); // item not back with the seller yet
-
-        // Stock only goes back when the seller has the item and restocks it.
-        $this->assertSame(8, $this->mug->fresh()->stock);
-        $this->actingAs($this->seller)->post("/seller/returns/{$r->id}/item-received", ['restock' => 1])->assertSessionHasNoErrors();
-        $this->assertSame(9, $this->mug->fresh()->stock);
 
         $r->refresh();
         $this->assertSame(ReturnRequest::COMPLETED, $r->status);
         $this->assertSame('refunded', $this->returnJson($order)['status']);
         $this->assertSame(
-            ['requested', 'info_requested', 'buyer_replied', 'approved_for_seller', 'seller_proposed', 'buyer_accepted', 'refund_released', 'refund_handed_over', 'item_received_restocked', 'completed'],
+            ['requested', 'info_requested', 'buyer_replied', 'approved_for_seller', 'seller_proposed', 'buyer_accepted',
+             'pickup_assigned', 'item_picked_up', 'item_received_restocked', 'refund_released', 'refund_handed_over', 'completed'],
             $r->auditLogs()->reorder('id')->pluck('action')->all(),
         );
         $this->actingAs($this->admin)->get("/admin/returns/{$r->id}")->assertOk()->assertSee('refund handed over');
+    }
+
+    /** Resolves a return-and-refund case for ₱300, ready for pickup. */
+    private function resolvedReturn(Order $order, string $type = 'return_and_refund', ?string $amount = '300.00'): ReturnRequest
+    {
+        $r = $this->openReturn($order);
+        $this->actingAs($this->admin)->post("/admin/returns/{$r->id}/approve")->assertSessionHasNoErrors();
+        $this->actingAs($this->seller)->post("/seller/returns/{$r->id}/propose", ['resolution_type' => $type, 'resolution_amount' => $amount])->assertSessionHasNoErrors();
+        $this->asBuyerApi();
+        $this->postJson("/api/buyer/returns/{$r->id}/accept")->assertOk();
+        $this->useWebGuard();
+        return $r->fresh();
+    }
+
+    public function test_admin_can_expedite_a_verified_claim_so_the_rider_refunds_on_pickup(): void
+    {
+        $order = $this->paidOrder();
+        $r = $this->resolvedReturn($order);
+
+        $this->actingAs($this->seller)->post("/admin/returns/{$r->id}/expedite", ['reason' => 'x'])->assertForbidden();
+        $this->actingAs($this->admin)->post("/admin/returns/{$r->id}/expedite", ['reason' => 'Photos clearly show a shattered mug'])->assertSessionHasNoErrors();
+        $r->refresh();
+        $this->assertSame('on_pickup', $r->refund_timing);
+        $this->assertSame($this->admin->id, $r->expedited_by);
+
+        $this->actingAs($this->logistics)->post("/logistics/refunds/{$r->id}/release", ['courier_id' => $this->courier->id])->assertSessionHasNoErrors();
+        // Same visit: the rider must collect the item before handing over the cash.
+        $this->actingAs($this->courier)->post("/courier/refunds/{$r->id}/handover", ['amount' => '300.00'])->assertStatus(422);
+        $this->actingAs($this->courier)->post("/courier/refunds/{$r->id}/handover", ['amount' => '300.00', 'item_collected' => 1])->assertSessionHasNoErrors();
+        $this->assertSame(ReturnRequest::RESOLVED, $r->fresh()->status); // seller still has to confirm receipt
+
+        $this->actingAs($this->seller)->post("/seller/returns/{$r->id}/item-received", ['inspection_passed' => 1, 'restock' => 0])->assertSessionHasNoErrors();
+        $this->assertSame(ReturnRequest::COMPLETED, $r->fresh()->status);
+        $this->assertSame(1, $r->auditLogs()->where('action', 'refund_expedited')->count());
+    }
+
+    public function test_a_failed_inspection_goes_to_admin_and_nothing_is_restocked_or_refunded(): void
+    {
+        $order = $this->paidOrder();
+        $r = $this->resolvedReturn($order);
+        $this->actingAs($this->logistics)->post("/logistics/returns/{$r->id}/pickup", ['courier_id' => $this->courier->id]);
+        $this->actingAs($this->courier)->post("/courier/returns/{$r->id}/picked-up");
+
+        $this->actingAs($this->seller)->post("/seller/returns/{$r->id}/item-received", ['inspection_passed' => 0, 'restock' => 1])
+            ->assertSessionHasErrors('inspection_note');
+        $this->actingAs($this->seller)->post("/seller/returns/{$r->id}/item-received", ['inspection_passed' => 0, 'restock' => 1, 'inspection_note' => 'Water damage, not a defect'])
+            ->assertSessionHasNoErrors();
+
+        $r->refresh();
+        $this->assertSame(ReturnRequest::ESCALATED, $r->status);
+        $this->assertFalse($r->inspection_passed);
+        $this->assertFalse($r->restocked);
+        $this->assertSame(9, $this->mug->fresh()->stock);
+        $this->actingAs($this->logistics)->post("/logistics/refunds/{$r->id}/release", ['courier_id' => $this->courier->id])->assertStatus(422);
+
+        // Admin reviews and decides; responsibility moves to the buyer, so no refund.
+        $this->actingAs($this->admin)->post("/admin/returns/{$r->id}/reject", ['reason' => 'Damage caused by the buyer'])->assertSessionHasNoErrors();
+        $this->assertSame(ReturnRequest::REJECTED, $r->fresh()->status);
+        $this->assertSame('paid', $order->fresh()->payment_status);
+    }
+
+    public function test_courier_damage_is_funded_by_picksell_and_never_charged_to_the_seller_or_rider(): void
+    {
+        $order = $this->paidOrder();
+        $r = $this->resolvedReturn($order, 'full_refund', null);
+        $this->assertSame('no_return', $r->refund_timing);
+
+        // Undetermined responsibility blocks the cash.
+        $this->actingAs($this->admin)->post("/admin/returns/{$r->id}/liability", ['liable_party' => 'undetermined', 'note' => 'Checking with logistics'])->assertSessionHasNoErrors();
+        $this->actingAs($this->logistics)->post("/logistics/refunds/{$r->id}/release", ['courier_id' => $this->courier->id])->assertStatus(422);
+
+        $this->actingAs($this->seller)->post("/admin/returns/{$r->id}/liability", ['liable_party' => 'seller', 'note' => 'x'])->assertForbidden();
+        $this->actingAs($this->admin)->post("/admin/returns/{$r->id}/liability", ['liable_party' => 'logistics', 'note' => 'Crushed box, courier report #12'])->assertSessionHasNoErrors();
+        $this->assertSame('platform', $r->fresh()->refund_funded_by);
+
+        $this->actingAs($this->logistics)->post("/logistics/refunds/{$r->id}/release", ['courier_id' => $this->courier->id])->assertSessionHasNoErrors();
+        $this->actingAs($this->courier)->post("/courier/refunds/{$r->id}/handover", ['amount' => '345.00'])->assertSessionHasNoErrors();
+
+        $this->travel(8)->days();
+        app(\App\Services\Settlements::class)->settleEligible();
+        $ledger = app(Ledger::class);
+        // Seller keeps ₱300 − 10% commission; Picksell bears the ₱345 refund.
+        $this->assertSame(27000, -$ledger->balance(Ledger::SELLER_PAYABLE, $this->seller->id));
+        $this->assertSame(0, $ledger->balance(Ledger::RIDER_CASH, $this->courier->id));
+        $this->assertSame(0, -$ledger->balance(Ledger::RIDER_PAYABLE, $this->courier->id));
+        $this->assertSame(0, (int) \App\Models\LedgerEntry::sum('amount_cents'));
+    }
+
+    public function test_defect_claims_have_a_longer_window_than_change_of_mind(): void
+    {
+        $order = $this->paidOrder();
+        $this->travel(20)->days();
+        $this->asBuyerApi();
+        $this->postJson("/api/buyer/orders/{$order->id}/return", ['quantity' => 1, 'reason' => 'Changed my mind'])->assertStatus(422);
+        $this->postJson("/api/buyer/orders/{$order->id}/return", ['quantity' => 1, 'reason' => 'Damaged or defective item'])->assertCreated();
+    }
+
+    public function test_a_defect_refund_after_settlement_is_booked_as_an_adjustment(): void
+    {
+        $order = $this->paidOrder();
+        $this->travel(8)->days();
+        app(\App\Services\Settlements::class)->settleEligible();
+        $this->assertSame(27000, -app(Ledger::class)->balance(Ledger::SELLER_PAYABLE, $this->seller->id));
+
+        $r = $this->resolvedReturn($order, 'partial_refund', '100.00');
+        $this->actingAs($this->logistics)->post("/logistics/refunds/{$r->id}/release", ['courier_id' => $this->courier->id])->assertSessionHasNoErrors();
+        $this->actingAs($this->courier)->post("/courier/refunds/{$r->id}/handover", ['amount' => '100.00'])->assertSessionHasNoErrors();
+
+        // Seller-funded ₱100: seller loses ₱90, Picksell gives back its ₱10 commission.
+        $ledger = app(Ledger::class);
+        $this->assertSame(18000, -$ledger->balance(Ledger::SELLER_PAYABLE, $this->seller->id));
+        $this->assertSame(0, $ledger->balance(Ledger::ORDER_FUNDS, null, $order->id));
+        $this->assertSame(0, (int) \App\Models\LedgerEntry::sum('amount_cents'));
+        $this->assertTrue(\App\Models\LedgerTransaction::where('type', 'late_refund_adjustment')->exists());
+        $this->assertSame(1, \App\Models\LedgerTransaction::where('type', 'order_settlement')->count()); // settlement untouched
     }
 
     public function test_disagreement_goes_to_admin_for_a_final_decision(): void
@@ -166,7 +295,11 @@ class ReturnWorkflowTest extends TestCase
         $this->actingAs($this->logistics)->post("/logistics/refunds/{$r->id}/release", ['courier_id' => $this->courier->id])->assertStatus(422);
         $this->actingAs($this->seller)->post("/seller/returns/{$r->id}/replacement-sent", ['note' => 'WB-9'])->assertSessionHasNoErrors();
         $this->assertSame(ReturnRequest::RESOLVED, $r->fresh()->status);
-        $this->actingAs($this->seller)->post("/seller/returns/{$r->id}/item-received", ['restock' => 0])->assertSessionHasNoErrors();
+        // The old item comes back through a rider pickup before the seller can confirm it.
+        $this->actingAs($this->seller)->post("/seller/returns/{$r->id}/item-received", ['inspection_passed' => 1, 'restock' => 0])->assertStatus(422);
+        $this->actingAs($this->logistics)->post("/logistics/returns/{$r->id}/pickup", ['courier_id' => $this->courier->id])->assertSessionHasNoErrors();
+        $this->actingAs($this->courier)->post("/courier/returns/{$r->id}/picked-up")->assertSessionHasNoErrors();
+        $this->actingAs($this->seller)->post("/seller/returns/{$r->id}/item-received", ['inspection_passed' => 1, 'restock' => 0])->assertSessionHasNoErrors();
 
         $this->assertSame(ReturnRequest::COMPLETED, $r->fresh()->status);
         $this->assertSame('paid', $order->fresh()->payment_status);

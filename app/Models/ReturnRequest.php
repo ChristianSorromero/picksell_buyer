@@ -49,6 +49,24 @@ class ReturnRequest extends Model
         'info_request', 'seller_note', 'refund_courier_id', 'admin_approved_at', 'proposed_at', 'escalated_at',
         'resolved_at', 'refund_released_at', 'item_collected_at', 'item_received_at', 'restocked',
         'replacement_sent_at', 'completed_at',
+        'refund_timing', 'expedited_by', 'expedited_reason', 'liable_party', 'refund_funded_by', 'liability_note',
+        'liability_set_by', 'pickup_courier_id', 'pickup_assigned_at', 'inspection_passed', 'inspection_note',
+    ];
+
+    /** Who caused the problem (admin's determination); see config picksell.returns. */
+    public const LIABLE_PARTIES = [
+        'seller'       => 'Seller (wrong, defective or not-as-described item)',
+        'logistics'    => 'Logistics / courier (damaged or lost in delivery)',
+        'buyer'        => 'Buyer (change of mind or misuse)',
+        'platform'     => 'Picksell (platform error)',
+        'undetermined' => 'Undetermined — under review',
+    ];
+
+    /** When the refund cash may go out. */
+    public const TIMING_LABELS = [
+        'after_inspection' => 'After the seller receives and inspects the item',
+        'on_pickup'        => 'On pickup (expedited by admin)',
+        'no_return'        => 'Right away (buyer keeps the item)',
     ];
 
     protected $casts = [
@@ -69,11 +87,14 @@ class ReturnRequest extends Model
         'item_received_at'     => 'datetime',
         'replacement_sent_at'  => 'datetime',
         'completed_at'         => 'datetime',
+        'pickup_assigned_at'   => 'datetime',
+        'inspection_passed'    => 'boolean',
     ];
 
     public function order()         { return $this->belongsTo(Order::class); }
     public function buyer()         { return $this->belongsTo(User::class, 'buyer_id'); }
     public function refundCourier() { return $this->belongsTo(User::class, 'refund_courier_id'); }
+    public function pickupCourier() { return $this->belongsTo(User::class, 'pickup_courier_id'); }
     public function auditLogs()     { return $this->morphMany(AuditLog::class, 'subject')->latest('id'); }
 
     public function isOpen(): bool { return !in_array($this->status, self::CLOSED, true); }
@@ -89,6 +110,32 @@ class ReturnRequest extends Model
     public function needsItemReceipt(): bool
     {
         return $this->status === self::RESOLVED && $this->requires_item_return && !$this->item_received_at;
+    }
+
+    /** The item must still be picked up from the buyer by a rider (not on the refund visit). */
+    public function needsPickup(): bool
+    {
+        return $this->status === self::RESOLVED && $this->requires_item_return && !$this->item_collected_at
+            && $this->refund_timing !== 'on_pickup';
+    }
+
+    /** Why the refund cash can't be released yet, or null when it can. */
+    public function refundBlocker(): ?string
+    {
+        $order = $this->order;
+        return match (true) {
+            !$this->needsRefundHandover()                   => 'This return has no refund waiting to be paid.',
+            $this->refund_released_at !== null              => 'The refund cash was already given to a rider.',
+            $this->refund_funded_by === null                => 'Responsibility for this refund has not been decided yet.',
+            $order->payment_review === 'unverifiable'       => 'The buyer’s original payment could not be verified; reconcile it first.',
+            !in_array($order->payment_status, ['paid', 'partially_refunded'], true)
+                                                            => 'The buyer’s cash for this order has not been handed in yet, so it can’t be refunded.',
+            $this->refund_timing === 'after_inspection' && !$this->item_received_at
+                                                            => 'Waiting for the seller to receive and inspect the returned item.',
+            $this->refund_timing === 'after_inspection' && $this->inspection_passed !== true
+                                                            => 'The item did not pass inspection; Picksell must decide first.',
+            default                                         => null,
+        };
     }
 
     /** Every operational and financial step of the agreed outcome is done. */

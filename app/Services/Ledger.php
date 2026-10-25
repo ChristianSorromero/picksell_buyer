@@ -37,7 +37,7 @@ class Ledger
      * @param  array<int, array{0: string, 1: ?int, 2: int, 3?: ?int}>  $lines  [account, user_id, cents, order_id]
      * @param  array  $links  order_id / return_request_id / payout_id
      */
-    public function post(string $type, string $key, array $lines, array $links = [], ?User $actor = null, ?string $memo = null): LedgerTransaction
+    public function post(string $type, string $key, array $lines, array $links = [], ?User $actor = null, ?string $memo = null, array $details = []): LedgerTransaction
     {
         $lines = array_values(array_filter($lines, fn ($l) => $l[2] !== 0));
         if (!$lines || array_sum(array_column($lines, 2)) !== 0) {
@@ -48,12 +48,13 @@ class Ledger
         }
 
         try {
-            return DB::transaction(function () use ($type, $key, $lines, $links, $actor, $memo) {
+            return DB::transaction(function () use ($type, $key, $lines, $links, $actor, $memo, $details) {
                 $transaction = LedgerTransaction::create($links + [
                     'type'            => $type,
                     'idempotency_key' => $key,
                     'actor_id'        => ($actor ?? auth()->user())?->id,
                     'memo'            => $memo,
+                    'details'         => $details ?: null,
                 ]);
                 foreach ($lines as $line) {
                     [$account, $userId, $cents, $orderId] = $line + [3 => null];

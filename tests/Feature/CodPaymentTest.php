@@ -76,13 +76,26 @@ class CodPaymentTest extends TestCase
         $this->assertSame(0, LedgerEntry::count());
     }
 
+    public function test_the_cash_due_includes_shipping_and_voucher_discounts(): void
+    {
+        \App\Models\Voucher::create(['code' => 'PICK50', 'scope' => 'platform', 'type' => 'fixed', 'value' => 50, 'min_spend' => 0, 'active' => true]);
+        $order = $this->outForDelivery($this->placeOrder(1, ['voucher_code' => 'PICK50']));
+
+        // ₱300 item − ₱50 voucher + ₱45 shipping = ₱295.
+        $this->assertSame(29500, $order->totalCents());
+        $this->deliver($order, '345.00')->assertStatus(422); // list price + shipping
+        $this->deliver($order, '250.00')->assertStatus(422); // items only
+        $this->deliver($order, '295.00')->assertSessionHasNoErrors();
+        $this->assertSame(29500, app(Ledger::class)->balance(Ledger::RIDER_CASH, $this->courier->id));
+    }
+
     public function test_only_the_assigned_rider_can_record_collection_and_only_once(): void
     {
         $order = $this->outForDelivery($this->placeOrder());
 
-        $this->actingAs($this->otherCourier)->patch("/courier/orders/{$order->id}/status", ['status' => 'completed', 'cash_collected' => '345.00'])
+        $this->actingAs($this->otherCourier)->patch("/courier/orders/{$order->id}/status", ['status' => 'completed', 'cash_collected' => '345.00', 'recipient_name' => 'Ana Reyes'])
             ->assertForbidden();
-        $this->actingAs($this->buyer)->patch("/courier/orders/{$order->id}/status", ['status' => 'completed', 'cash_collected' => '345.00'])
+        $this->actingAs($this->buyer)->patch("/courier/orders/{$order->id}/status", ['status' => 'completed', 'cash_collected' => '345.00', 'recipient_name' => 'Ana Reyes'])
             ->assertForbidden();
         $this->asBuyerApi();
         $this->postJson("/api/buyer/orders/{$order->id}/rate", ['rating' => 5])->assertStatus(422); // not delivered
@@ -118,7 +131,7 @@ class CodPaymentTest extends TestCase
         $this->assertSame(0, (int) LedgerEntry::sum('amount_cents'));
 
         $this->remit([$order])->assertStatus(422);
-        $this->assertSame(['cod_collected', 'cod_remitted'], $order->auditLogs()->reorder('id')->pluck('action')->all());
+        $this->assertSame(['cod_collected', 'delivered', 'cod_remitted'], $order->auditLogs()->reorder('id')->pluck('action')->all());
     }
 
     public function test_ledger_rejects_duplicates_unbalanced_postings_and_edits(): void

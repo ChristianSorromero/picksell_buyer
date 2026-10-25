@@ -42,9 +42,23 @@ class AdminReturnController extends Controller
 
     public function approve(Request $request, ReturnRequest $returnRequest)
     {
-        $data = $request->validate(['note' => 'nullable|string|max:1000']);
-        $this->workflow->approve($returnRequest, $request->user(), $data['note'] ?? null);
+        $data = $request->validate(['note' => 'nullable|string|max:1000', 'liable_party' => 'nullable|string']);
+        $this->workflow->approve($returnRequest, $request->user(), $data['note'] ?? null, $data['liable_party'] ?? null);
         return back()->with('success', 'Approved and sent to the seller for resolution.');
+    }
+
+    public function liability(Request $request, ReturnRequest $returnRequest)
+    {
+        $data = $request->validate(['liable_party' => 'required|string', 'note' => 'required|string|max:1000']);
+        $this->workflow->setLiability($returnRequest, $request->user(), $data['liable_party'], $data['note']);
+        return back()->with('success', 'Responsibility recorded.');
+    }
+
+    public function expedite(Request $request, ReturnRequest $returnRequest)
+    {
+        $data = $request->validate(['reason' => 'required|string|max:1000']);
+        $this->workflow->expedite($returnRequest, $request->user(), $data['reason']);
+        return back()->with('success', 'Refund expedited: the rider will pay it when collecting the item.');
     }
 
     public function reject(Request $request, ReturnRequest $returnRequest)
@@ -60,8 +74,9 @@ class AdminReturnController extends Controller
             'resolution_type'   => 'required|string',
             'resolution_amount' => 'nullable|numeric|min:0',
             'note'              => 'required|string|max:1000',
+            'liable_party'      => 'nullable|string',
         ]);
-        $this->workflow->decide($returnRequest, $request->user(), $data['resolution_type'], $data['resolution_amount'] ?? null, $data['note']);
+        $this->workflow->decide($returnRequest, $request->user(), $data['resolution_type'], $data['resolution_amount'] ?? null, $data['note'], $data['liable_party'] ?? null);
         return back()->with('success', 'Final decision recorded.');
     }
 

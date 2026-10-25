@@ -16,6 +16,7 @@ class Order extends Model
         'shipping_option', 'estimated_delivery_from', 'estimated_delivery_to',
         'payment_method', 'payment_status', 'ship_to',
         'cod_collected_at', 'cod_collected_by', 'paid_at', 'payment_confirmed_by', 'settled_at',
+        'delivery_attempts', 'payment_review', 'payment_review_note', 'payment_backfilled_at',
         'waybill_number', 'tracking_status',
         'packed_at', 'handed_over_at', 'delivered_at', 'cancelled_at', 'cancel_reason',
         'rating', 'feedback', 'rated_at',
@@ -34,6 +35,7 @@ class Order extends Model
         'cod_collected_at'        => 'datetime',
         'paid_at'                 => 'datetime',
         'settled_at'              => 'datetime',
+        'payment_backfilled_at'   => 'datetime',
     ];
 
     /** unpaid → collected (rider has the cash) → paid (cash handed in) → partially_/refunded */
@@ -61,6 +63,7 @@ class Order extends Model
     public function returnRequest() { return $this->hasOne(ReturnRequest::class); }
     public function auditLogs()     { return $this->morphMany(AuditLog::class, 'subject')->latest('id'); }
     public function collectedBy()   { return $this->belongsTo(User::class, 'cod_collected_by'); }
+    public function attempts()      { return $this->hasMany(DeliveryAttempt::class)->orderBy('attempted_at')->orderBy('id'); }
 
     /** What the buyer pays in cash for this order, in centavos. */
     public function totalCents(): int

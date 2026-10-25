@@ -35,7 +35,7 @@ final class OrderStatus
         self::DELIVERED         => ['Delivered', 'Your parcel has been delivered. Enjoy!'],
         self::COMPLETED         => ['Order completed', 'Thanks for rating your order.'],
         self::DELIVERY_FAILED   => ['Delivery attempt failed', 'We couldn’t deliver your parcel. We’ll try again.'],
-        self::RETURNED          => ['Returned', 'Your return has been processed.'],
+        self::RETURNED          => ['Returned to seller', 'We couldn’t deliver your parcel, so it is going back to the seller. You were not charged.'],
         self::CANCELLED         => ['Order cancelled', 'This order was cancelled.'],
     ];
 
@@ -58,9 +58,12 @@ final class OrderStatus
         'pack'             => [[self::PLACED], 'Only new orders can be packed.'],
         'handover'         => [[self::PREPARING], 'Pack the order before handing it over.'],
         'scan'             => [[self::PICKED_UP], 'Only parcels handed over by the seller can be scanned.'],
-        'assign'           => [[self::AT_SORTING_CENTER, self::ASSIGNED_TO_RIDER], 'Scan the parcel at the sorting center before assigning a rider.'],
-        'out_for_delivery' => [[self::ASSIGNED_TO_RIDER], 'Only parcels assigned to you and not yet on the way can be set out for delivery.'],
+        'assign'           => [[self::AT_SORTING_CENTER, self::ASSIGNED_TO_RIDER, self::DELIVERY_FAILED], 'Scan the parcel at the sorting center before assigning a rider.'],
+        'out_for_delivery' => [[self::ASSIGNED_TO_RIDER, self::DELIVERY_FAILED], 'Only parcels assigned to you and not yet on the way can be set out for delivery.'],
         'deliver'          => [[self::OUT_FOR_DELIVERY], 'Set the parcel out for delivery before marking it delivered.'],
+        'fail_delivery'    => [[self::OUT_FOR_DELIVERY], 'Only a parcel that is out for delivery can be marked as a failed attempt.'],
+        'return_to_sender' => [[self::DELIVERY_FAILED], 'Only a parcel with a failed delivery can be sent back to the seller.'],
+        'receive_returned' => [[self::RETURNED], 'This parcel is not on its way back to you.'],
     ];
 
     public static function can(Order $order, string $action): bool
@@ -79,10 +82,12 @@ final class OrderStatus
         $tracking = (string) $order->tracking_status;
 
         return match ($order->status) {
-            'cancelled'  => self::CANCELLED,
+            // A parcel sent back after failed deliveries stays "returned", not "cancelled".
+            'cancelled'  => $tracking === 'Returned to seller' ? self::RETURNED : self::CANCELLED,
             'completed'  => $order->rating ? self::COMPLETED : self::DELIVERED,
             'processing' => self::PREPARING,
             'shipped'    => match (true) {
+                $tracking === 'Returning to seller'                   => self::RETURNED,
                 str_starts_with($tracking, 'Delivery failed')         => self::DELIVERY_FAILED,
                 $tracking === 'Out for delivery'                      => self::OUT_FOR_DELIVERY,
                 str_starts_with($tracking, 'Sorted for')              => self::ASSIGNED_TO_RIDER,

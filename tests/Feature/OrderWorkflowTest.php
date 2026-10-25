@@ -96,7 +96,7 @@ class OrderWorkflowTest extends TestCase
         $this->actingAs($this->courier)->patch("/courier/orders/{$order->id}/status", ['status' => 'shipped'])->assertRedirect();
         $this->assertSame('out_for_delivery', $this->state($order));
         $this->actingAs($this->courier)->get('/courier/orders')->assertOk()->assertSee('Mark Delivered');
-        $this->actingAs($this->courier)->patch("/courier/orders/{$order->id}/status", ['status' => 'completed', 'cash_collected' => '345.00'])->assertRedirect();
+        $this->actingAs($this->courier)->patch("/courier/orders/{$order->id}/status", ['status' => 'completed', 'cash_collected' => '345.00', 'recipient_name' => 'Ana Reyes'])->assertRedirect();
         $this->assertSame('delivered', $this->state($order));
         $this->assertSame('collected', $order->fresh()->payment_status); // paid only once the cash is handed in
 
@@ -138,10 +138,10 @@ class OrderWorkflowTest extends TestCase
         $this->actingAs($this->logistics)->patch("/logistics/parcels/{$order->id}/assign", ['courier_id' => $this->courier->id])->assertRedirect();
 
         // Rider: no delivering before setting out, no going backwards.
-        $this->actingAs($this->courier)->patch("/courier/orders/{$order->id}/status", ['status' => 'completed', 'cash_collected' => '345.00'])->assertStatus(422);
+        $this->actingAs($this->courier)->patch("/courier/orders/{$order->id}/status", ['status' => 'completed', 'cash_collected' => '345.00', 'recipient_name' => 'Ana Reyes'])->assertStatus(422);
         $this->actingAs($this->courier)->patch("/courier/orders/{$order->id}/status", ['status' => 'shipped'])->assertRedirect();
         $this->actingAs($this->logistics)->patch("/logistics/parcels/{$order->id}/assign", ['courier_id' => $this->courier->id])->assertStatus(422);
-        $this->actingAs($this->courier)->patch("/courier/orders/{$order->id}/status", ['status' => 'completed', 'cash_collected' => '345.00'])->assertRedirect();
+        $this->actingAs($this->courier)->patch("/courier/orders/{$order->id}/status", ['status' => 'completed', 'cash_collected' => '345.00', 'recipient_name' => 'Ana Reyes'])->assertRedirect();
         $this->actingAs($this->courier)->patch("/courier/orders/{$order->id}/status", ['status' => 'shipped'])->assertStatus(422);
         $this->assertSame('delivered', $this->state($order));
     }

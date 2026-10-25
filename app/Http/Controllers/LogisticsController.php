@@ -6,6 +6,7 @@ use App\Mail\RegistrationApprovedMail;
 use App\Mail\RegistrationDisapprovedMail;
 use App\Models\Order;
 use App\Models\User;
+use App\Services\Deliveries;
 use App\Support\OrderStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -97,6 +98,15 @@ class LogisticsController extends Controller
             'tracking_status' => 'Received and scanned at sorting center',
         ]);
         return back()->with('success', "Parcel {$order->order_number} scanned.");
+    }
+
+    /** A parcel that can't be delivered goes back to the seller; nothing is charged. */
+    public function returnToSender(Request $request, Order $order, Deliveries $deliveries)
+    {
+        $this->authorizeParcel($order);
+        $data = $request->validate(['reason' => 'required|string|max:300']);
+        $deliveries->returnToSender($order, $request->user(), $data['reason']);
+        return back()->with('success', "Parcel {$order->order_number} is being returned to the seller.");
     }
 
     public function assignCourier(Request $request, Order $order)

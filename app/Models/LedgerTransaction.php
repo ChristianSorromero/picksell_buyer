@@ -10,9 +10,9 @@ class LedgerTransaction extends Model
 {
     public const UPDATED_AT = null;
 
-    protected $fillable = ['type', 'idempotency_key', 'order_id', 'return_request_id', 'payout_id', 'actor_id', 'memo'];
+    protected $fillable = ['type', 'idempotency_key', 'order_id', 'return_request_id', 'payout_id', 'actor_id', 'memo', 'details'];
 
-    protected $casts = ['created_at' => 'datetime'];
+    protected $casts = ['created_at' => 'datetime', 'details' => 'array'];
 
     protected static function booted(): void
     {

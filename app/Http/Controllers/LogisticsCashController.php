@@ -22,6 +22,9 @@ class LogisticsCashController extends Controller
             'riders'         => User::whereIn('id', $awaiting->keys())->get()->keyBy('id'),
             'refundsToSend'  => ReturnRequest::with('order', 'buyer')->where('status', ReturnRequest::RESOLVED)
                 ->whereNull('refund_released_at')->whereNull('refunded_at')->where('resolution_amount', '>', 0)->get(),
+            'pickups'        => ReturnRequest::with('order', 'pickupCourier')->where('status', ReturnRequest::RESOLVED)
+                ->where('requires_item_return', true)->whereNull('item_collected_at')
+                ->where(fn ($q) => $q->whereNull('refund_timing')->orWhere('refund_timing', '!=', 'on_pickup'))->get(),
             'refundsOut'     => ReturnRequest::with('order', 'refundCourier')->whereNotNull('refund_released_at')->whereNull('refunded_at')->get(),
             'couriers'       => User::where('role', 'courier')->where('status', 'approved')->orderBy('last_name')->get(),
             'riderCash'      => $ledger->balancesByUser(Ledger::RIDER_CASH),
@@ -41,6 +44,14 @@ class LogisticsCashController extends Controller
         $data = $request->validate(['courier_id' => 'required|integer']);
         $workflow->releaseRefund($returnRequest, $request->user(), User::findOrFail($data['courier_id']));
         return back()->with('success', "Refund cash for return #{$returnRequest->id} given to the rider.");
+    }
+
+    /** Sends a rider to collect a returned item (no cash changes hands on pickup). */
+    public function assignPickup(Request $request, ReturnRequest $returnRequest, ReturnWorkflow $workflow)
+    {
+        $data = $request->validate(['courier_id' => 'required|integer']);
+        $workflow->assignPickup($returnRequest, $request->user(), User::findOrFail($data['courier_id']));
+        return back()->with('success', "Pickup for return #{$returnRequest->id} assigned.");
     }
 
     public function cancelRefund(Request $request, ReturnRequest $returnRequest, ReturnWorkflow $workflow)

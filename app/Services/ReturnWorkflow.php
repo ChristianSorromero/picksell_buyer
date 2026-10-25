@@ -33,7 +33,7 @@ use Illuminate\Validation\ValidationException;
  */
 class ReturnWorkflow
 {
-    public function __construct(private Ledger $ledger) {}
+    public function __construct(private Ledger $ledger, private Settlements $settlements) {}
 
     // ── Buyer ────────────────────────────────────────────────────────────
 
@@ -95,10 +95,45 @@ class ReturnWorkflow
             ['info_request' => $question, 'reviewed_at' => now()], $question);
     }
 
-    public function approve(R $r, User $admin, ?string $note): void
+    /**
+     * Sends the case to the seller. Records who is presumed responsible
+     * (from the reason, unless admin says otherwise) and so who would fund a
+     * refund; admin can change it later with a documented reason.
+     */
+    public function approve(R $r, User $admin, ?string $note, ?string $liableParty = null): void
     {
-        $this->move($r, [R::REQUESTED], R::WITH_SELLER, $admin, 'approved_for_seller',
-            ['admin_approved_at' => now(), 'reviewed_at' => now()], $note);
+        $party = $liableParty ?? config("picksell.returns.presumed_liability.{$r->reason}", 'undetermined');
+        $this->ensureParty($party);
+        $this->move($r, [R::REQUESTED], R::WITH_SELLER, $admin, 'approved_for_seller', [
+            'admin_approved_at' => now(), 'reviewed_at' => now(), 'refund_to' => 'cash',
+        ] + $this->liabilityAttrs($party, $admin, $liableParty ? $note : "Presumed from the reason: {$r->reason}"), $note);
+    }
+
+    /** Admin's documented determination of who caused the problem and who funds the refund. */
+    public function setLiability(R $r, User $admin, string $party, string $note): void
+    {
+        $this->ensureParty($party);
+        DB::transaction(function () use ($r, $admin, $party, $note) {
+            $r = R::lockForUpdate()->findOrFail($r->id);
+            abort_if($r->status === R::REJECTED, 422, 'This return was rejected.');
+            abort_if($r->order->settled_at !== null, 422, 'This order is already settled; correct it with a finance adjustment instead.');
+            $previous = $r->liable_party;
+            $r->update($this->liabilityAttrs($party, $admin, $note));
+            AuditLog::record($r, 'liability_set', $previous, $party, $note, null, $admin);
+        });
+    }
+
+    /** Exception to inspection-first: refund on pickup when evidence already proves the claim. */
+    public function expedite(R $r, User $admin, string $reason): void
+    {
+        DB::transaction(function () use ($r, $admin, $reason) {
+            $r = R::lockForUpdate()->findOrFail($r->id);
+            abort_unless($r->status === R::RESOLVED && $r->refund_timing === 'after_inspection' && !$r->item_collected_at && !$r->refund_released_at, 422,
+                'Only a refund still waiting for pickup and inspection can be expedited.');
+            $r->update(['refund_timing' => 'on_pickup', 'expedited_by' => $admin->id, 'expedited_reason' => $reason,
+                'pickup_courier_id' => null, 'pickup_assigned_at' => null]);
+            AuditLog::record($r, 'refund_expedited', 'after_inspection', 'on_pickup', $reason, $r->resolutionCents(), $admin);
+        });
     }
 
     public function reject(R $r, User $admin, string $reason): void
@@ -107,14 +142,20 @@ class ReturnWorkflow
             ['rejected_at' => now(), 'resolution_note' => $reason], $reason);
     }
 
-    /** Final decision on an escalated case. */
-    public function decide(R $r, User $admin, string $type, ?string $amountPesos, string $note): void
+    /**
+     * Final decision on an escalated case (including one whose returned item
+     * failed inspection — admin has reviewed it, so the refund no longer
+     * waits for inspection).
+     */
+    public function decide(R $r, User $admin, string $type, ?string $amountPesos, string $note, ?string $liableParty = null): void
     {
-        [$type, $cents, $requiresReturn] = $this->resolution($r, $type, $amountPesos);
-        $this->move($r, [R::ESCALATED], R::RESOLVED, $admin, 'admin_decided', [
+        [$type, $cents, $requiresReturn, $timing] = $this->resolution($r, $type, $amountPesos);
+        if ($liableParty !== null) $this->ensureParty($liableParty);
+        $this->move($r, [R::ESCALATED], R::RESOLVED, $admin, 'admin_decided', fn (R $fresh) => [
             'resolution_type' => $type, 'resolution_amount' => Money::pesos($cents), 'requires_item_return' => $requiresReturn,
+            'refund_timing' => $fresh->item_received_at ? ($cents > 0 ? 'no_return' : null) : $timing,
             'resolution_note' => $note, 'resolved_at' => now(), 'processing_at' => now(),
-        ], $note, $cents);
+        ] + ($liableParty !== null ? $this->liabilityAttrs($liableParty, $admin, $note) : []), $note, $cents);
         $this->completeIfDone($r, $admin);
     }
 
@@ -123,10 +164,10 @@ class ReturnWorkflow
     public function propose(R $r, User $seller, string $type, ?string $amountPesos, ?string $note): void
     {
         $this->ensureSeller($r, $seller);
-        [$type, $cents, $requiresReturn] = $this->resolution($r, $type, $amountPesos);
+        [$type, $cents, $requiresReturn, $timing] = $this->resolution($r, $type, $amountPesos);
         $this->move($r, [R::WITH_SELLER], R::PROPOSED, $seller, 'seller_proposed', [
             'resolution_type' => $type, 'resolution_amount' => Money::pesos($cents), 'requires_item_return' => $requiresReturn,
-            'seller_note' => $note, 'proposed_at' => now(),
+            'refund_timing' => $timing, 'seller_note' => $note, 'proposed_at' => now(),
         ], $note, $cents);
     }
 
@@ -138,25 +179,67 @@ class ReturnWorkflow
         $this->notifyAdmins("Return request #{$r->id} needs a final decision: the seller declined it.");
     }
 
-    public function confirmItemReceived(R $r, User $seller, bool $restock): void
+    /**
+     * The seller has the returned item and records the inspection. A failed
+     * inspection before any refund is paid goes to admin; stock is only
+     * restored for items that passed and that the seller chooses to restock.
+     */
+    public function confirmItemReceived(R $r, User $seller, bool $restock, bool $passed = true, ?string $note = null): void
     {
         $this->ensureSeller($r, $seller);
-        DB::transaction(function () use ($r, $seller, $restock) {
+        $escalated = DB::transaction(function () use ($r, $seller, $restock, $passed, $note) {
             $r = R::lockForUpdate()->findOrFail($r->id);
             abort_unless($r->needsItemReceipt(), 422, 'This return is not waiting for the item to come back.');
-            // A refunded return comes back with the rider; a replacement return is shipped by the buyer.
-            abort_if($r->resolution_type !== 'replacement' && !$r->item_collected_at, 422, 'The rider has not collected the item yet.');
+            abort_unless($r->item_collected_at, 422, 'The rider has not collected the item yet.');
 
-            $r->update(['item_received_at' => now(), 'restocked' => $restock]);
+            $restock = $restock && $passed;
+            $r->update(['item_received_at' => now(), 'inspection_passed' => $passed, 'inspection_note' => $note, 'restocked' => $restock]);
             if ($restock) {
-                // Only after the seller has the item and judged it sellable.
                 $order = $r->order;
                 $order->product?->increment('stock', $r->quantity);
                 if ($order->variation_ids) ProductVariation::whereIn('id', $order->variation_ids)->increment('stock', $r->quantity);
             }
-            AuditLog::record($r, $restock ? 'item_received_restocked' : 'item_received_not_restocked', $r->status, $r->status, null, null, $seller);
+            $action = $passed ? ($restock ? 'item_received_restocked' : 'item_received_not_restocked') : 'item_failed_inspection';
+            AuditLog::record($r, $action, $r->status, $r->status, $note, null, $seller);
+
+            if (!$passed && !$r->refunded_at && $r->resolutionCents() > 0) {
+                $r->update(['status' => R::ESCALATED, 'escalated_at' => now()]);
+                AuditLog::record($r, 'escalated_after_inspection', R::RESOLVED, R::ESCALATED, $note, null, $seller);
+                return true;
+            }
+            return false;
         });
+
+        if ($escalated) {
+            $this->notifyAdmins("Return request #{$r->id}: the returned item failed the seller's inspection and needs a decision.");
+        } elseif (!$passed) {
+            $this->notifyAdmins("Return request #{$r->id}: the item failed inspection after the refund was paid. Review responsibility before settlement.");
+        }
         $this->completeIfDone($r->fresh(), $seller);
+    }
+
+    // ── Item pickup (inspection-first returns) ───────────────────────────
+
+    public function assignPickup(R $r, User $staff, User $courier): void
+    {
+        abort_unless($courier->role === 'courier' && $courier->isApproved(), 422, 'Choose an approved rider.');
+        DB::transaction(function () use ($r, $staff, $courier) {
+            $r = R::lockForUpdate()->findOrFail($r->id);
+            abort_unless($r->needsPickup(), 422, 'This return is not waiting for an item pickup.');
+            $r->update(['pickup_courier_id' => $courier->id, 'pickup_assigned_at' => now()]);
+            AuditLog::record($r, 'pickup_assigned', $r->status, $r->status, "Assigned to {$courier->full_name}", null, $staff);
+        });
+    }
+
+    public function recordPickup(R $r, User $courier): void
+    {
+        DB::transaction(function () use ($r, $courier) {
+            $r = R::lockForUpdate()->findOrFail($r->id);
+            abort_if($r->pickup_courier_id !== $courier->id, 403);
+            abort_unless($r->needsPickup(), 422, 'This item was already collected.');
+            $r->update(['item_collected_at' => now()]);
+            AuditLog::record($r, 'item_picked_up', $r->status, $r->status, null, null, $courier);
+        });
     }
 
     public function markReplacementSent(R $r, User $seller, ?string $note): void
@@ -179,11 +262,9 @@ class ReturnWorkflow
     {
         abort_unless($courier->role === 'courier' && $courier->isApproved(), 422, 'Choose an approved rider.');
         DB::transaction(function () use ($r, $staff, $courier) {
-            $r = R::lockForUpdate()->findOrFail($r->id);
             $order = Order::lockForUpdate()->findOrFail($r->order_id);
-            abort_unless($r->needsRefundHandover(), 422, 'This return has no refund waiting to be paid.');
-            abort_if($r->refund_released_at, 422, 'The refund cash was already given to a rider.');
-            abort_unless($order->payment_status === 'paid', 422, 'The buyer’s cash for this order has not been handed in yet, so it can’t be refunded.');
+            $r = R::lockForUpdate()->findOrFail($r->id)->setRelation('order', $order);
+            if ($blocker = $r->refundBlocker()) abort(422, $blocker);
 
             $cents = $r->resolutionCents();
             $n = LedgerTransaction::where('return_request_id', $r->id)->where('type', 'refund_released')->count() + 1;
@@ -216,7 +297,11 @@ class ReturnWorkflow
         });
     }
 
-    /** The rider hands the refund to the buyer (and collects the item when it must come back). */
+    /**
+     * The rider hands the refund to the buyer. On an expedited (on-pickup)
+     * refund they collect the item in the same visit. The rider only holds
+     * the cash; who bears the refund is the separate funding decision.
+     */
     public function handOverRefund(R $r, User $courier, string $amountPesos, bool $itemCollected): void
     {
         DB::transaction(function () use ($r, $courier, $amountPesos, $itemCollected) {
@@ -226,15 +311,19 @@ class ReturnWorkflow
             abort_unless($r->needsRefundHandover() && $r->refund_released_at, 422, 'This refund is not waiting to be handed over.');
 
             $cents = $r->resolutionCents();
+            $collectsItem = $r->requires_item_return && $r->refund_timing === 'on_pickup' && !$r->item_collected_at;
             abort_if(Money::cents($amountPesos) !== $cents, 422, 'Hand over exactly ' . Money::format($cents) . ' to the buyer.');
-            abort_if($r->requires_item_return && !$itemCollected, 422, 'Collect the returned item from the buyer before handing over the refund.');
+            abort_if($collectsItem && !$itemCollected, 422, 'Collect the returned item from the buyer before handing over the refund.');
 
             $this->ledger->post('refund_paid', "refund_paid:return:{$r->id}", [
                 [Ledger::ORDER_FUNDS, null, $cents, $order->id],
                 [Ledger::RIDER_CASH, $courier->id, -$cents, $order->id],
-            ], ['order_id' => $order->id, 'return_request_id' => $r->id], $courier, "Refund for return #{$r->id} handed to the buyer");
+            ], ['order_id' => $order->id, 'return_request_id' => $r->id], $courier, "Refund for return #{$r->id} handed to the buyer",
+                ['funded_by' => $r->refund_funded_by, 'liable_party' => $r->liable_party, 'timing' => $r->refund_timing]);
 
-            $r->update(['refunded_at' => now()] + ($r->requires_item_return ? ['item_collected_at' => now()] : []));
+            $r->update(['refunded_at' => now()] + ($collectsItem ? ['item_collected_at' => now()] : []));
+            // A defect claim refunded after the order settled is booked as an adjustment.
+            $this->settlements->adjustForLateRefund($order, $r, $cents, $courier);
             $order->update(['payment_status' => $cents >= $order->totalCents() ? 'refunded' : 'partially_refunded']);
             AuditLog::record($r, 'refund_handed_over', $r->status, $r->status, null, $cents, $courier);
             AuditLog::record($order, 'refunded', 'paid', $order->payment_status, "Return #{$r->id}", $cents, $courier);
@@ -251,7 +340,7 @@ class ReturnWorkflow
         return $r->order->totalCents();
     }
 
-    /** @return array{0: string, 1: int, 2: bool} type, centavos, item must come back */
+    /** @return array{0: string, 1: int, 2: bool, 3: ?string} type, centavos, item must come back, refund timing */
     private function resolution(R $r, string $type, ?string $amountPesos): array
     {
         if (!isset(R::RESOLUTIONS[$type])) {
@@ -270,7 +359,26 @@ class ReturnWorkflow
         if ($error) throw ValidationException::withMessages(['resolution_amount' => $error]);
 
         $cents = match ($rule) { 'none' => 0, 'max' => $max, default => $cents };
-        return [$type, $cents, $requiresReturn];
+        // Default: a returned item is inspected before its refund goes out.
+        $timing = $cents === 0 ? null : ($requiresReturn ? 'after_inspection' : 'no_return');
+        return [$type, $cents, $requiresReturn, $timing];
+    }
+
+    private function liabilityAttrs(string $party, User $admin, ?string $note): array
+    {
+        return [
+            'liable_party'     => $party,
+            'refund_funded_by' => config("picksell.returns.refund_funded_by.{$party}"),
+            'liability_note'   => $note,
+            'liability_set_by' => $admin->id,
+        ];
+    }
+
+    private function ensureParty(string $party): void
+    {
+        if (!array_key_exists($party, R::LIABLE_PARTIES)) {
+            throw ValidationException::withMessages(['liable_party' => 'Choose who is responsible.']);
+        }
     }
 
     /**

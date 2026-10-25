@@ -63,6 +63,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/documents/complaints/{complaint}/{index?}', [\App\Http\Controllers\DocumentController::class, 'complaintEvidence'])
         ->whereNumber('index')->name('documents.complaint');
 
+    Route::get('/documents/delivery-attempts/{attempt}', [\App\Http\Controllers\DeliveryProofController::class, 'photo'])->name('documents.delivery');
+
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     Route::delete('/account', [AuthController::class, 'deleteAccount'])->name('account.delete');
     Route::get('/buyer/dashboard',   fn() => view('dashboard'))->name('buyer.dashboard');
@@ -90,6 +92,8 @@ Route::middleware(['auth', LogisticsMiddleware::class])->prefix('logistics')->gr
     Route::post('/cash/riders/{courier}/remit', [LogisticsCashController::class, 'remit'])->name('logistics.cash.remit');
     Route::post('/refunds/{returnRequest}/release', [LogisticsCashController::class, 'releaseRefund'])->name('logistics.refunds.release');
     Route::post('/refunds/{returnRequest}/cancel', [LogisticsCashController::class, 'cancelRefund'])->name('logistics.refunds.cancel');
+    Route::post('/returns/{returnRequest}/pickup', [LogisticsCashController::class, 'assignPickup'])->name('logistics.returns.pickup');
+    Route::post('/parcels/{order}/return-to-sender', [LogisticsController::class, 'returnToSender'])->name('logistics.parcels.rts');
 });
 
 // Courier / Rider Routes
@@ -97,6 +101,8 @@ Route::middleware(['auth', CourierMiddleware::class])->prefix('courier')->group(
     Route::get('/orders', [CourierController::class, 'dashboard'])->name('courier.orders');
     Route::patch('/orders/{order}/status', [CourierController::class, 'updateStatus'])->name('courier.orders.status');
     Route::post('/refunds/{returnRequest}/handover', [CourierController::class, 'handOverRefund'])->name('courier.refunds.handover');
+    Route::post('/orders/{order}/failed', [CourierController::class, 'failDelivery'])->name('courier.orders.fail');
+    Route::post('/returns/{returnRequest}/picked-up', [CourierController::class, 'recordPickup'])->name('courier.returns.pickup');
     Route::get('/reports', [CourierController::class, 'reports'])->name('courier.reports');
     Route::get('/chat', [CourierController::class, 'chat'])->name('courier.chat');
     Route::post('/chat/send', [CourierController::class, 'sendMessage'])->name('courier.chat.send');
@@ -147,6 +153,7 @@ Route::middleware(['auth', SellerMiddleware::class])->prefix('seller')->group(fu
     Route::get('/orders/{order}',                   [SellerController::class, 'showOrder'])->name('seller.orders.show');
     Route::patch('/orders/{order}/pack',            [SellerController::class, 'packOrder'])->name('seller.orders.pack');
     Route::patch('/orders/{order}/handover',        [SellerController::class, 'handoverOrder'])->name('seller.orders.handover');
+    Route::post('/orders/{order}/returned-parcel',  [SellerController::class, 'receiveReturnedParcel'])->name('seller.orders.returned');
 
     // Returns (after admin review) and payouts
     Route::get('/returns', [SellerReturnController::class, 'index'])->name('seller.returns');
@@ -201,6 +208,8 @@ Route::middleware(['auth', AdminMiddleware::class])->prefix('admin')->group(func
     Route::post('/returns/{returnRequest}/approve', [AdminReturnController::class, 'approve'])->name('admin.returns.approve');
     Route::post('/returns/{returnRequest}/reject', [AdminReturnController::class, 'reject'])->name('admin.returns.reject');
     Route::post('/returns/{returnRequest}/decide', [AdminReturnController::class, 'decide'])->name('admin.returns.decide');
+    Route::post('/returns/{returnRequest}/liability', [AdminReturnController::class, 'liability'])->name('admin.returns.liability');
+    Route::post('/returns/{returnRequest}/expedite', [AdminReturnController::class, 'expedite'])->name('admin.returns.expedite');
     Route::get('/returns/{returnRequest}/evidence/{index}', [AdminReturnController::class, 'evidence'])->whereNumber('index')->name('admin.returns.evidence');
     // Finance: reconciliation, settlements, manual payouts
     Route::get('/finance', [AdminFinanceController::class, 'index'])->name('admin.finance');
@@ -208,6 +217,11 @@ Route::middleware(['auth', AdminMiddleware::class])->prefix('admin')->group(func
     Route::post('/finance/payouts', [AdminFinanceController::class, 'generate'])->name('admin.finance.generate');
     Route::patch('/finance/payouts/{payout}', [AdminFinanceController::class, 'updatePayout'])->name('admin.finance.payout');
     Route::post('/finance/riders/{courier}/remit', [AdminFinanceController::class, 'remit'])->name('admin.finance.remit');
+    Route::post('/finance/orders/{order}/backfill', [AdminFinanceController::class, 'backfill'])->name('admin.finance.backfill');
+    Route::post('/finance/orders/{order}/unverifiable', [AdminFinanceController::class, 'unverifiable'])->name('admin.finance.unverifiable');
+    Route::post('/finance/sellers/{seller}/tax-profile', [AdminFinanceController::class, 'taxProfile'])->name('admin.finance.tax');
+    // Admin can return an undeliverable parcel to the seller too.
+    Route::post('/logistics/orders/{order}/return-to-sender', [AdminController::class, 'returnToSender'])->name('admin.logistics.rts');
     // Commission
     Route::get('/commission', [AdminController::class, 'commission'])->name('admin.commission');
 

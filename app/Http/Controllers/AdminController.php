@@ -313,6 +313,13 @@ class AdminController extends Controller
         return back()->with('success', "Parcel {$order->order_number} assigned to {$courier->full_name}.");
     }
 
+    public function returnToSender(Request $request, Order $order, \App\Services\Deliveries $deliveries)
+    {
+        $data = $request->validate(['reason' => 'required|string|max:300']);
+        $deliveries->returnToSender($order, $request->user(), $data['reason']);
+        return back()->with('success', "Parcel {$order->order_number} is being returned to the seller.");
+    }
+
     public function scanParcel(Order $order)
     {
         OrderStatus::ensure($order, 'scan');

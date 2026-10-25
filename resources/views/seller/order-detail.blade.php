@@ -83,8 +83,17 @@
                         </div>
                         <button type="submit" class="btn btn-success">Hand Over</button>
                     </form>
+                    @elseif(\App\Support\OrderStatus::can($order, 'receive_returned') && $order->status === 'shipped')
+                    <div class="alert alert-error" style="margin:0 0 0.6rem;">Delivery failed {{ $order->delivery_attempts }} time(s); the parcel is being returned to you. The buyer was not charged.</div>
+                    <form method="POST" action="{{ route('seller.orders.returned', $order) }}" style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                        @csrf
+                        <button name="restock" value="1" class="btn btn-success">Parcel received — put back in stock</button>
+                        <button name="restock" value="0" class="btn btn-outline">Parcel received — don't restock</button>
+                    </form>
+                    @elseif($order->canonical_status === \App\Support\OrderStatus::RETURNED)
+                    <div class="alert alert-success" style="margin:0;">Returned parcel received{{ $order->auditLogs()->where('action', 'returned_parcel_restocked')->exists() ? ' and restocked' : '' }}.</div>
                     @elseif($order->status === 'shipped')
-                    <div class="alert alert-success" style="margin:0;">Order has been handed over to courier. Awaiting delivery confirmation.</div>
+                    <div class="alert alert-success" style="margin:0;">Order has been handed over to courier. {{ $order->canonical_status === \App\Support\OrderStatus::DELIVERY_FAILED ? 'A delivery attempt failed: ' . \Illuminate\Support\Str::after($order->tracking_status, 'Delivery failed: ') : 'Awaiting delivery confirmation.' }}</div>
                     @elseif($order->status === 'completed')
                     <div class="alert alert-success" style="margin:0;">Order delivered and completed.</div>
                     @endif
