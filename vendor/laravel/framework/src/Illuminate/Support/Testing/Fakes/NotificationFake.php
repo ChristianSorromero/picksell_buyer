@@ -17,7 +17,7 @@ use PHPUnit\Framework\Assert as PHPUnit;
 
 class NotificationFake implements Fake, NotificationDispatcher, NotificationFactory
 {
-    use Macroable, ReflectsClosures;
+    use Macroable, MatchesProperties, ReflectsClosures;
 
     /**
      * All of the notifications that have been sent.
@@ -59,7 +59,7 @@ class NotificationFake implements Fake, NotificationDispatcher, NotificationFact
      *
      * @param  mixed  $notifiable
      * @param  string|\Closure  $notification
-     * @param  callable|null  $callback
+     * @param  callable|array<string, mixed>|null  $callback
      * @return void
      *
      * @throws \Exception
@@ -105,6 +105,17 @@ class NotificationFake implements Fake, NotificationDispatcher, NotificationFact
     }
 
     /**
+     * Assert if a notification was sent on-demand exactly once.
+     *
+     * @param  string  $notification
+     * @return void
+     */
+    public function assertSentOnDemandOnce($notification)
+    {
+        $this->assertSentOnDemandTimes($notification, 1);
+    }
+
+    /**
      * Assert if a notification was sent a number of times.
      *
      * @param  mixed  $notifiable
@@ -123,11 +134,23 @@ class NotificationFake implements Fake, NotificationDispatcher, NotificationFact
     }
 
     /**
+     * Assert if a notification was sent exactly once.
+     *
+     * @param  mixed  $notifiable
+     * @param  string  $notification
+     * @return void
+     */
+    public function assertSentToOnce($notifiable, $notification)
+    {
+        $this->assertSentToTimes($notifiable, $notification, 1);
+    }
+
+    /**
      * Determine if a notification was sent based on a truth-test callback.
      *
      * @param  mixed  $notifiable
      * @param  string|\Closure  $notification
-     * @param  callable|null  $callback
+     * @param  callable|array<string, mixed>|null  $callback
      * @return void
      *
      * @throws \Exception
@@ -244,7 +267,7 @@ class NotificationFake implements Fake, NotificationDispatcher, NotificationFact
      *
      * @param  mixed  $notifiable
      * @param  string  $notification
-     * @param  callable|null  $callback
+     * @param  callable|array<string, mixed>|null  $callback
      * @return \Illuminate\Support\Collection
      */
     public function sent($notifiable, $notification, $callback = null)
@@ -253,7 +276,7 @@ class NotificationFake implements Fake, NotificationDispatcher, NotificationFact
             return new Collection;
         }
 
-        $callback = $callback ?: fn () => true;
+        $callback = $this->resolveTruthTest($callback) ?: fn () => true;
 
         $notifications = new Collection($this->notificationsFor($notifiable, $notification));
 

@@ -44,6 +44,11 @@ class Image implements Responsable, Stringable
     protected ?string $driver = null;
 
     /**
+     * The image contents, or a lazy loader that resolves them.
+     */
+    protected Closure|string $contents;
+
+    /**
      * Whether the image has been processed.
      */
     protected bool $processed = false;
@@ -57,10 +62,26 @@ class Image implements Responsable, Stringable
      * Create a new image instance.
      */
     public function __construct(
-        protected Closure|string $contents,
+        Closure|string $contents,
         protected ?UploadedFile $file = null,
     ) {
+        $this->contents = $contents instanceof Closure
+            ? $this->resolveOnce($contents)
+            : $contents;
+
         $this->pipeline = new ImagePipeline;
+    }
+
+    /**
+     * Wrap a lazy contents loader so it is invoked at most once, even across clones.
+     */
+    protected function resolveOnce(Closure $loader): Closure
+    {
+        return function () use ($loader) {
+            static $contents;
+
+            return $contents ??= $loader();
+        };
     }
 
     /**
@@ -293,6 +314,14 @@ class Image implements Responsable, Stringable
     }
 
     /**
+     * Convert the image to JPEG XL format.
+     */
+    public function toJxl(): static
+    {
+        return $this->toFormat('jxl');
+    }
+
+    /**
      * Convert the image to BMP format.
      */
     public function toBmp(): static
@@ -307,7 +336,7 @@ class Image implements Responsable, Stringable
      */
     public function toFormat(string $format): static
     {
-        if (! in_array($format, ['webp', 'jpg', 'jpeg', 'png', 'gif', 'avif', 'heic', 'heif', 'bmp'])) {
+        if (! in_array($format, ['webp', 'jpg', 'jpeg', 'png', 'gif', 'avif', 'heic', 'heif', 'jxl', 'bmp'])) {
             throw new ImageException("The [{$format}] format is not supported.");
         }
 
@@ -437,6 +466,7 @@ class Image implements Responsable, Stringable
             'image/webp' => 'webp',
             'image/avif', 'image/x-avif' => 'avif',
             'image/heic', 'image/x-heic', 'image/heif' => 'heic',
+            'image/jxl', 'image/x-jxl' => 'jxl',
             'image/bmp' => 'bmp',
             'image/svg+xml' => 'svg',
             'image/tiff' => 'tiff',

@@ -2,6 +2,7 @@
 
 namespace Illuminate\Foundation;
 
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\NodePackageManager;
 use Laravel\Pail\PailServiceProvider;
@@ -50,6 +51,13 @@ class DevCommands
     protected static $except = [];
 
     /**
+     * The order in which named commands should run when running the "dev" command.
+     *
+     * @var array<int, string>
+     */
+    protected static $order = [];
+
+    /**
      * The mode in which the "dev" command should run.
      *
      * @var DevCommandMode
@@ -69,6 +77,20 @@ class DevCommands
      * @var bool
      */
     protected static $autoRestart = true;
+
+    /**
+     * Whether to exclude vendor commands.
+     *
+     * @var bool
+     */
+    protected static $withoutVendorCommands = false;
+
+    /**
+     * Whether to exclude the framework's default commands.
+     *
+     * @var bool
+     */
+    protected static $withoutDefaultCommands = false;
 
     /**
      * How many lines of output to buffer for each command when running in tabbed mode.
@@ -181,6 +203,14 @@ class DevCommands
         $commands = [];
 
         foreach (self::$commands as $command) {
+            if (self::$withoutVendorCommands && $command->priority() === DevCommand::PRIORITY_VENDOR) {
+                continue;
+            }
+
+            if (self::$withoutDefaultCommands && $command->priority() === DevCommand::PRIORITY_DEFAULT) {
+                continue;
+            }
+
             $cmd = $command->toArray();
 
             if ((! empty(self::$only) && ! in_array($cmd['name'], self::$only)) || in_array($cmd['name'], self::$except)) {
@@ -189,6 +219,8 @@ class DevCommands
 
             $commands[] = $cmd;
         }
+
+        $commands = self::applyOrder($commands);
 
         return self::fillInEmptyColors($commands);
     }
@@ -326,6 +358,25 @@ class DevCommands
     }
 
     /**
+     * Sort the given commands.
+     *
+     * @param  array  $commands
+     * @return array
+     */
+    protected static function applyOrder(array $commands): array
+    {
+        if (empty(self::$order)) {
+            return $commands;
+        }
+
+        $positions = array_flip(self::$order);
+
+        $commands = Arr::sort($commands, fn ($command) => $positions[$command['name']] ?? PHP_INT_MAX);
+
+        return array_values($commands);
+    }
+
+    /**
      * Fill in any empty colors in the given commands array, ensuring each command has a color assigned.
      *
      * @param  array  $commands
@@ -437,6 +488,37 @@ class DevCommands
     public static function except(...$names): void
     {
         self::$except = $names;
+    }
+
+    /**
+     * Set the order in which named commands should run when running the "dev" command.
+     *
+     * @param  array<int, string>  $names
+     * @return void
+     */
+    public static function order(array $names): void
+    {
+        self::$order = $names;
+    }
+
+    /**
+     * Exclude any commands from the vendor directory.
+     *
+     * @return void
+     */
+    public static function withoutVendorCommands(): void
+    {
+        self::$withoutVendorCommands = true;
+    }
+
+    /**
+     * Exclude the framework's default commands.
+     *
+     * @return void
+     */
+    public static function withoutDefaultCommands(): void
+    {
+        self::$withoutDefaultCommands = true;
     }
 
     /**

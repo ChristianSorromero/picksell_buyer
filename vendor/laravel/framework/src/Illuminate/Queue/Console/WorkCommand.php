@@ -11,6 +11,7 @@ use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Queue\Events\JobReleasedAfterException;
 use Illuminate\Queue\Events\WorkerQueuePaused;
 use Illuminate\Queue\Events\WorkerQueueResumed;
+use Illuminate\Queue\Events\WorkerStopping;
 use Illuminate\Queue\Worker;
 use Illuminate\Queue\WorkerOptions;
 use Illuminate\Support\Carbon;
@@ -45,7 +46,7 @@ class WorkCommand extends Command
                             {--max-jobs=0 : The number of jobs to process before stopping}
                             {--max-time=0 : The maximum number of seconds the worker should run}
                             {--force : Force the worker to run even in maintenance mode}
-                            {--memory=128 : The memory limit in megabytes}
+                            {--memory=128 : The memory limit in megabytes, or as a percentage of the PHP memory limit}
                             {--sleep=3 : The number of seconds to sleep when no job is available}
                             {--rest=0 : The number of seconds to rest between jobs}
                             {--timeout=60 : The number of seconds a child process can run}
@@ -206,11 +207,15 @@ class WorkCommand extends Command
         });
 
         $this->laravel['events']->listen(WorkerQueuePaused::class, function ($event) {
-            $this->writeQueueStatus($event->queue, 'paused');
+            $this->writeQueueStatus($event->connectionName, $event->queue, 'paused');
         });
 
         $this->laravel['events']->listen(WorkerQueueResumed::class, function ($event) {
-            $this->writeQueueStatus($event->queue, 'resumed');
+            $this->writeQueueStatus($event->connectionName, $event->queue, 'resumed');
+        });
+
+        $this->laravel['events']->listen(WorkerStopping::class, function ($event) {
+            $this->writeStopReason($event);
         });
 
         static::$hasRegisteredListeners = true;
@@ -238,11 +243,12 @@ class WorkCommand extends Command
     /**
      * Write the status output for a paused or resumed queue.
      *
+     * @param  string  $connection
      * @param  string  $queue
      * @param  string  $status
      * @return void
      */
-    protected function writeQueueStatus($queue, $status)
+    protected function writeQueueStatus($connection, $queue, $status)
     {
         if ($this->output->isQuiet() || $this->output->isSilent()) {
             return;
@@ -251,6 +257,7 @@ class WorkCommand extends Command
         if ($this->outputUsingJson()) {
             $this->output->writeln(json_encode([
                 'level' => 'warning',
+                'connection' => $connection,
                 'queue' => $queue,
                 'status' => $status,
                 'timestamp' => $this->now()->format('Y-m-d\TH:i:s.uP'),
@@ -266,6 +273,41 @@ class WorkCommand extends Command
             $status === 'paused'
                 ? '<fg=yellow;options=bold>PAUSED</>'
                 : '<fg=green;options=bold>RESUMED</>',
+        ));
+    }
+
+    /**
+     * Write the status output for a queue worker that is stopping.
+     *
+     * @param  \Illuminate\Queue\Events\WorkerStopping  $event
+     * @return void
+     */
+    protected function writeStopReason(WorkerStopping $event)
+    {
+        if ($this->output->isQuiet() || $this->output->isSilent() || is_null($event->reason)) {
+            return;
+        }
+
+        if ($this->outputUsingJson()) {
+            $this->output->writeln(json_encode([
+                'level' => $event->status === 0 ? 'info' : 'warning',
+                'connection' => $event->connectionName,
+                'queue' => $event->queue,
+                'status' => 'stopped',
+                'reason' => $event->reason->value,
+                'exit_code' => $event->status,
+                'jobs_processed' => $event->jobsProcessed,
+                'memory' => is_null($event->memoryUsage) ? null : round($event->memoryUsage, 1),
+                'timestamp' => $this->now()->format('Y-m-d\TH:i:s.uP'),
+            ]));
+
+            return;
+        }
+
+        $this->output->writeln(sprintf(
+            '  <fg=gray>%s</> Worker <fg=yellow;options=bold>STOPPED</> <fg=gray>%s</>',
+            $this->now()->format('Y-m-d H:i:s'),
+            $event->reason->description(),
         ));
     }
 

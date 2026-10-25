@@ -8,10 +8,8 @@
 namespace Nette\Schema\Elements;
 
 use Nette;
-use Nette\Schema\Context;
-use Nette\Schema\Helpers;
-use Nette\Schema\Schema;
-use function array_diff_key, array_fill_keys, array_key_exists, array_keys, array_map, array_merge, array_pop, array_values, is_array, is_object, strval;
+use Nette\Schema\{Context, Helpers, Schema};
+use function array_key_exists, is_array, is_object;
 
 
 final class Structure implements Schema
@@ -73,7 +71,7 @@ final class Structure implements Schema
 
 
 	/**
-	 * When enabled, properties whose value equals the default are omitted from the output.
+	 * When enabled, missing properties are not filled with their default values.
 	 */
 	public function skipDefaults(bool $state = true): self
 	{
@@ -89,7 +87,7 @@ final class Structure implements Schema
 	public function extend(array|self $shape): self
 	{
 		$shape = $shape instanceof self ? $shape->items : $shape;
-		return new self(array_merge($this->items, $shape));
+		return new self([...$this->items, ...$shape]);
 	}
 
 

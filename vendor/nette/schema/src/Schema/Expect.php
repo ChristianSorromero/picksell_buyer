@@ -8,10 +8,8 @@
 namespace Nette\Schema;
 
 use Nette;
-use Nette\Schema\Elements\AnyOf;
-use Nette\Schema\Elements\Structure;
-use Nette\Schema\Elements\Type;
-use function is_object;
+use Nette\Schema\Elements\{AnyOf, Structure, Type};
+use function array_key_exists, is_object;
 
 
 /**
@@ -30,12 +28,12 @@ use function is_object;
  */
 final class Expect
 {
-	/** @param  list<mixed>  $args */
+	/** @param  array<int|string, mixed>  $args */
 	public static function __callStatic(string $name, array $args): Type
 	{
 		$type = new Type($name);
 		if ($args) {
-			$type->default($args[0]);
+			$type->default(array_key_exists('default', $args) ? $args['default'] : $args[0]);
 		}
 
 		return $type;
@@ -79,11 +77,13 @@ final class Expect
 		$ro = new \ReflectionObject($object);
 		$props = $ro->hasMethod('__construct')
 			? $ro->getMethod('__construct')->getParameters()
-			: $ro->getProperties();
+			: array_filter($ro->getProperties(\ReflectionProperty::IS_PUBLIC), fn($prop) => !$prop->isStatic());
 
 		foreach ($props as $prop) {
 			$name = $prop->getName();
-			if (!isset($items[$name])) {
+			if ($prop instanceof \ReflectionParameter && $prop->isVariadic()) {
+				throw new Nette\InvalidArgumentException("Variadic parameter \$$name of {$ro->getName()}::__construct() is not supported by Expect::from().");
+			} elseif (!isset($items[$name])) {
 				$type = Helpers::getPropertyType($prop) ?? 'mixed';
 				$item = new Type($type);
 				if ($prop instanceof \ReflectionProperty ? $prop->isInitialized($object) : $prop->isOptional()) {

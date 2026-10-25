@@ -19,8 +19,8 @@ composer require guzzlehttp/promises
 
 | Version | Status       | PHP Version  |
 |---------|--------------|--------------|
-| 3.0     | Latest       | >=7.4,<8.6   |
-| 2.5     | Maintenance  | >=7.2.5,<8.6 |
+| 3.1     | Latest       | >=7.4,<8.7   |
+| 2.6     | Maintenance  | >=7.2.5,<8.7 |
 | 1.5     | End of Life  | >=5.5,<8.3   |
 
 ## Quick Start
@@ -50,6 +50,14 @@ You can wait for a promise to complete synchronously:
 $value = $promise->wait();
 ```
 
+A promise's `getState()` describes how it was settled, not the eventual
+outcome: a promise that was resolved with another promise, directly or by
+returning one from a `then()` handler, reports `fulfilled` while the inner
+promise may still be pending, and `wait()` can still throw if the inner
+promise rejects. Poll the state only on promises settled with plain values,
+or call `wait()` first (see
+[guzzle/promises#101](https://github.com/guzzle/promises/issues/101)).
+
 When using Guzzle HTTP requests, asynchronous methods return
 `GuzzleHttp\Promise\PromiseInterface` instances:
 
@@ -71,10 +79,9 @@ $response = $promise->wait();
 
 If you discover a security vulnerability within this package, please send an
 email to security@tidelift.com. All security vulnerabilities will be promptly
-addressed. Please do not disclose security-related issues publicly until a fix
-has been announced. Please see
-[Security Policy](https://github.com/guzzle/promises/security/policy) for more
-information.
+addressed by the security maintainers listed in the
+[Security Policy](https://github.com/guzzle/promises/security/policy). Please do
+not disclose security-related issues publicly until a fix has been announced.
 
 ## License
 

@@ -85,7 +85,7 @@ class HttpKernel implements HttpKernelInterface, TerminableInterface
             if ($e instanceof RequestExceptionInterface) {
                 $e = new BadRequestHttpException($e->getMessage(), $e);
             }
-            if (false === $catch) {
+            if (!$catch) {
                 $this->finishRequest($request, $type, $controllerMetadata);
 
                 throw $e;
@@ -141,7 +141,9 @@ class HttpKernel implements HttpKernelInterface, TerminableInterface
             }
         }
 
-        $response->sendHeaders();
+        if (!headers_sent()) {
+            $response->sendHeaders();
+        }
         $response->sendContent();
 
         $this->terminate($request, $response);

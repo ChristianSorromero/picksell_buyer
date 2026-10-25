@@ -54,21 +54,21 @@ class Blueprint
     /**
      * The storage engine that should be used for the table.
      *
-     * @var string
+     * @var string|null
      */
     public $engine;
 
     /**
      * The default character set that should be used for the table.
      *
-     * @var string
+     * @var string|null
      */
     public $charset;
 
     /**
      * The collation that should be used for the table.
      *
-     * @var string
+     * @var string|null
      */
     public $collation;
 
@@ -491,6 +491,17 @@ class Blueprint
     public function dropSpatialIndex($index)
     {
         return $this->dropIndexCommand('dropSpatialIndex', 'spatialIndex', $index);
+    }
+
+    /**
+     * Indicate that the given vector index should be dropped.
+     *
+     * @param  string|array  $index
+     * @return \Illuminate\Support\Fluent
+     */
+    public function dropVectorIndex($index)
+    {
+        return $this->dropIndexCommand('dropVectorIndex', 'vectorIndex', $index);
     }
 
     /**

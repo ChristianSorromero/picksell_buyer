@@ -4,6 +4,7 @@ namespace Illuminate\Support;
 
 use Closure;
 use Illuminate\Support\Traits\Macroable;
+use InvalidArgumentException;
 use League\CommonMark\Environment\Environment;
 use League\CommonMark\Extension\GithubFlavoredMarkdownExtension;
 use League\CommonMark\Extension\InlinesOnly\InlinesOnlyExtension;
@@ -238,7 +239,7 @@ class Str
      */
     public static function camel($value)
     {
-        return static::$camelCache[$value] ?? static::$camelCache[$value] = lcfirst(static::studly($value));
+        return static::$camelCache[$value] ?? static::$camelCache[$value] = static::lcfirst(static::studly($value));
     }
 
     /**
@@ -494,6 +495,18 @@ class Str
      */
     public static function finish($value, $cap)
     {
+        if ($cap === '') {
+            return $value;
+        }
+
+        if (! str_ends_with($value, $cap)) {
+            return $value.$cap;
+        }
+
+        if (! str_ends_with($value, $cap.$cap)) {
+            return $value;
+        }
+
         $quoted = preg_quote($cap, '/');
 
         return preg_replace('/(?:'.$quoted.')+$/u', '', $value).$cap;
@@ -1103,13 +1116,21 @@ class Str
             ] : null,
             'spaces' => $spaces === true ? [' '] : null,
         ]))
-            ->filter()
-            ->each(fn ($c) => $password->push($c[random_int(0, count($c) - 1)]))
-            ->flatten();
+            ->filter();
 
-        $length = $length - $password->count();
+        if ($options->isEmpty()) {
+            throw new InvalidArgumentException('At least one character pool must be enabled.');
+        }
 
-        return $password->merge($options->pipe(
+        $allCharacters = $options->flatten();
+
+        $options->shuffle()
+            ->take(max(0, $length))
+            ->each(fn ($c) => $password->push($c[random_int(0, count($c) - 1)]));
+
+        $length = max(0, $length - $password->count());
+
+        return $password->merge($allCharacters->pipe(
             fn ($c) => Collection::times($length, fn () => $c[random_int(0, $c->count() - 1)])
         ))->shuffle()->implode('');
     }
@@ -1489,6 +1510,18 @@ class Str
      */
     public static function start($value, $prefix)
     {
+        if ($prefix === '') {
+            return $value;
+        }
+
+        if (! str_starts_with($value, $prefix)) {
+            return $prefix.$value;
+        }
+
+        if (! str_starts_with($value, $prefix.$prefix)) {
+            return $value;
+        }
+
         $quoted = preg_quote($prefix, '/');
 
         return $prefix.preg_replace('/^(?:'.$quoted.')+/u', '', $value);
@@ -1686,7 +1719,10 @@ class Str
         if ($charlist === null) {
             $trimDefaultCharacters = " \n\r\t\v\0";
 
-            return preg_replace('~^[\s'.self::INVISIBLE_CHARACTERS.$trimDefaultCharacters.']+|[\s'.self::INVISIBLE_CHARACTERS.$trimDefaultCharacters.']+$~u', '', $value) ?? trim($value);
+            $whitespace = '[\s'.self::INVISIBLE_CHARACTERS.$trimDefaultCharacters.']';
+
+            // The trailing match may only begin at the first character of a whitespace run, keeping this linear...
+            return preg_replace('~^'.$whitespace.'+|'.$whitespace.'(?<!'.$whitespace.$whitespace.')'.$whitespace.'*+$~u', '', $value) ?? trim($value);
         }
 
         return trim($value, $charlist);
@@ -1722,7 +1758,10 @@ class Str
         if ($charlist === null) {
             $rtrimDefaultCharacters = " \n\r\t\v\0";
 
-            return preg_replace('~[\s'.self::INVISIBLE_CHARACTERS.$rtrimDefaultCharacters.']+$~u', '', $value) ?? rtrim($value);
+            $whitespace = '[\s'.self::INVISIBLE_CHARACTERS.$rtrimDefaultCharacters.']';
+
+            // The match may only begin at the first character of a whitespace run, keeping this linear...
+            return preg_replace('~'.$whitespace.'(?<!'.$whitespace.$whitespace.')'.$whitespace.'*+$~u', '', $value) ?? rtrim($value);
         }
 
         return rtrim($value, $charlist);
