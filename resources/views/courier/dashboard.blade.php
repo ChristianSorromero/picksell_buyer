@@ -8,8 +8,44 @@
     <div class="stat"><strong>{{ $stats['assigned'] }}</strong><span>Active Assignments</span></div>
     <div class="stat"><strong>{{ $stats['in_transit'] }}</strong><span>Out for Delivery</span></div>
     <div class="stat"><strong>{{ $stats['delivered'] }}</strong><span>Delivered</span></div>
-    <div class="stat"><strong>₱{{ number_format($stats['earnings'], 2) }}</strong><span>Completed Commission</span></div>
+    <div class="stat"><strong>{{ \App\Support\Money::format($stats['earnings']) }}</strong><span>Settled Rider Pay</span></div>
+    <div class="stat"><strong>{{ \App\Support\Money::format($stats['cash_on_hand']) }}</strong><span>Cash to Hand In</span></div>
 </div>
+
+@if($refunds->isNotEmpty())
+<div class="card">
+    <div class="card-header"><span class="card-title">Refunds to Hand Over</span></div>
+    <div style="overflow-x:auto;">
+        <table>
+            <thead><tr><th>Return</th><th>Recipient / Address</th><th>Refund</th><th>Action</th></tr></thead>
+            <tbody>
+            @foreach($refunds as $refund)
+                @php $delivery = $refund->order->delivery; $amount = $refund->resolutionCents(); @endphp
+                <tr>
+                    <td><strong>#{{ $refund->id }}</strong><div style="font-size:0.75rem;color:#888;">{{ $refund->order->order_number }}</div></td>
+                    <td>
+                        <strong>{{ $delivery['name'] ?? '—' }}</strong>
+                        <div style="font-size:0.78rem;color:#888;">{{ $delivery['address'] ?? 'Address unavailable' }}</div>
+                        <div style="font-size:0.75rem;color:#888;">{{ $delivery['phone'] ?? '' }}</div>
+                    </td>
+                    <td><strong>{{ \App\Support\Money::format($amount) }}</strong>@if($refund->requires_item_return)<div style="font-size:0.75rem;color:#b45309;">Collect {{ $refund->quantity }} item(s) back</div>@endif</td>
+                    <td>
+                        <form method="POST" action="{{ route('courier.refunds.handover', $refund) }}" onsubmit="return confirm('Confirm you handed {{ \App\Support\Money::format($amount) }} to the buyer?')">
+                            @csrf
+                            <input type="hidden" name="amount" value="{{ \App\Support\Money::pesos($amount) }}">
+                            @if($refund->requires_item_return)
+                                <label style="font-size:0.78rem;display:block;margin-bottom:0.3rem;"><input type="checkbox" name="item_collected" value="1" required> Item collected</label>
+                            @endif
+                            <button class="btn btn-success" type="submit">Refund Handed Over</button>
+                        </form>
+                    </td>
+                </tr>
+            @endforeach
+            </tbody>
+        </table>
+    </div>
+</div>
+@endif
 
 <div class="card">
     <div class="card-header">
@@ -40,7 +76,13 @@
                     @if(\App\Support\OrderStatus::can($order, 'out_for_delivery'))
                     <form method="POST" action="{{ route('courier.orders.status', $order) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="shipped"><button class="btn btn-coral" type="submit">Out for Delivery</button></form>
                     @elseif(\App\Support\OrderStatus::can($order, 'deliver'))
-                    <form method="POST" action="{{ route('courier.orders.status', $order) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="completed"><button class="btn btn-success" type="submit">Mark Delivered</button></form>
+                    @php $due = $order->totalCents(); @endphp
+                    <form method="POST" action="{{ route('courier.orders.status', $order) }}" style="display:flex;flex-direction:column;gap:0.3rem;">@csrf @method('PATCH')
+                        <input type="hidden" name="status" value="completed">
+                        <label style="font-size:0.75rem;color:#888;">Cash collected (COD {{ \App\Support\Money::format($due) }})</label>
+                        <input type="number" name="cash_collected" step="0.01" min="0" value="{{ \App\Support\Money::pesos($due) }}" required style="width:120px;padding:0.3rem;border:1.5px solid #ddd6c8;border-radius:6px;">
+                        <button class="btn btn-success" type="submit">Mark Delivered</button>
+                    </form>
                     @elseif($order->status === 'completed')
                     <span style="color:#16a34a;font-size:0.8rem;">Completed {{ optional($order->delivered_at)->format('M d, Y') }}</span>
                     @endif

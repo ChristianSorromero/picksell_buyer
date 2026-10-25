@@ -219,21 +219,49 @@ final class BuyerPresenter
 
     public static function returnRequest(ReturnRequest $r): array
     {
+        $agreed = in_array($r->status, [ReturnRequest::RESOLVED, ReturnRequest::COMPLETED], true);
+        $resolution = fn () => [
+            'type'             => $r->resolution_type,
+            'label'            => ReturnRequest::RESOLUTIONS[$r->resolution_type][0] ?? null,
+            'amount'           => self::money($r->resolution_amount ?? 0),
+            'item_must_return' => $r->requires_item_return,
+            'note'             => $r->seller_note,
+        ];
+
         return [
             'id'            => $r->id,
-            'status'        => $r->status,
+            // The five stages older app builds know; `stage` has the detail.
+            'status'        => match ($r->status) {
+                ReturnRequest::REQUESTED => 'requested',
+                ReturnRequest::RESOLVED  => 'processing',
+                ReturnRequest::COMPLETED => 'refunded',
+                ReturnRequest::REJECTED  => 'rejected',
+                default                  => 'under_review',
+            },
+            'stage'         => $r->status,
+            'stage_label'   => ReturnRequest::STAGE_LABELS[$r->status] ?? $r->status,
+            // What the buyer has to do next, if anything: 'reply' or 'decide'.
+            'awaiting'      => match ($r->status) {
+                ReturnRequest::INFO_REQUESTED => 'reply',
+                ReturnRequest::PROPOSED       => 'decide',
+                default                       => null,
+            },
+            'info_request'  => $r->status === ReturnRequest::INFO_REQUESTED ? $r->info_request : null,
+            'proposal'      => $r->status === ReturnRequest::PROPOSED ? $resolution() : null,
+            'resolution'    => $agreed ? $resolution() : null,
             'quantity'      => $r->quantity,
             'reason'        => $r->reason,
             'details'       => $r->details,
-            'refund_amount' => self::money($r->refund_amount),
+            'refund_amount' => self::money($agreed ? ($r->resolution_amount ?? 0) : $r->refund_amount),
             'refund_to'     => self::paymentMethodName($r->refund_to) ?? $r->refund_to,
             // Evidence lives on the private disk; only admins can open it.
             'evidence_count' => count($r->evidence_paths ?? []),
             'requested_at'  => self::date($r->created_at),
-            'reviewed_at'   => self::date($r->reviewed_at),
-            'processing_at' => self::date($r->processing_at),
-            'refunded_at'   => self::date($r->refunded_at),
+            'reviewed_at'   => self::date($r->admin_approved_at ?? $r->reviewed_at),
+            'processing_at' => self::date($r->resolved_at ?? $r->processing_at),
+            'refunded_at'   => self::date($r->refunded_at ?? ($r->status === ReturnRequest::COMPLETED ? $r->completed_at : null)),
             'rejected_at'   => self::date($r->rejected_at),
+            'completed_at'  => self::date($r->completed_at),
             'resolution_note' => $r->resolution_note,
         ];
     }
@@ -247,7 +275,9 @@ final class BuyerPresenter
     public static function paymentMethodName(?string $code): ?string
     {
         if (!$code) return null;
-        $legacy = ['bank_transfer' => 'Bank Transfer'];
-        return collect(config('picksell.payment_methods'))->firstWhere('code', $code)['name'] ?? $legacy[$code] ?? $code;
+        // Older records may name methods that are no longer offered.
+        $legacy = ['bank_transfer' => 'Bank Transfer', 'gcash' => 'GCash', 'maya' => 'Maya', 'card' => 'Credit / Debit Card'];
+        return collect([...config('picksell.payment_methods'), ...config('picksell.refund_methods')])->firstWhere('code', $code)['name']
+            ?? $legacy[$code] ?? $code;
     }
 }

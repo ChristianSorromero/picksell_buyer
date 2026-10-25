@@ -9,7 +9,7 @@ use App\Models\Complaint;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariation;
-use App\Models\ReturnRequest;
+use App\Services\ReturnWorkflow;
 use App\Support\BuyerPresenter;
 use App\Support\OrderStatus;
 use Illuminate\Http\Request;
@@ -24,6 +24,8 @@ class OrderController extends Controller
         'Damaged or defective item', 'Wrong item received', 'Item not as described',
         'Missing parts or accessories', 'Changed my mind',
     ];
+
+    public function __construct(private ReturnWorkflow $returns) {}
 
     private function find(Request $request, Order $order): Order
     {
@@ -159,10 +161,11 @@ class OrderController extends Controller
             'quantity'   => "required|integer|min:1|max:{$order->quantity}",
             'reason'     => ['required', Rule::in(self::RETURN_REASONS)],
             'details'    => 'nullable|string|max:2000',
-            'refund_to'  => 'required|in:gcash,maya,bank_transfer',
+            // COD only: refunds are paid in cash by a rider. Older app builds sent wallets.
+            'refund_to'  => 'nullable|in:cash',
             'evidence'   => 'nullable|array|max:4',
             'evidence.*' => 'image|mimes:jpg,jpeg,png,webp|max:5120',
-        ]);
+        ], ['refund_to.in' => 'Refunds are paid in cash by a Picksell rider.']);
 
         if (!BuyerPresenter::orderDetail($order->load('events'))['actions']['can_return']) {
             $days = config('picksell.return_window_days');
@@ -170,20 +173,7 @@ class OrderController extends Controller
         }
 
         $paths = collect($request->file('evidence', []))->map(fn ($f) => $f->store('uploads/returns', 'local'))->all();
-        $unitPaid = ($order->amount ?? 0) / max(1, $order->quantity);
-
-        $return = ReturnRequest::create([
-            'order_id'       => $order->id,
-            'buyer_id'       => $request->user()->id,
-            'quantity'       => $data['quantity'],
-            'reason'         => $data['reason'],
-            'details'        => $data['details'] ?? null,
-            'evidence_paths' => $paths ?: null,
-            'refund_amount'  => round($unitPaid * $data['quantity'], 2),
-            'refund_to'      => $data['refund_to'],
-            'status'         => 'requested',
-        ]);
-        $order->recordEvent('return_requested', 'You requested a return for ' . $data['quantity'] . ' item(s).');
+        $return = $this->returns->open($order, $request->user(), $data, $paths);
 
         return response()->json([
             'message'        => 'Return request submitted.',
@@ -256,11 +246,7 @@ class OrderController extends Controller
             ],
             'report_categories' => self::REPORT_CATEGORIES,
             'return_reasons'    => self::RETURN_REASONS,
-            'refund_methods'    => [
-                ['code' => 'gcash', 'name' => 'GCash'],
-                ['code' => 'maya', 'name' => 'Maya'],
-                ['code' => 'bank_transfer', 'name' => 'Bank Transfer'],
-            ],
+            'refund_methods'    => config('picksell.refund_methods'),
             'return_window_days' => (int) config('picksell.return_window_days'),
         ]);
     }

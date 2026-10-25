@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\ReturnController;
 use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\BuyerController;
 use App\Http\Controllers\MobileAuthController;
@@ -73,6 +74,9 @@ Route::middleware(['auth:sanctum', 'active.buyer', 'throttle:120,1,buyer-api'])-
         Route::post('/orders/{order}/return', [OrderController::class, 'requestReturn'])->middleware('throttle:10,1,return');
         Route::post('/orders/{order}/reorder', [OrderController::class, 'reorder']);
         Route::get('/reorder', [OrderController::class, 'reorderCandidates']);
+        Route::post('/returns/{returnRequest}/reply', [ReturnController::class, 'reply'])->middleware('throttle:10,1,return-reply');
+        Route::post('/returns/{returnRequest}/accept', [ReturnController::class, 'accept']);
+        Route::post('/returns/{returnRequest}/decline', [ReturnController::class, 'decline']);
         Route::get('/support/tickets', [OrderController::class, 'tickets']);
 
         Route::get('/notifications', [NotificationController::class, 'index']);

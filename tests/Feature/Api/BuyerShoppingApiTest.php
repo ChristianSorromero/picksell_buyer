@@ -182,9 +182,13 @@ class BuyerShoppingApiTest extends TestCase
         $this->getJson("/api/products/{$this->shirt->id}/reviews")
             ->assertJsonPath('summary.count', 1)->assertJsonPath('reviews.0.comment', 'Nice fit');
 
+        // COD only: refunds go back in cash, never to a wallet.
         $this->postJson("/api/buyer/orders/{$orderId}/return", ['quantity' => 1, 'reason' => 'Wrong item received', 'refund_to' => 'gcash'])
-            ->assertCreated()->assertJsonPath('return_request.refund_amount', 400);
-        $this->postJson("/api/buyer/orders/{$orderId}/return", ['quantity' => 1, 'reason' => 'Wrong item received', 'refund_to' => 'gcash'])
+            ->assertStatus(422)->assertJsonValidationErrors('refund_to');
+        $this->postJson("/api/buyer/orders/{$orderId}/return", ['quantity' => 1, 'reason' => 'Wrong item received', 'refund_to' => 'cash'])
+            ->assertCreated()->assertJsonPath('return_request.refund_amount', 400)
+            ->assertJsonPath('return_request.status', 'requested')->assertJsonPath('return_request.stage', 'requested');
+        $this->postJson("/api/buyer/orders/{$orderId}/return", ['quantity' => 1, 'reason' => 'Wrong item received'])
             ->assertStatus(422);
     }
 

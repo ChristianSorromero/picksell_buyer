@@ -30,6 +30,7 @@
         <div class="nav-label">Operations</div>
         <a class="nav-item {{ request()->routeIs('logistics.applications') ? 'active' : '' }}" href="{{ route('logistics.applications') }}"><span class="nav-icon">♙</span><span class="nav-text">Courier Applications</span></a>
         <a class="nav-item {{ request()->routeIs('logistics.parcels') ? 'active' : '' }}" href="{{ route('logistics.parcels') }}"><span class="nav-icon">▣</span><span class="nav-text">Sorting Center</span></a>
+        <a class="nav-item {{ request()->routeIs('logistics.cash') ? 'active' : '' }}" href="{{ route('logistics.cash') }}"><span class="nav-icon">₱</span><span class="nav-text">Cash Desk</span></a>
     </nav>
     <div class="sidebar-footer"><div class="staff-card"><div class="staff-info"><div class="staff-avatar">{{ strtoupper(substr(auth()->user()->first_name, 0, 1)) }}</div><div class="staff-text"><div class="staff-name">{{ auth()->user()->full_name }}</div><div class="staff-role">Logistics Staff</div></div><form method="POST" action="{{ route('logout') }}">@csrf<button class="btn-logout" type="submit" title="Log out"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 0-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg></button></form></div></div></div>
 </aside>

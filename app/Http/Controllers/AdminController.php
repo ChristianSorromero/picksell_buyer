@@ -192,7 +192,7 @@ class AdminController extends Controller
     // Commission
     public function commission(Request $request)
     {
-        $rate = 10;
+        $rate = (string) \Brick\Math\BigDecimal::of((string) config('picksell.commission_rate'))->multipliedBy(100)->strippedOfTrailingZeros(); // percent, for display
         $from = $request->get('from', now()->startOfMonth()->format('Y-m-d'));
         $to   = $request->get('to', now()->format('Y-m-d'));
 

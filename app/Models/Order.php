@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Money;
 use App\Support\OrderStatus;
 use Illuminate\Database\Eloquent\Model;
 
@@ -14,6 +15,7 @@ class Order extends Model
         'amount', 'commission', 'status',
         'shipping_option', 'estimated_delivery_from', 'estimated_delivery_to',
         'payment_method', 'payment_status', 'ship_to',
+        'cod_collected_at', 'cod_collected_by', 'paid_at', 'payment_confirmed_by', 'settled_at',
         'waybill_number', 'tracking_status',
         'packed_at', 'handed_over_at', 'delivered_at', 'cancelled_at', 'cancel_reason',
         'rating', 'feedback', 'rated_at',
@@ -29,7 +31,13 @@ class Order extends Model
         'estimated_delivery_to'   => 'date',
         'variation_ids'           => 'array',
         'ship_to'                 => 'array',
+        'cod_collected_at'        => 'datetime',
+        'paid_at'                 => 'datetime',
+        'settled_at'              => 'datetime',
     ];
+
+    /** unpaid → collected (rider has the cash) → paid (cash handed in) → partially_/refunded */
+    public const PAYMENT_STATUSES = ['unpaid', 'collected', 'paid', 'partially_refunded', 'refunded'];
 
     protected static function booted(): void
     {
@@ -51,6 +59,21 @@ class Order extends Model
     public function product()       { return $this->belongsTo(Product::class); }
     public function events()        { return $this->hasMany(OrderEvent::class)->orderBy('occurred_at')->orderBy('id'); }
     public function returnRequest() { return $this->hasOne(ReturnRequest::class); }
+    public function auditLogs()     { return $this->morphMany(AuditLog::class, 'subject')->latest('id'); }
+    public function collectedBy()   { return $this->belongsTo(User::class, 'cod_collected_by'); }
+
+    /** What the buyer pays in cash for this order, in centavos. */
+    public function totalCents(): int
+    {
+        return $this->total !== null
+            ? Money::cents($this->total)
+            : Money::cents($this->amount) + Money::cents($this->shipping_fee) + Money::cents($this->service_fee);
+    }
+
+    public function isCod(): bool
+    {
+        return in_array($this->payment_method, [null, 'cod'], true);
+    }
 
     public function getCanonicalStatusAttribute(): string
     {

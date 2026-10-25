@@ -4,7 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Mail\NewMessageMail;
 use App\Models\Message;
+use App\Models\LedgerEntry;
 use App\Models\Order;
+use App\Models\Payout;
+use App\Models\ReturnRequest;
+use App\Services\CodPayments;
+use App\Services\Ledger;
+use App\Services\ReturnWorkflow;
+use App\Support\Money;
 use App\Support\OrderStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -17,7 +24,7 @@ class CourierController extends Controller
         return auth()->user();
     }
 
-    public function dashboard(Request $request)
+    public function dashboard(Request $request, Ledger $ledger)
     {
         $courier = $this->courier();
         $status = $request->get('status', 'all');
@@ -31,34 +38,43 @@ class CourierController extends Controller
             'assigned' => Order::where('courier_id', $courier->id)->whereIn('status', ['shipped', 'processing'])->count(),
             'in_transit' => Order::where('courier_id', $courier->id)->where('status', 'shipped')->count(),
             'delivered' => Order::where('courier_id', $courier->id)->where('status', 'completed')->count(),
-            'earnings' => Order::where('courier_id', $courier->id)->where('status', 'completed')->sum('commission'),
+            // Rider pay accrued at settlement (see config picksell.finance).
+            'earnings' => -$ledger->balance(Ledger::RIDER_PAYABLE, $courier->id) + (int) Payout::where('payee_id', $courier->id)->where('status', 'completed')->sum('amount_cents'),
+            'cash_on_hand' => $ledger->balance(Ledger::RIDER_CASH, $courier->id),
         ];
+        $refunds = ReturnRequest::with('order')->where('refund_courier_id', $courier->id)
+            ->whereNotNull('refund_released_at')->whereNull('refunded_at')->get();
 
-        return view('courier.dashboard', compact('orders', 'status', 'stats'));
+        return view('courier.dashboard', compact('orders', 'status', 'stats', 'refunds'));
     }
 
-    public function updateStatus(Request $request, Order $order)
+    public function updateStatus(Request $request, Order $order, CodPayments $cod)
     {
         abort_if($order->courier_id !== $this->courier()->id, 403);
 
         $data = $request->validate([
-            'status' => 'required|in:shipped,completed',
+            'status'         => 'required|in:shipped,completed',
+            'cash_collected' => 'required_if:status,completed|nullable|numeric|min:0',
         ]);
-        OrderStatus::ensure($order, $data['status'] === 'shipped' ? 'out_for_delivery' : 'deliver');
 
-        $updates = ['status' => $data['status']];
-        if ($data['status'] === 'shipped') {
-            $updates['tracking_status'] = 'Out for delivery';
-        } else {
-            $updates['tracking_status'] = 'Delivered';
-            $updates['delivered_at'] = now();
+        if ($data['status'] === 'completed') {
+            // Delivery and the COD cash are recorded together, or not at all.
+            $cod->deliverAndCollect($order, $this->courier(), (string) $data['cash_collected']);
+            return back()->with('success', 'Parcel delivered and ' . Money::format($order->totalCents()) . ' cash collected. Hand it in at the sorting center.');
         }
 
-        $order->update($updates);
+        OrderStatus::ensure($order, 'out_for_delivery');
+        $order->update(['status' => 'shipped', 'tracking_status' => 'Out for delivery']);
 
-        return back()->with('success', $data['status'] === 'completed'
-            ? 'Parcel marked as delivered.'
-            : 'Parcel marked as out for delivery.');
+        return back()->with('success', 'Parcel marked as out for delivery.');
+    }
+
+    /** The rider hands an approved refund to the buyer, collecting the item when it must come back. */
+    public function handOverRefund(Request $request, ReturnRequest $returnRequest, ReturnWorkflow $workflow)
+    {
+        $data = $request->validate(['amount' => 'required|numeric|min:0', 'item_collected' => 'nullable|boolean']);
+        $workflow->handOverRefund($returnRequest, $this->courier(), (string) $data['amount'], (bool) ($data['item_collected'] ?? false));
+        return back()->with('success', "Refund for return #{$returnRequest->id} recorded as handed over.");
     }
 
     public function reports(Request $request)
@@ -76,7 +92,9 @@ class CourierController extends Controller
             'orders' => $orders,
             'totalOrders' => $orders->count(),
             'deliveredOrders' => $orders->where('status', 'completed')->count(),
-            'earnings' => $orders->where('status', 'completed')->sum('commission'),
+            // Settled rider pay for these orders; 0 until a rider fee policy is configured.
+            'earningsCents' => -(int) LedgerEntry::where('account', Ledger::RIDER_PAYABLE)->where('user_id', $this->courier()->id)
+                ->where('amount_cents', '<', 0)->whereIn('order_id', $orders->pluck('id'))->sum('amount_cents'),
         ]);
     }
 
