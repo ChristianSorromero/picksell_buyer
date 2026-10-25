@@ -46,9 +46,18 @@
         </div>
         <div style="display:flex;align-items:center;gap:0.8rem;">
             <span style="font-size:0.8rem;color:#888;">{{ $order->seller->business_name ?? $order->seller->full_name }}</span>
-            <span class="badge badge-{{ $order->status }}">{{ $order->status }}</span>
+            @php
+                $canonical = $order->canonical_status;
+                $label = \App\Support\OrderStatus::EVENTS[$canonical][0] ?? $order->status;
+            @endphp
+            <span class="badge badge-{{ $order->status }}">{{ $label }}</span>
         </div>
     </div>
+    @if($canonical === \App\Support\OrderStatus::DELIVERY_FAILED)
+        <div class="alert alert-error" style="margin:0.6rem 1rem 0;">Delivery attempt failed: {{ \Illuminate\Support\Str::after($order->tracking_status, 'Delivery failed: ') }}. We'll try again — keep your phone nearby.</div>
+    @elseif($canonical === \App\Support\OrderStatus::RETURNED)
+        <div class="alert alert-error" style="margin:0.6rem 1rem 0;">We couldn't deliver this parcel, so it went back to the seller. You were not charged.</div>
+    @endif
     <div class="order-card-body">
         @if($order->product && $order->product->image)
             <img src="{{ Storage::url($order->product->image) }}" style="width:60px;height:60px;object-fit:cover;border-radius:8px;">
@@ -58,7 +67,15 @@
         <div style="flex:1;">
             <div style="font-weight:600;">{{ $order->product_name }}</div>
             <div style="font-size:0.8rem;color:#888;">Qty: {{ $order->quantity }}</div>
-            <div style="font-size:0.95rem;font-weight:800;color:var(--coral);">₱{{ number_format($order->amount, 2) }}</div>
+            <div style="font-size:0.95rem;font-weight:800;color:var(--coral);">{{ \App\Support\Money::format($order->totalCents()) }}</div>
+            <div style="font-size:0.75rem;color:#888;">
+                @switch($order->payment_status)
+                    @case('unpaid') Pay in cash on delivery (incl. shipping) @break
+                    @case('collected') @case('paid') Paid in cash @break
+                    @case('partially_refunded') Paid · partly refunded @break
+                    @case('refunded') Refunded @break
+                @endswitch
+            </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:0.4rem;align-items:flex-end;">
             @if($order->waybill_number)

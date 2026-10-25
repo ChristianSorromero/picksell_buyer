@@ -125,7 +125,7 @@
                 </td>
                 <td>{{ $order->seller->business_name ?? $order->seller->full_name ?? '—' }}</td>
                 <td><span class="badge badge-{{ $order->status }}">{{ $label }}</span><div style="font-size:0.75rem;color:#888;margin-top:0.2rem;">{{ $order->tracking_status ?? 'Assigned' }}</div>
-                    @if($order->delivery_attempts)<div style="font-size:0.72rem;color:#888;">Attempts: {{ $order->delivery_attempts }} of {{ $maxAttempts }}</div>@endif</td>
+                    @if($order->delivery_attempts && $order->status === 'shipped')<div style="font-size:0.72rem;color:#888;">Attempts: {{ $order->delivery_attempts }} of {{ $maxAttempts }}</div>@endif</td>
                 <td>
                     @if(OrderStatus::can($order, 'out_for_delivery') && $order->delivery_attempts < $maxAttempts)
                     <form method="POST" action="{{ route('courier.orders.status', $order) }}">@csrf @method('PATCH')<input type="hidden" name="status" value="shipped"><button class="btn btn-coral" type="submit">{{ $state === OrderStatus::DELIVERY_FAILED ? 'Try Again' : 'Out for Delivery' }}</button></form>
