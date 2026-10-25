@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Mail\BuyerVerificationCodeMail;
+use App\Mail\PasswordResetCodeMail;
 use App\Models\User;
 use App\Models\Product;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -239,6 +241,79 @@ class MobileAuthController extends Controller
         return "{$masked}@{$domain}";
     }
 
+
+    // ── Password reset (buyers) ──────────────────────────────────────────
+    // The same answer is returned whether or not the email is registered,
+    // so the endpoint can't be used to discover accounts.
+
+    private const RESET_MAX_ATTEMPTS = 5;
+
+    public function forgotPassword(Request $request)
+    {
+        $request->validate(['email' => 'required|email']);
+        $email = mb_strtolower(trim($request->email));
+        $generic = response()->json([
+            'message'    => 'If a PickSell account uses that email, we sent it a six-digit code.',
+            'expires_in' => self::CODE_TTL_MINUTES * 60,
+            'resend_in'  => self::RESEND_COOLDOWN_S,
+        ]);
+
+        $user = User::whereRaw('LOWER(email) = ?', [$email])->where('role', 'buyer')
+            ->whereIn('status', ['approved', 'suspended'])->whereNull('anonymized_at')->first();
+        if (!$user || $user->status !== 'approved') return $generic;
+
+        $existing = DB::table('password_reset_tokens')->where('email', $user->email)->first();
+        if ($existing && Carbon::parse($existing->created_at)->gt(now()->subSeconds(self::RESEND_COOLDOWN_S))) {
+            return $generic; // cooldown: don't send again yet
+        }
+
+        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        DB::table('password_reset_tokens')->updateOrInsert(['email' => $user->email], ['token' => Hash::make($code), 'created_at' => now()]);
+        Cache::forget($this->resetAttemptsKey($user->email));
+        Mail::to($user->email)->send(new PasswordResetCodeMail($user, $code, self::CODE_TTL_MINUTES));
+
+        return $generic;
+    }
+
+    public function resetPassword(Request $request)
+    {
+        $data = $request->validate([
+            'email'    => 'required|email',
+            'code'     => 'required|digits:6',
+            'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
+        ], ['code.digits' => 'Enter the six-digit code from your email.']);
+
+        $invalid = fn (string $message = 'The code is incorrect or has expired. Request a new one.') =>
+            response()->json(['message' => $message, 'errors' => ['code' => [$message]]], 422);
+
+        $user = User::whereRaw('LOWER(email) = ?', [mb_strtolower(trim($data['email']))])->where('role', 'buyer')
+            ->where('status', 'approved')->whereNull('anonymized_at')->first();
+        $row = $user ? DB::table('password_reset_tokens')->where('email', $user->email)->first() : null;
+        if (!$row || Carbon::parse($row->created_at)->lt(now()->subMinutes(self::CODE_TTL_MINUTES))) return $invalid();
+
+        $attemptsKey = $this->resetAttemptsKey($user->email);
+        if (Cache::get($attemptsKey, 0) >= self::RESET_MAX_ATTEMPTS) {
+            return $invalid('Too many incorrect attempts. Request a new code.');
+        }
+        if (!Hash::check($data['code'], $row->token)) {
+            Cache::put($attemptsKey, Cache::get($attemptsKey, 0) + 1, now()->addMinutes(self::CODE_TTL_MINUTES));
+            return $invalid();
+        }
+
+        DB::transaction(function () use ($user, $data) {
+            $user->forceFill(['password' => Hash::make($data['password']), 'remember_token' => null])->save();
+            $user->tokens()->delete(); // sign out every device
+            DB::table('password_reset_tokens')->where('email', $user->email)->delete();
+        });
+        Cache::forget($attemptsKey);
+
+        return response()->json(['message' => 'Your password was changed. Log in with your new password.']);
+    }
+
+    private function resetAttemptsKey(string $email): string
+    {
+        return 'password-reset-attempts:' . sha1(mb_strtolower($email));
+    }
 
     public function login(Request $request)
     {

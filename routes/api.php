@@ -23,6 +23,8 @@ Route::post('/register/resend', [MobileAuthController::class, 'resendCode'])->mi
 // Brute-force protection: 10 attempts per minute per IP. Each throttle
 // gets its own prefix so limits don't share one counter.
 Route::post('/login', [MobileAuthController::class, 'login'])->middleware('throttle:10,1,login');
+Route::post('/password/forgot', [MobileAuthController::class, 'forgotPassword'])->middleware('throttle:5,1,password-forgot');
+Route::post('/password/reset', [MobileAuthController::class, 'resetPassword'])->middleware('throttle:10,1,password-reset');
 
 // Public catalog (bearer token optional — adds `wishlisted`)
 Route::get('/home', [CatalogController::class, 'home']);

@@ -129,10 +129,9 @@ class AuthController extends Controller
     public function sendResetLink(Request $request)
     {
         $request->validate(['email' => 'required|email']);
-        $status = Password::sendResetLink($request->only('email'));
-        return $status === Password::RESET_LINK_SENT
-            ? back()->with('success', 'Password reset link sent to your email.')
-            : back()->withErrors(['email' => __($status)]);
+        Password::sendResetLink($request->only('email'));
+        // Same answer whether or not the email is registered (no account discovery).
+        return back()->with('success', 'If an account uses that email, we sent it a password reset link.');
     }
 
     public function showResetPassword(string $token)

@@ -3,15 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Mail\NewMessageMail;
+use App\Models\CartItem;
 use App\Models\Message;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\ProductVariation;
 use App\Models\User;
 use App\Services\Deliveries;
 use App\Support\OrderStatus;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 class SellerController extends Controller
 {
@@ -56,8 +60,65 @@ class SellerController extends Controller
         $query  = Product::where('seller_id', $this->seller()->id);
         if ($status !== 'all') $query->where('status', $status);
         if ($search) $query->where('name', 'like', "%$search%");
-        $products = $query->latest()->paginate(15);
+        $products = $query->withCount('variations')->latest()->paginate(15);
         return view('seller.inventory', compact('products', 'status', 'search'));
+    }
+
+    // ── Product options (variations) ─────────────────────────────────────
+    // Each option (e.g. Color: White, Size: L) has its own stock. A buyer
+    // must pick one option per type, and an order needs stock in every
+    // chosen option and in the product's total stock.
+
+    public function variations(Product $product)
+    {
+        abort_if($product->seller_id !== $this->seller()->id, 403);
+        $groups = $product->variations()->orderBy('type')->orderBy('id')->get()->groupBy('type');
+        return view('seller.variations', compact('product', 'groups'));
+    }
+
+    public function storeVariation(Request $request, Product $product)
+    {
+        abort_if($product->seller_id !== $this->seller()->id, 403);
+        $data = $this->validateVariation($request, $product);
+        $product->variations()->create($data);
+        return back()->with('success', "Added {$data['type']}: {$data['value']}.");
+    }
+
+    public function updateVariation(Request $request, Product $product, ProductVariation $variation)
+    {
+        abort_if($product->seller_id !== $this->seller()->id || $variation->product_id !== $product->id, 403);
+        $data = $this->validateVariation($request, $product, $variation);
+        $variation->update($data);
+        return back()->with('success', "Updated {$data['type']}: {$data['value']}.");
+    }
+
+    public function destroyVariation(Product $product, ProductVariation $variation)
+    {
+        abort_if($product->seller_id !== $this->seller()->id || $variation->product_id !== $product->id, 403);
+        DB::transaction(function () use ($variation) {
+            // Cart lines that chose this option can't be bought any more without it.
+            CartItem::where('variation_id', $variation->id)->orWhereJsonContains('variation_ids', $variation->id)->delete();
+            $variation->delete(); // past orders keep their own label
+        });
+        return back()->with('success', 'Option removed. Carts that had it selected were cleared of that item.');
+    }
+
+    private function validateVariation(Request $request, Product $product, ?ProductVariation $current = null): array
+    {
+        $data = $request->validate([
+            'type'  => ['required', 'string', 'max:30', "regex:/^[\pL\pN][\pL\pN\s&'-]*$/u"],
+            'value' => 'required|string|max:50',
+            'stock' => 'required|integer|min:0|max:100000',
+        ], ['type.regex' => 'Use a short name like Color or Size.']);
+        $data['type'] = ucfirst(trim($data['type']));
+        $data['value'] = trim($data['value']);
+
+        $duplicate = $product->variations()->whereRaw('LOWER(type) = ? AND LOWER(value) = ?', [mb_strtolower($data['type']), mb_strtolower($data['value'])])
+            ->when($current, fn ($q) => $q->whereKeyNot($current->id))->exists();
+        if ($duplicate) {
+            throw ValidationException::withMessages(['value' => "{$data['type']}: {$data['value']} already exists."]);
+        }
+        return $data;
     }
 
     public function storeProduct(Request $request)

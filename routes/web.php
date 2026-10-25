@@ -47,11 +47,11 @@ Route::post('/contact', fn() => back()->with('success', 'Message sent!'))->name(
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
-    Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1,web-login');
     Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
     Route::post('/register', [AuthController::class, 'register']);
     Route::get('/forgot-password', [AuthController::class, 'showForgotPassword'])->name('password.request');
-    Route::post('/forgot-password', [AuthController::class, 'sendResetLink'])->name('password.email');
+    Route::post('/forgot-password', [AuthController::class, 'sendResetLink'])->middleware('throttle:5,1,web-forgot')->name('password.email');
     Route::get('/reset-password/{token}', [AuthController::class, 'showResetPassword'])->name('password.reset');
     Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('password.update');
 });
@@ -147,6 +147,10 @@ Route::middleware(['auth', SellerMiddleware::class])->prefix('seller')->group(fu
     Route::post('/inventory',                       [SellerController::class, 'storeProduct'])->name('seller.inventory.store');
     Route::patch('/inventory/{product}',            [SellerController::class, 'updateProduct'])->name('seller.inventory.update');
     Route::patch('/inventory/{product}/archive',    [SellerController::class, 'archiveProduct'])->name('seller.inventory.archive');
+    Route::get('/inventory/{product}/options',      [SellerController::class, 'variations'])->name('seller.variations');
+    Route::post('/inventory/{product}/options',     [SellerController::class, 'storeVariation'])->name('seller.variations.store');
+    Route::patch('/inventory/{product}/options/{variation}', [SellerController::class, 'updateVariation'])->name('seller.variations.update');
+    Route::delete('/inventory/{product}/options/{variation}', [SellerController::class, 'destroyVariation'])->name('seller.variations.destroy');
 
     // Orders
     Route::get('/orders',                           [SellerController::class, 'orders'])->name('seller.orders');

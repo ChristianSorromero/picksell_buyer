@@ -54,6 +54,7 @@
                 <td>
                     <div style="display:flex;gap:0.4rem;">
                         <button class="btn btn-outline btn-sm" onclick="openEditModal({{ $product->id }}, {{ json_encode($product) }})">Edit</button>
+                        <a href="{{ route('seller.variations', $product) }}" class="btn btn-outline btn-sm">Options ({{ $product->variations_count ?? $product->variations()->count() }})</a>
                         <form method="POST" action="/seller/inventory/{{ $product->id }}/archive">
                             @csrf @method('PATCH')
                             <button type="submit" class="btn btn-sm {{ $product->status==='archived' ? 'btn-success' : 'btn-danger' }}">
