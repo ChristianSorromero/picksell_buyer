@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart' show XFile;
 
 import 'token_store.dart';
 
@@ -145,20 +146,31 @@ class ApiClient {
     });
   }
 
-  /// multipart/form-data, for evidence photo uploads.
+  /// multipart/form-data. [files] become arrays (`evidence[]`), [singleFiles]
+  /// one file each (`id_upload`). Paths come from image_picker; reading them
+  /// as bytes works on phones and in the browser alike.
   Future<ApiResult> multipart(
     String path, {
     required Map<String, String> fields,
     Map<String, List<String>> files = const {},
+    Map<String, String> singleFiles = const {},
   }) {
     return _guard(() async {
       final request = http.MultipartRequest('POST', _uri(path))
         ..headers.addAll(await _headers())
         ..fields.addAll(fields);
+      Future<http.MultipartFile> part(String field, String filePath) async {
+        final file = XFile(filePath);
+        return http.MultipartFile.fromBytes(field, await file.readAsBytes(), filename: file.name);
+      }
+
       for (final entry in files.entries) {
-        for (final path in entry.value) {
-          request.files.add(await http.MultipartFile.fromPath('${entry.key}[]', path));
+        for (final filePath in entry.value) {
+          request.files.add(await part('${entry.key}[]', filePath));
         }
+      }
+      for (final entry in singleFiles.entries) {
+        request.files.add(await part(entry.key, entry.value));
       }
       final streamed = await _client.send(request).timeout(const Duration(seconds: 60));
       return http.Response.fromStream(streamed);

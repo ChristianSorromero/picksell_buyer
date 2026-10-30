@@ -109,15 +109,13 @@ class CourierInfo {
       CourierInfo(name: j['name'] as String? ?? '', vehicle: toStr(j['vehicle']), phone: toStr(j['phone']));
 }
 
-/// Frozen delivery address on the order.
+/// Where the parcel goes: the buyer's profile address (the website delivers there).
 class ShipTo {
-  const ShipTo({required this.recipientName, required this.phone, required this.fullAddress, this.label, this.landmark});
+  const ShipTo({required this.recipientName, required this.phone, required this.fullAddress});
 
   final String recipientName;
   final String phone;
   final String fullAddress;
-  final AddressLabel? label;
-  final String? landmark;
 
   String get displayPhone => formatPhPhone(phone);
 
@@ -125,9 +123,33 @@ class ShipTo {
         recipientName: j['recipient_name'] as String? ?? '',
         phone: j['phone'] as String? ?? '',
         fullAddress: j['full_address'] as String? ?? '',
-        label: j['label'] == null ? null : AddressLabel.fromApi(j['label']),
-        landmark: toStr(j['landmark']),
       );
+}
+
+/// Pickrush parcel tracking (the same scans the website's tracking page shows).
+class ParcelTracking {
+  const ParcelTracking({required this.trackingNo, required this.status, this.events = const []});
+
+  final String trackingNo;
+  final String status;
+  final List<ParcelScan> events;
+
+  factory ParcelTracking.fromJson(Json j) => ParcelTracking(
+        trackingNo: j['tracking_no'] as String? ?? '',
+        status: j['status'] as String? ?? '',
+        events: listOf(j['events'], ParcelScan.fromJson),
+      );
+}
+
+class ParcelScan {
+  const ParcelScan({required this.headline, this.location, this.at});
+
+  final String headline;
+  final String? location;
+  final DateTime? at;
+
+  factory ParcelScan.fromJson(Json j) =>
+      ParcelScan(headline: j['headline'] as String? ?? '', location: toStr(j['location']), at: toDate(j['at']));
 }
 
 enum RefundStage { requested, underReview, processing, refunded, rejected }
@@ -150,22 +172,21 @@ class ReturnRequest {
     this.rejectedAt,
     this.resolutionNote,
     this.stageLabel,
-    this.awaiting,
-    this.infoRequest,
-    this.proposal,
+    this.sellerNote,
+    this.returnShipment,
   });
 
   final int id;
   final RefundStage stage;
 
-  /// Detailed step, e.g. "Seller proposed a resolution".
+  /// The website's step in plain words, e.g. "Approved: send the item back to the seller".
   final String? stageLabel;
 
-  /// What the buyer has to do next: 'reply' (admin asked a question) or
-  /// 'decide' (accept or decline the seller's proposal).
-  final String? awaiting;
-  final String? infoRequest;
-  final ReturnProposal? proposal;
+  /// The seller's note when approving or declining.
+  final String? sellerNote;
+
+  /// "J&T · 1234567 (in transit)" once the seller adds return shipping details.
+  final String? returnShipment;
   final int quantity;
   final String reason;
   final String? details;
@@ -205,27 +226,15 @@ class ReturnRequest {
         rejectedAt: toDate(j['rejected_at']),
         resolutionNote: toStr(j['resolution_note']),
         stageLabel: toStr(j['stage_label']),
-        awaiting: toStr(j['awaiting']),
-        infoRequest: toStr(j['info_request']),
-        proposal: j['proposal'] is Map ? ReturnProposal.fromJson((j['proposal'] as Map).cast<String, dynamic>()) : null,
+        sellerNote: toStr(j['seller_note']),
+        returnShipment: _shipment(mapOrNull(j['tracking'])),
       );
-}
 
-/// The seller's proposed resolution, waiting for the buyer.
-class ReturnProposal {
-  const ReturnProposal({required this.label, required this.amount, required this.itemMustReturn, this.note});
-
-  final String label;
-  final double amount;
-  final bool itemMustReturn;
-  final String? note;
-
-  factory ReturnProposal.fromJson(Json j) => ReturnProposal(
-        label: j['label'] as String? ?? '',
-        amount: toDouble(j['amount']),
-        itemMustReturn: j['item_must_return'] == true,
-        note: toStr(j['note']),
-      );
+  static String? _shipment(Json? t) {
+    if (t == null) return null;
+    final status = toStr(t['status'])?.replaceAll('_', ' ');
+    return [toStr(t['carrier']), toStr(t['number'])].whereType<String>().join(' · ') + (status == null ? '' : ' ($status)');
+  }
 }
 
 /// BUY-C14 — which actions the backend allows right now.
@@ -276,6 +285,7 @@ class OrderDetail {
     this.logisticsName,
     this.courier,
     this.events = const [],
+    this.tracking,
     this.feedback,
     this.cancelReason,
     this.cancelledAt,
@@ -300,6 +310,9 @@ class OrderDetail {
   final String? logisticsName;
   final CourierInfo? courier;
   final List<TrackingEvent> events;
+
+  /// Pickrush scans once the seller hands the parcel over.
+  final ParcelTracking? tracking;
   final String? feedback;
   final String? cancelReason;
   final DateTime? cancelledAt;
@@ -337,6 +350,7 @@ class OrderDetail {
       logisticsName: toStr(mapOrNull(j['logistics'])?['name']),
       courier: mapOrNull(j['courier']) == null ? null : CourierInfo.fromJson(mapOrNull(j['courier'])!),
       events: listOf(j['events'], TrackingEvent.fromJson),
+      tracking: mapOrNull(j['tracking']) == null ? null : ParcelTracking.fromJson(mapOrNull(j['tracking'])!),
       feedback: toStr(j['feedback']),
       cancelReason: toStr(j['cancel_reason']),
       cancelledAt: toDate(j['cancelled_at']),

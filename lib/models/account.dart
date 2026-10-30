@@ -12,6 +12,12 @@ class BuyerProfile {
     this.sex,
     this.birthday,
     this.memberSince,
+    this.middleInitial,
+    this.province = '',
+    this.municipality = '',
+    this.barangay = '',
+    this.street,
+    this.houseNo,
   });
 
   final int id;
@@ -24,6 +30,14 @@ class BuyerProfile {
   final String? sex;
   final DateTime? birthday;
   final DateTime? memberSince;
+  final String? middleInitial;
+
+  /// The delivery address (the website ships every order here).
+  final String province;
+  final String municipality;
+  final String barangay;
+  final String? street;
+  final String? houseNo;
 
   String get name => '$firstName $lastName'.trim();
   String get initials =>
@@ -38,6 +52,12 @@ class BuyerProfile {
         sex: toStr(j['sex']),
         birthday: toDate(j['birthday']),
         memberSince: toDate(j['member_since']),
+        middleInitial: toStr(j['middle_initial']),
+        province: j['province'] as String? ?? '',
+        municipality: j['municipality'] as String? ?? '',
+        barangay: j['barangay'] as String? ?? '',
+        street: toStr(j['street']),
+        houseNo: toStr(j['house_no']),
       );
 }
 
@@ -48,16 +68,14 @@ class AccountOverview {
     this.orderCounts = const {},
     this.wishlistCount = 0,
     this.cartCount = 0,
-    this.addressCount = 0,
-    this.defaultAddress,
+    this.deliveryAddress,
   });
 
   final BuyerProfile profile;
   final Map<OrderTab, int> orderCounts;
   final int wishlistCount;
   final int cartCount;
-  final int addressCount;
-  final Address? defaultAddress;
+  final DeliveryAddress? deliveryAddress;
 
   factory AccountOverview.fromJson(Json j) {
     final stats = mapOrNull(j['stats']) ?? const {};
@@ -66,8 +84,7 @@ class AccountOverview {
       orderCounts: parseOrderCounts(mapOrNull(stats['order_counts'])),
       wishlistCount: toInt(stats['wishlist_count']),
       cartCount: toInt(stats['cart_count']),
-      addressCount: toInt(stats['address_count']),
-      defaultAddress: mapOrNull(j['default_address']) == null ? null : Address.fromJson(mapOrNull(j['default_address'])!),
+      deliveryAddress: mapOrNull(j['delivery_address']) == null ? null : DeliveryAddress.fromJson(mapOrNull(j['delivery_address'])!),
     );
   }
 }

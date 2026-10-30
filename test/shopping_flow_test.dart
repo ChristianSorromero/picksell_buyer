@@ -52,16 +52,20 @@ void main() {
       );
     });
 
-    test('quote and placement send the same selection, voucher and shipping', () async {
+    test('quote and placement use the website rules: product voucher, COD, no fees', () async {
       final checkout = CheckoutService();
-      final q = await checkout.quote(lineIds: [1, 2], shippingOption: 'express', voucherCode: 'SAVE50');
-      expect(q.totals.total, 1000 - 50 + 120);
+      final r = await checkout.quote(lineIds: [1, 2], voucherCode: 'TEE10');
+      // Tee 400 -10% (TEE10) + mugs 600, no delivery fee.
+      expect(r.quote.totals.total, 1000 - 40);
+      expect(r.quote.totals.shippingTotal, 0);
+      expect(r.deliveryAddress.recipientName, 'Juan Dela Cruz');
 
-      final placed = await checkout.place(lineIds: [1, 2], addressId: 9, paymentMethod: 'cod', shippingOption: 'express', voucherCode: 'SAVE50');
-      expect(placed.total, q.totals.total);
+      final placed = await checkout.place(lineIds: [1, 2], voucherCode: 'TEE10');
+      expect(placed.total, r.quote.totals.total);
       final sent = jsonDecode(api.calls('POST', '/buyer/checkout').single.body) as Map;
-      expect(sent, containsPair('voucher_code', 'SAVE50'));
-      expect(sent, containsPair('shipping_option', 'express'));
+      expect(sent, containsPair('voucher_code', 'TEE10'));
+      expect(sent, containsPair('payment_method', 'cod'));
+      expect(sent.containsKey('address_id'), isFalse);
       expect(sent['item_ids'], [1, 2]);
     });
   });
@@ -115,34 +119,35 @@ void main() {
     await tester.pumpWidget(_app(const CheckoutPage(lineIds: [1, 2])));
     await tester.pumpAndSettle();
 
+    // Delivered to the profile address, as on the website.
     expect(find.text('Juan Dela Cruz'), findsOneWidget);
+    expect(find.text('Cash on Delivery'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Merchandise Subtotal'), 200, scrollable: find.byType(Scrollable).first);
     expect(find.text('Merchandise Subtotal'), findsOneWidget);
-    expect(find.text('₱1,045.00'), findsWidgets); // 1000 + 45 shipping
+    expect(find.text('₱1,000.00'), findsWidgets); // no delivery fee
 
     await tester.tap(find.text('Place Order'));
     await tester.pumpAndSettle();
 
     expect(find.text('Order placed!'), findsOneWidget);
-    expect(find.textContaining('PS-10000001'), findsOneWidget);
+    expect(find.textContaining('ORD-TESTTEST'), findsOneWidget);
     final sent = jsonDecode(api.calls('POST', '/buyer/checkout').single.body) as Map;
-    expect(sent, containsPair('address_id', 9));
     expect(sent, containsPair('payment_method', 'cod'));
   });
 
   testWidgets('checkout: a stock conflict shows the "cart changed" popup', (tester) async {
     _phone(tester);
-    api.placeError = 'conflict';
+    api.placeError = 'stock';
     await tester.pumpWidget(_app(const CheckoutPage(lineIds: [1])));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Place Order'));
     await tester.pumpAndSettle();
     expect(find.text('Your cart changed'), findsOneWidget);
-    expect(find.textContaining('Some items in your order changed'), findsOneWidget);
+    expect(find.textContaining('Not enough stock for: Cotton Basic Tee.'), findsOneWidget);
   });
 
-  testWidgets('product: add to cart requires each variation, then posts the choice', (tester) async {
+  testWidgets('product: add to cart needs one option, as a website cart line holds one', (tester) async {
     _phone(tester);
     await tester.pumpWidget(_app(const ProductDetailPage(productId: 7)));
     await tester.pumpAndSettle();
@@ -157,7 +162,7 @@ void main() {
     expect(find.text('Please select'), findsNWidgets(2));
     expect(api.calls('POST', '/buyer/cart'), isEmpty);
 
-    // Sold-out size L is disabled; choose Black + M.
+    // Sold-out size L is disabled. Choosing M after Black replaces it.
     final sheet = find.byType(BottomSheet);
     await tester.tap(find.descendant(of: sheet, matching: find.bySemanticsLabel('Black')));
     await tester.tap(find.descendant(of: sheet, matching: find.bySemanticsLabel('M')));
@@ -167,7 +172,7 @@ void main() {
     await tester.tap(find.text('ADD TO CART'));
     await tester.pumpAndSettle();
     final sent = jsonDecode(api.calls('POST', '/buyer/cart').single.body) as Map;
-    expect(sent['variation_ids'], [12, 21]);
+    expect(sent['variation_ids'], [21]);
     expect(find.textContaining('added to cart'), findsOneWidget);
   });
 

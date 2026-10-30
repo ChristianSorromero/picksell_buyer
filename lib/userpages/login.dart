@@ -8,7 +8,6 @@ import '../components/shared/auth/social_button.dart';
 import '../page_transitions.dart';
 import '../services/auth_service.dart';
 import 'buyer/buyer_shell.dart';
-import 'email_verification_page.dart';
 import 'forgot_password_page.dart';
 import 'register.dart';
 
@@ -87,15 +86,13 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _handleLoginError(ApiResult result) async {
     final data = result.data ?? const {};
 
-    if (data['needs_verification'] == true) {
-      PsToast.show(context, result.message);
-      Navigator.of(context).push(fadeRoute(EmailVerificationPage(
-        email: data['email']?.toString() ?? _emailController.text.trim(),
-        maskedEmail: data['masked_email']?.toString(),
-        expiresIn: Duration(seconds: (data['expires_in'] as num?)?.toInt() ?? 0),
-        // Let them resend straight away; the server still enforces its cooldown.
-        resendIn: Duration.zero,
-      )));
+    // Signed up but not approved yet (or refused): the website's account statuses.
+    if (result.statusCode == 403 && data['status'] != null) {
+      await PsDialog.error(
+        context,
+        title: data['status'] == 'pending' ? 'Waiting for approval' : 'Can’t log in',
+        message: result.message,
+      );
       return;
     }
 

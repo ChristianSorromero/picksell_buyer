@@ -2,7 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Services\RiderPay;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -39,7 +38,6 @@ class Preflight extends Command
             'Log level is not debug', 'LOG_LEVEL is debug (logs too much, may include personal data)');
 
         $this->section('Security');
-        $this->check(config('session.secure') === true, 'Session cookies are HTTPS-only', 'SESSION_SECURE_COOKIE is not true');
         $this->check(filled(config('sanctum.expiration')), 'App tokens expire (' . config('sanctum.expiration') . ' min)', 'Sanctum tokens never expire');
         $dbUser = (string) config('database.connections.' . config('database.default') . '.username');
         $this->check($dbUser !== 'root', 'Database user is not root', 'Database user is root — use a least-privilege account');
@@ -54,8 +52,14 @@ class Preflight extends Command
         $this->warnIf($this->placeholder(substr(strrchr((string) config('mail.from.address'), '@') ?: '', 1)),
             'MAIL_FROM_ADDRESS (' . config('mail.from.address') . ') is not on a real domain: mail may be rejected as spam');
         $this->warnIf(config('queue.default') === 'sync', 'QUEUE_CONNECTION is sync: emails are sent during the request; a slow mail server slows checkout and registration');
-        // file_exists also sees Windows junctions, which is_link/is_dir do not.
-        $this->warnIf(!file_exists(public_path('storage')), 'public/storage link missing: run php artisan storage:link');
+        // Uploads must land in the website's storage so admins and the website see the same files.
+        $root = (string) config('filesystems.disks.public.root');
+        $this->check(filled(env('PICKSELL_PUBLIC_STORAGE_ROOT')) && is_dir($root) && is_writable($root),
+            "Shared storage is the website's folder ({$root})",
+            'PICKSELL_PUBLIC_STORAGE_ROOT must be the website\'s storage/app/public folder, existing and writable (now: ' . $root . ')');
+        $storageUrl = (string) config('filesystems.disks.public.url');
+        $this->check(str_starts_with($storageUrl, 'https://'), "Files are served from {$storageUrl}",
+            'PICKSELL_PUBLIC_STORAGE_URL should be the website\'s https /storage address (now: ' . $storageUrl . ')');
 
         $this->section('Database');
         try {
@@ -68,10 +72,12 @@ class Preflight extends Command
             $ran = DB::table('migrations')->pluck('migration')->all();
             $pending = collect(glob(database_path('migrations/*.php')))->map(fn ($f) => basename($f, '.php'))->diff($ran)->values();
             $this->check($pending->isEmpty(), 'No pending migrations', $pending->count() . ' pending migration(s): ' . $pending->implode(', '));
-            if (Schema::hasTable('ledger_entries')) {
-                $sum = (int) DB::table('ledger_entries')->sum('amount_cents');
-                $this->check($sum === 0, 'Ledger balances', "Ledger is out of balance by {$sum} centavos");
-            }
+            // Tables the website's migrations create; the app depends on all of them.
+            $missing = collect(['users', 'products', 'product_images', 'carts', 'cart_items', 'orders', 'order_status_histories',
+                'return_requests', 'return_request_events', 'product_reviews', 'messages', 'notifications', 'complaints',
+                'wishlist_items', 'recently_viewed_products', 'personal_access_tokens'])->reject(fn ($table) => Schema::hasTable($table));
+            $this->check($missing->isEmpty(), 'Website tables present',
+                'Missing tables: ' . $missing->implode(', ') . ' — run the website\'s migrations (php artisan migrate in the PickSell project) first');
         } catch (Throwable $e) {
             $this->check(false, '', 'Database not reachable: ' . $e->getMessage());
         }
@@ -79,9 +85,7 @@ class Preflight extends Command
         $this->section('Business rules');
         $methods = collect(config('picksell.payment_methods'))->where('available', true)->pluck('code')->all();
         $this->check($methods === ['cod'], 'Cash on Delivery is the only payment method', 'Payment methods other than COD are enabled: ' . implode(', ', $methods));
-        $this->info('  • Rider pay policy: ' . app(RiderPay::class)->status() . ' (needs approval before it is set to active)');
-        $this->info('  • Tax withholding (RR 16-2023): ' . (config('picksell.finance.withholding.enabled') ? 'ENABLED — confirm it was professionally reviewed' : 'off'));
-        $this->info('  • Payout two-person rule: ' . (config('picksell.finance.payout_requires_second_admin') ? 'on' : 'off'));
+        $this->info('  • Commission rate: ' . config('app.platform_commission_rate') . '% (must equal the website\'s PLATFORM_COMMISSION_RATE)');
         $this->info('  • Shown and scheduled in: ' . config('app.display_timezone') . ' / ' . config('app.schedule_timezone'));
 
         $this->newLine();

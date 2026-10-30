@@ -9,8 +9,9 @@ import 'package:picksell/services/cart_service.dart';
 import 'package:picksell/services/wishlist_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// In-memory stand-in for the Laravel buyer API, enough for widget tests
-/// of cart → checkout → orders. Prices are computed like CheckoutPricing.
+/// In-memory stand-in for the buyer API, enough for widget tests of sign-up,
+/// cart → checkout → orders. Prices follow the website's checkout rules
+/// (App\Services\CartQuote): no fees, a product voucher code is case-sensitive.
 class FakeBuyerApi {
   FakeBuyerApi() {
     reset();
@@ -19,7 +20,7 @@ class FakeBuyerApi {
   final List<http.Request> requests = [];
   late List<Map<String, dynamic>> cart;
   int nextLineId = 100;
-  String? placeError; // 'conflict' → 409
+  String? placeError; // 'stock' → 422 item_ids
   Map<String, dynamic>? orderDetail;
 
   static const shirt = {
@@ -38,6 +39,8 @@ class FakeBuyerApi {
     'is_featured': false,
     'is_available': true,
     'wishlisted': false,
+    'voucher_code': 'TEE10',
+    'voucher_discount': 10.0,
     'seller': {'id': 3, 'name': 'Island Threads', 'location': 'Cebu City, Cebu', 'verified': true},
   };
 
@@ -60,51 +63,67 @@ class FakeBuyerApi {
     'seller': {'id': 3, 'name': 'Island Threads', 'location': 'Cebu City, Cebu', 'verified': true},
   };
 
+  static const deliveryAddress = {
+    'recipient_name': 'Juan Dela Cruz',
+    'phone': '09171234567',
+    'province': 'Metro Manila',
+    'municipality': 'Quezon City',
+    'barangay': 'Diliman',
+    'street': 'Rizal Ave',
+    'house_no': '123',
+    'full_address': '123, Rizal Ave, Diliman, Quezon City, Metro Manila',
+    'complete': true,
+  };
+
   void reset() {
     requests.clear();
     placeError = null;
     cart = [
-      {'id': 1, 'product': shirt, 'quantity': 1, 'variation_ids': [11, 21], 'variation_label': 'White, M'},
+      {'id': 1, 'product': shirt, 'quantity': 1, 'variation_ids': [11], 'variation_label': 'Color: White'},
       {'id': 2, 'product': mug, 'quantity': 2, 'variation_ids': <int>[], 'variation_label': null},
     ];
   }
 
-  Map<String, dynamic> _quote(Iterable<Map<String, dynamic>> lines, {String shipping = 'standard', String? voucher}) {
+  Map<String, dynamic> _quote(Iterable<Map<String, dynamic>> lines, {String? voucher}) {
     final items = [
       for (final l in lines)
-        {
-          'cart_item_id': l['id'],
-          'product': l['product'],
-          'variation_ids': l['variation_ids'],
-          'variation_label': l['variation_label'],
-          'quantity': l['quantity'],
-          'available_stock': (l['product'] as Map)['stock'],
-          'unit_price': (l['product'] as Map)['price'],
-          'line_total': ((l['product'] as Map)['price'] as double) * (l['quantity'] as int),
-          'discount': 0.0,
-          'issue': null,
-        },
+        () {
+          final product = l['product'] as Map;
+          final lineTotal = (product['price'] as double) * (l['quantity'] as int);
+          final pct = voucher != null && voucher == product['voucher_code'] ? product['voucher_discount'] as double : 0.0;
+          return {
+            'cart_item_id': l['id'],
+            'product': product,
+            'variation_ids': l['variation_ids'],
+            'variation_label': l['variation_label'],
+            'quantity': l['quantity'],
+            'available_stock': product['stock'],
+            'unit_price': product['price'],
+            'line_total': lineTotal,
+            'discount': lineTotal * pct / 100,
+            'issue': null,
+          };
+        }(),
     ];
     final merch = items.fold<double>(0, (s, i) => s + (i['line_total'] as double));
-    final fee = shipping == 'express' ? 120.0 : 45.0;
-    final discount = voucher == 'SAVE50' && merch >= 500 ? 50.0 : 0.0;
+    final discount = items.fold<double>(0, (s, i) => s + (i['discount'] as double));
     return {
       'groups': items.isEmpty
           ? []
           : [
-              {'seller': shirt['seller'], 'items': items, 'subtotal': merch, 'discount': discount, 'shipping_fee': fee},
+              {'seller': shirt['seller'], 'items': items, 'subtotal': merch, 'discount': discount, 'shipping_fee': 0.0},
             ],
-      'shipping_option': {'code': shipping, 'name': shipping == 'express' ? 'Picksell Express' : 'Picksell Standard', 'fee': fee, 'min_days': 3, 'max_days': 5, 'official': true, 'estimated_from': '2026-10-24', 'estimated_to': '2026-10-26'},
-      'voucher': discount > 0 ? {'code': 'SAVE50', 'title': '₱50 Off', 'discount': discount} : null,
-      'voucher_error': voucher != null && discount == 0 ? 'We couldn’t find that voucher code.' : null,
+      'shipping_option': null,
+      'voucher': discount > 0 ? {'code': voucher, 'title': 'Product voucher', 'discount': discount} : null,
+      'voucher_error': voucher != null && discount == 0 ? 'That voucher doesn’t apply to the selected items. Product vouchers are case-sensitive.' : null,
       'has_issues': false,
       'item_count': items.fold<int>(0, (s, i) => s + (i['quantity'] as int)),
       'totals': {
         'merchandise_subtotal': merch,
-        'shipping_total': items.isEmpty ? 0 : fee,
+        'shipping_total': 0.0,
         'discount_total': discount,
-        'service_fee': 0,
-        'total': items.isEmpty ? 0 : merch - discount + fee,
+        'service_fee': 0.0,
+        'total': merch - discount,
       },
     };
   }
@@ -115,7 +134,8 @@ class FakeBuyerApi {
   Future<http.Response> handle(http.Request r) async {
     requests.add(r);
     final path = r.url.path.replaceFirst(RegExp(r'^/api'), '');
-    final body = r.body.isEmpty ? <String, dynamic>{} : jsonDecode(r.body) as Map<String, dynamic>;
+    final isJson = (r.headers['content-type'] ?? '').contains('json');
+    final body = r.body.isEmpty || !isJson ? <String, dynamic>{} : jsonDecode(r.body) as Map<String, dynamic>;
 
     switch ((r.method, path)) {
       case ('GET', '/buyer/cart'):
@@ -125,47 +145,58 @@ class FakeBuyerApi {
       case ('POST', '/buyer/cart'):
         final product = body['product_id'] == 7 ? shirt : mug;
         final ids = (body['variation_ids'] as List? ?? []).cast<int>();
-        if (product == shirt && ids.length < 2) {
-          return _json({'message': 'Please select a size.', 'errors': {'variation_ids': ['Please select a size.']}}, 422);
+        if (ids.length > 1) {
+          return _json({'message': 'Choose one option.', 'errors': {'variation_ids': ['Choose one option.']}}, 422);
         }
-        cart.add({'id': nextLineId, 'product': product, 'quantity': body['quantity'], 'variation_ids': ids, 'variation_label': ids.isEmpty ? null : 'Black, L'});
-        return _json({'message': 'added', 'cart_item_id': nextLineId++, 'cart_count': 99}, 201);
+        cart.add({'id': nextLineId, 'product': product, 'quantity': body['quantity'], 'variation_ids': ids, 'variation_label': ids.isEmpty ? null : 'Size: M'});
+        return _json({'message': '${product['name']} added to cart.', 'cart_item_id': nextLineId++, 'cart_count': 99}, 201);
       case ('POST', '/buyer/checkout/quote'):
         final ids = (body['item_ids'] as List).cast<int>();
-        return _json({'quote': _quote(cart.where((l) => ids.contains(l['id'])), shipping: body['shipping_option'] ?? 'standard', voucher: body['voucher_code'])});
+        return _json({'quote': _quote(cart.where((l) => ids.contains(l['id'])), voucher: body['voucher_code']), 'delivery_address': deliveryAddress});
       case ('POST', '/buyer/checkout'):
-        if (placeError == 'conflict') {
-          return _json({'message': 'Some items in your order changed (stock or availability). Please review your cart.'}, 409);
+        if (placeError == 'stock') {
+          return _json({'message': 'Not enough stock for: Cotton Basic Tee.', 'errors': {'item_ids': ['Not enough stock for: Cotton Basic Tee.']}}, 422);
         }
         final ids = (body['item_ids'] as List).cast<int>();
-        final q = _quote(cart.where((l) => ids.contains(l['id'])), shipping: body['shipping_option'] ?? 'standard', voucher: body['voucher_code']);
+        final q = _quote(cart.where((l) => ids.contains(l['id'])), voucher: body['voucher_code']);
         cart.removeWhere((l) => ids.contains(l['id']));
         return _json({
           'message': 'Order placed! We’ll notify you as it moves.',
-          'checkout_ref': 'CO-TEST',
-          'totals': q['totals'],
+          'checkout_ref': 'ORD-TESTTEST',
+          'total': (q['totals'] as Map)['total'],
           'orders': [
-            {'id': 501, 'order_number': 'PS-10000001', 'status': 'placed', 'tab': 'to_ship', 'seller': shirt['seller'], 'product_id': 7, 'product_name': 'Cotton Basic Tee', 'quantity': 1, 'unit_price': 400, 'total': 445, 'created_at': '2026-10-21T10:00:00+08:00'},
+            {'id': 501, 'order_number': 'ORD-TESTTEST', 'status': 'placed', 'tab': 'to_ship', 'seller': shirt['seller'], 'product_id': 7, 'product_name': 'Cotton Basic Tee', 'quantity': 1, 'unit_price': 400, 'total': 400, 'created_at': '2026-10-21T10:00:00+08:00'},
           ],
         }, 201);
       case ('DELETE', '/buyer/cart'):
         final ids = (body['item_ids'] as List).cast<int>();
         cart.removeWhere((l) => ids.contains(l['id']));
         return _json({'cart': _quote(cart)});
-      case ('GET', '/buyer/addresses'):
-        return _json({
-          'addresses': [
-            {'id': 9, 'label': 'home', 'recipient_name': 'Juan Dela Cruz', 'phone': '09171234567', 'province': 'Metro Manila', 'municipality': 'Quezon City', 'barangay': 'Diliman', 'street': 'Rizal Ave', 'full_address': '123 Rizal Ave, Brgy. Diliman, Quezon City, Metro Manila', 'is_default': true},
-          ],
-        });
-      case ('GET', '/buyer/vouchers'):
-        return _json({'platform': [], 'store': []});
       case ('GET', '/buyer/wishlist'):
         return _json({'products': []});
       case ('GET', '/buyer/notifications'):
         return _json({'notifications': [], 'unread_count': 0});
       case ('GET', '/buyer/orders/options'):
-        return _json({'cancel_reasons': ['Ordered by mistake'], 'report_categories': [], 'return_reasons': [], 'refund_methods': [], 'return_window_days': 7});
+        return _json({
+          'cancel_reasons': ['Ordered by mistake'],
+          'report_categories': [],
+          'return_reasons': ['Damaged item', 'Wrong item received', 'Wrong size', 'Not as described', 'Other'],
+          'refund_methods': [],
+        });
+
+      // Sign-up, the website's flow.
+      case ('POST', '/register/check-contact'):
+        return body['email'] == 'taken@example.com'
+            ? _json({'message': 'This email is already registered.', 'errors': {'email': ['This email is already registered. Try logging in instead.']}}, 422)
+            : _json({'message': 'Available.'});
+      case ('POST', '/register/email-code'):
+        return _json({'message': 'We sent a 6-digit code to your email.', 'masked_email': 'j***n@example.com', 'expires_in': 300, 'resend_in': 60});
+      case ('POST', '/register/email-code/verify'):
+        return body['code'] == '123456'
+            ? _json({'verified': true, 'message': 'Email verified.', 'registration_token': 'reg-token'})
+            : _json({'message': 'That code is incorrect.', 'errors': {'code': ['That code is incorrect. You have 4 tries left.']}}, 422);
+      case ('POST', '/register'):
+        return _json({'status': 'pending', 'message': 'Registration submitted! Please wait for admin approval. You will be notified via email.'}, 201);
     }
 
     final cartItem = RegExp(r'^/buyer/cart/(\d+)$').firstMatch(path);
@@ -206,24 +237,6 @@ class FakeBuyerApi {
           : _json({'message': 'The code is incorrect or has expired. Request a new one.', 'errors': {'code': ['The code is incorrect or has expired. Request a new one.']}}, 422);
     }
 
-    // Return cases: accept → resolved, decline → escalated, reply → back to review.
-    final returnStep = RegExp(r'^/buyer/returns/(\d+)/(accept|decline|reply)$').firstMatch(path);
-    if (returnStep != null && r.method == 'POST') {
-      final (stage, label) = switch (returnStep.group(2)) {
-        'accept' => ('resolved', 'Resolution agreed — in progress'),
-        'decline' => ('escalated', 'Picksell is deciding'),
-        _ => ('requested', 'Waiting for Picksell review'),
-      };
-      return _json({
-        'message': 'ok',
-        'return_request': {
-          'id': int.parse(returnStep.group(1)!), 'status': stage == 'resolved' ? 'processing' : 'under_review', 'stage': stage,
-          'stage_label': label, 'awaiting': null, 'quantity': 1, 'reason': 'Damaged or defective item',
-          'refund_amount': 300, 'refund_to': 'Cash, handed over by a Picksell rider', 'requested_at': '2026-10-24T10:00:00+08:00',
-        },
-      });
-    }
-
     if (r.method == 'GET' && path == '/products/7') {
       return _json({
         'product': {
@@ -237,7 +250,7 @@ class FakeBuyerApi {
           'seller': {...(shirt['seller'] as Map), 'rating': 4.8, 'review_count': 12, 'positive_rate': 98, 'product_count': 4},
           'rating_summary': {'average': 4.5, 'count': 2, 'distribution': {'5': 1, '4': 1, '3': 0, '2': 0, '1': 0}},
           'top_reviews': [],
-          'shipping': {'code': 'standard', 'name': 'Picksell Standard', 'fee': 45, 'estimated_from': '2026-10-24', 'estimated_to': '2026-10-26'},
+          'shipping': null,
           'vouchers': [],
         },
       });

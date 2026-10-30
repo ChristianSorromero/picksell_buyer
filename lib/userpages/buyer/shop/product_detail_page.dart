@@ -6,7 +6,6 @@ import '../../../models/catalog.dart';
 import '../../../models/chat.dart';
 import '../../../services/cart_service.dart';
 import '../../../services/catalog_service.dart';
-import '../../../services/recently_viewed_service.dart';
 import '../../../services/wishlist_service.dart';
 import '../../chats_page.dart';
 import '../nav.dart';
@@ -32,7 +31,6 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   Future<ProductDetail> _load() async {
     final d = await _catalog.product(widget.productId);
     WishlistStore.instance.sync([d.product]);
-    RecentlyViewed.add(d.product.id);
     return d;
   }
 

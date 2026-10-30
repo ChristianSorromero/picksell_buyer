@@ -7,8 +7,8 @@ import '../../../services/order_service.dart';
 import 'evidence_picker.dart';
 import 'refund_status_page.dart';
 
-/// BUY-C11 Request Return — quantity, reason, refund destination, details
-/// and photos. Eligibility (window, once per order) is enforced server-side.
+/// BUY-C11 Request Return — quantity, reason, details and photos, as on the
+/// website. Eligibility (delivered, once per order) is enforced server-side.
 class ReturnRequestPage extends StatefulWidget {
   const ReturnRequestPage({super.key, required this.order});
 
@@ -23,8 +23,6 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
   final _details = TextEditingController();
   late int _quantity = widget.order.summary.quantity;
   String? _reason;
-  // Cash on Delivery only: refunds are handed over in cash by a rider.
-  String _refundTo = 'cash';
   List<String> _photos = [];
   final Map<String, String> _errors = {};
   bool _busy = false;
@@ -39,6 +37,7 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
     setState(() {
       _errors.clear();
       if (_reason == null) _errors['reason'] = 'Select a reason for the return.';
+      if (_details.text.trim().isEmpty) _errors['details'] = 'Describe the problem with the item.';
     });
     if (_errors.isNotEmpty) return;
     setState(() => _busy = true);
@@ -47,7 +46,6 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
         widget.order.id,
         quantity: _quantity,
         reason: _reason!,
-        refundTo: _refundTo,
         details: _details.text,
         photos: _photos,
       );
@@ -61,6 +59,8 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
         _busy = false;
         final m = e.fieldError('reason') ?? e.fieldError('quantity');
         if (m != null) _errors['reason'] = m;
+        final d = e.fieldError('details');
+        if (d != null) _errors['details'] = d;
       });
       if (!e.isValidation) PsDialog.error(context, title: 'Couldn’t submit return', message: e.message);
     }
@@ -113,30 +113,21 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
             ),
             if (_errors['reason'] != null) PsFieldError(_errors['reason']!),
             const SizedBox(height: PsSpace.md),
-            const PsFieldLabel('Refund to'),
-            Wrap(
-              spacing: PsSpace.xs,
-              runSpacing: PsSpace.xs,
-              children: [
-                for (final (code, name) in options.refundMethods)
-                  PsOptionChip(label: name, selected: _refundTo == code, onTap: () => setState(() => _refundTo = code)),
-              ],
-            ),
-            const SizedBox(height: PsSpace.md),
-            const PsFieldLabel('Additional Details'),
+            const PsFieldLabel('What’s wrong with the item?'),
             TextField(
               controller: _details,
               maxLines: 4,
               maxLength: 2000,
               style: PsText.input,
-              decoration: psInputDecoration(hint: 'Explain the issue with the item…'),
+              decoration: psInputDecoration(hint: 'Explain the issue with the item…', hasError: _errors['details'] != null),
             ),
+            if (_errors['details'] != null) PsFieldError(_errors['details']!),
             const SizedBox(height: PsSpace.xs),
             const PsFieldLabel('Upload Photos'),
-            EvidencePicker(paths: _photos, max: 4, onChanged: (p) => setState(() => _photos = p)),
+            EvidencePicker(paths: _photos, max: 5, onChanged: (p) => setState(() => _photos = p)),
             const SizedBox(height: PsSpace.md),
             Text(
-              'Returns can be requested within ${options.returnWindowDays} days of receiving the order. '
+              'The seller reviews your request first. If they decline it, PickSell support reviews it. '
               'Please keep the item in its original packaging with all accessories.',
               style: PsText.caption,
             ),

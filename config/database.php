@@ -131,8 +131,10 @@ return [
     |
     */
 
+    // The website's `migrations` table belongs to its own migrations; this app records its one
+    // migration (the login-token table) separately so the two never trip over each other.
     'migrations' => [
-        'table' => 'migrations',
+        'table' => 'mobile_api_migrations',
         'update_date_on_publish' => true,
     ],
 

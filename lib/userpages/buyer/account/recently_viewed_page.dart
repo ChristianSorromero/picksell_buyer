@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../../components/components.dart';
 import '../../../models/catalog.dart';
-import '../../../services/catalog_service.dart';
 import '../../../services/recently_viewed_service.dart';
 import '../../../services/wishlist_service.dart';
 import '../nav.dart';
 
-/// BUY-A06 Recently Viewed — ids stored on-device, products re-fetched so
-/// price and stock are current. Products that were removed drop out.
+/// BUY-A06 Recently Viewed — the same list as the website's "Recently
+/// Viewed" row. Products that can no longer be bought drop out.
 class RecentlyViewedPage extends StatefulWidget {
   const RecentlyViewedPage({super.key});
 
@@ -17,20 +16,11 @@ class RecentlyViewedPage extends StatefulWidget {
 }
 
 class _RecentlyViewedPageState extends State<RecentlyViewedPage> {
+  final _service = RecentlyViewedService();
   Key _key = UniqueKey();
 
   Future<List<Product>> _load() async {
-    final catalog = CatalogService();
-    final ids = await RecentlyViewed.ids();
-    final results = await Future.wait(ids.map((id) async {
-      try {
-        return (await catalog.product(id)).product;
-      } on ApiException catch (e) {
-        if (e.isNetworkError) rethrow;
-        return null; // unavailable now
-      }
-    }));
-    final products = results.whereType<Product>().toList();
+    final products = await _service.list();
     WishlistStore.instance.sync(products);
     return products;
   }
@@ -43,7 +33,7 @@ class _RecentlyViewedPageState extends State<RecentlyViewedPage> {
         actions: [
           TextButton(
             onPressed: () async {
-              await RecentlyViewed.clear();
+              await _service.clear();
               setState(() => _key = UniqueKey());
             },
             child: const Text('Clear'),

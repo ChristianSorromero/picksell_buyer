@@ -38,10 +38,13 @@ return [
             'report' => false,
         ],
 
+        // The Picksell website's public storage: product photos, ID uploads, return and complaint
+        // evidence. Point it at the website's storage/app/public folder (same machine) and its
+        // /storage URL, so files uploaded from the app are the same files the website shows.
         'public' => [
             'driver' => 'local',
-            'root' => storage_path('app/public'),
-            'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
+            'root' => env('PICKSELL_PUBLIC_STORAGE_ROOT', storage_path('app/public')),
+            'url' => rtrim(env('PICKSELL_PUBLIC_STORAGE_URL', rtrim(env('APP_URL', 'http://localhost'), '/').'/storage'), '/'),
             'visibility' => 'public',
             'throw' => false,
             'report' => false,

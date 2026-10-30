@@ -6,65 +6,53 @@ use App\Http\Controllers\Controller;
 use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\Product;
-use App\Models\ProductVariation;
-use App\Services\CheckoutPricing;
+use App\Models\WishlistItem;
+use App\Services\CartQuote;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
-/** COM-C10/C12/C13 — the buyer's server-side cart. */
+/**
+ * The buyer's cart, the same rows the website's cart shows. Like the website, a line holds a
+ * product and at most one variation, and adding the same choice again adds to its quantity.
+ */
 class CartController extends Controller
 {
-    public function __construct(private CheckoutPricing $pricing) {}
+    public function __construct(private CartQuote $quote) {}
 
     private function cart(Request $request): Cart
     {
         return Cart::firstOrCreate(['buyer_id' => $request->user()->id]);
     }
 
-    private function items(Cart $cart)
-    {
-        return CartItem::where('cart_id', $cart->id)->with('product.seller')->latest()->get();
-    }
-
-    /** GET /buyer/cart?voucher_code= */
+    /** GET /buyer/cart — every line, priced, grouped by seller. */
     public function index(Request $request)
     {
-        $quote = $this->pricing->quote($this->items($this->cart($request)), 'standard', $request->query('voucher_code'));
-        return response()->json(['cart' => $quote]);
+        $items = CartItem::where('cart_id', $this->cart($request)->id)->with('product.seller', 'variation')->latest()->get();
+        $wishlist = WishlistItem::where('user_id', $request->user()->id)->pluck('product_id')->all();
+
+        return response()->json(['cart' => $this->quote->quote($items, null, $wishlist)]);
     }
 
-    /** POST /buyer/cart {product_id, quantity, variation_ids[]} */
+    /** POST /buyer/cart {product_id, quantity, variation_ids?: [id] | variation_id?} */
     public function store(Request $request)
     {
         $data = $request->validate([
             'product_id'      => 'required|integer|exists:products,id',
             'quantity'        => 'required|integer|min:1',
-            'variation_ids'   => 'nullable|array',
+            'variation_id'    => 'nullable|integer',
+            'variation_ids'   => 'nullable|array|max:1',
             'variation_ids.*' => 'integer',
-        ]);
+        ], ['variation_ids.max' => 'Choose one option.']);
 
-        $product = Product::with('variations')->findOrFail($data['product_id']);
-        $variationIds = $this->validateVariations($product, $data['variation_ids'] ?? []);
+        $product = Product::with('variations', 'seller')->findOrFail($data['product_id']);
+        abort_unless($product->isPurchasable(), 422, 'This product is no longer available.');
+        $variationId = $this->variation($product, $data['variation_id'] ?? ($data['variation_ids'][0] ?? null));
         $cart = $this->cart($request);
 
-        $existing = CartItem::where('cart_id', $cart->id)->where('product_id', $product->id)->get()
-            ->first(fn ($i) => $this->pricing->variationIds($i) == $variationIds);
-
-        $quantity = ($existing?->quantity ?? 0) + $data['quantity'];
-        $this->assertQuantity($product, $variationIds, $quantity);
-
-        if ($existing) {
-            $existing->update(['quantity' => $quantity]);
-            $item = $existing;
-        } else {
-            $item = CartItem::create([
-                'cart_id'       => $cart->id,
-                'product_id'    => $product->id,
-                'variation_id'  => $variationIds[0] ?? null,
-                'variation_ids' => $variationIds ?: null,
-                'quantity'      => $quantity,
-            ]);
-        }
+        $item = CartItem::firstOrNew(['cart_id' => $cart->id, 'product_id' => $product->id, 'variation_id' => $variationId]);
+        $this->assertStock($product, (int) $item->quantity + $data['quantity']);
+        $item->quantity = (int) $item->quantity + $data['quantity'];
+        $item->save();
 
         return response()->json([
             'message'      => "{$product->name} added to cart.",
@@ -79,22 +67,29 @@ class CartController extends Controller
         $this->authorizeItem($request, $item);
         $data = $request->validate([
             'quantity'        => 'sometimes|integer|min:1',
-            'variation_ids'   => 'sometimes|array',
+            'variation_ids'   => 'sometimes|array|max:1',
             'variation_ids.*' => 'integer',
-        ]);
+        ], ['variation_ids.max' => 'Choose one option.']);
 
-        $product = $item->product()->with('variations')->first();
-        $variationIds = array_key_exists('variation_ids', $data)
-            ? $this->validateVariations($product, $data['variation_ids'])
-            : $this->pricing->variationIds($item);
-        $quantity = $data['quantity'] ?? $item->quantity;
-        $this->assertQuantity($product, $variationIds, $quantity);
+        $product = $item->product()->with('variations', 'seller')->first();
+        if (array_key_exists('variation_ids', $data)) {
+            $variationId = $this->variation($product, $data['variation_ids'][0] ?? null);
+            $same = CartItem::where('cart_id', $item->cart_id)->where('product_id', $item->product_id)
+                ->where('variation_id', $variationId)->whereKeyNot($item->id)->first();
+            if ($same) {
+                // Switching to a choice already in the cart merges the two lines.
+                $same->increment('quantity', $data['quantity'] ?? $item->quantity);
+                $item->delete();
 
-        $item->update([
-            'quantity'      => $quantity,
-            'variation_id'  => $variationIds[0] ?? null,
-            'variation_ids' => $variationIds ?: null,
-        ]);
+                return $this->index($request);
+            }
+            $item->variation_id = $variationId;
+        }
+        if (isset($data['quantity'])) {
+            $this->assertStock($product, $data['quantity']);
+            $item->quantity = $data['quantity'];
+        }
+        $item->save();
 
         return $this->index($request);
     }
@@ -103,6 +98,7 @@ class CartController extends Controller
     {
         $this->authorizeItem($request, $item);
         $item->delete();
+
         return $this->index($request);
     }
 
@@ -111,6 +107,7 @@ class CartController extends Controller
     {
         $data = $request->validate(['item_ids' => 'required|array|min:1', 'item_ids.*' => 'integer']);
         CartItem::where('cart_id', $this->cart($request)->id)->whereIn('id', $data['item_ids'])->delete();
+
         return $this->index($request);
     }
 
@@ -129,41 +126,23 @@ class CartController extends Controller
         abort_if($item->cart->buyer_id !== $request->user()->id, 404);
     }
 
-    /** One option per variation type is required when the product has variations. */
-    private function validateVariations(Product $product, array $ids): array
+    private function variation(Product $product, ?int $id): ?int
     {
-        $ids = array_values(array_unique(array_map('intval', $ids)));
-        $types = $product->variations->pluck('type')->unique();
-        $chosen = $product->variations->whereIn('id', $ids);
-
-        if ($chosen->count() !== count($ids) || $chosen->pluck('type')->unique()->count() !== $chosen->count()) {
-            throw ValidationException::withMessages(['variation_ids' => 'Choose one option for each variation.']);
-        }
-        $missing = $types->diff($chosen->pluck('type'));
-        if ($missing->isNotEmpty()) {
-            throw ValidationException::withMessages(['variation_ids' => 'Please select a ' . strtolower($missing->first()) . '.']);
+        if ($id === null) return null;
+        if (! $product->variations->contains('id', $id)) {
+            throw ValidationException::withMessages(['variation_ids' => 'That option isn’t available for this product.']);
         }
 
-        // Stable order (by type) so the same choice always matches the same cart line.
-        return $chosen->sortBy('type')->pluck('id')->values()->all();
+        return $id;
     }
 
-    private function assertQuantity(Product $product, array $variationIds, int $quantity): void
+    private function assertStock(Product $product, int $quantity): void
     {
-        abort_if($product->status !== 'active', 422, 'This product is no longer available.');
-
-        $stock = min([(int) $product->stock, ...ProductVariation::whereIn('id', $variationIds)->pluck('stock')->map(fn ($s) => (int) $s)->all()]);
-        $max = min($stock, (int) config('picksell.max_quantity_per_item'));
-
-        if ($stock <= 0) {
+        if ($product->stock <= 0) {
             throw ValidationException::withMessages(['quantity' => 'This item is out of stock.']);
         }
-        if ($quantity > $max) {
-            throw ValidationException::withMessages([
-                'quantity' => $max < (int) config('picksell.max_quantity_per_item')
-                    ? "Only {$max} left in stock."
-                    : "Maximum {$max} per order for this item.",
-            ]);
+        if ($quantity > $product->stock) {
+            throw ValidationException::withMessages(['quantity' => "Only {$product->stock} left in stock."]);
         }
     }
 }

@@ -15,12 +15,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
 
-        $middleware->statefulApi();
-
+        // The app signs in with bearer tokens only; there are no browser sessions on this server.
         $middleware->alias([
-            'admin'  => \App\Http\Middleware\AdminMiddleware::class,
-            'seller' => \App\Http\Middleware\SellerMiddleware::class,
-            'buyer'  => \App\Http\Middleware\BuyerMiddleware::class,
             'active.buyer' => \App\Http\Middleware\EnsureActiveBuyer::class,
         ]);
     })

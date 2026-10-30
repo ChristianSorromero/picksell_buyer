@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../components/components.dart';
 import '../../../models/catalog.dart';
 import '../../../services/catalog_service.dart';
-import '../../../services/recently_viewed_service.dart';
 import '../../../services/wishlist_service.dart';
 import '../nav.dart';
 import '../shop_header.dart';
@@ -23,13 +22,10 @@ class _HomeTabState extends State<HomeTab> {
 
   Future<(HomeFeed, List<Product>)> _load() async {
     final feed = await _catalog.home();
-    WishlistStore.instance.sync([...feed.hotDiscounts, ...feed.featured, ...feed.recommended]);
+    WishlistStore.instance.sync([...feed.hotDiscounts, ...feed.featured, ...feed.recommended, ...feed.recentlyViewed]);
 
-    // BUY-A06: resolve recently viewed ids against current catalog data.
-    final ids = await RecentlyViewed.ids();
-    final known = {for (final p in [...feed.recommended, ...feed.featured, ...feed.hotDiscounts]) p.id: p};
-    final recent = ids.map((id) => known[id]).whereType<Product>().take(6).toList();
-    return (feed, recent);
+    // BUY-A06: the server's list, shared with the website.
+    return (feed, feed.recentlyViewed.take(6).toList());
   }
 
   @override

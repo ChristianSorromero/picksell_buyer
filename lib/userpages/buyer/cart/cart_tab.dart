@@ -10,6 +10,7 @@ import '../../../services/cart_service.dart';
 import '../../../services/catalog_service.dart';
 import '../../../services/checkout_service.dart';
 import '../nav.dart';
+import 'checkout_page.dart' show VoucherCodeSheet;
 
 /// Cart (COM-C12/C13/C14): seller groups, selection, quantity edits,
 /// variation changes, bulk delete, voucher choice and checkout.
@@ -98,7 +99,7 @@ class _CartTabState extends State<CartTab> {
       return;
     }
     try {
-      final q = await _checkout.quote(lineIds: ids, voucherCode: _voucherCode);
+      final q = (await _checkout.quote(lineIds: ids, voucherCode: _voucherCode)).quote;
       if (!mounted || id != _quoteRequest) return;
       setState(() => _selectionQuote = q);
       if (q.voucherError != null) {
@@ -207,19 +208,13 @@ class _CartTabState extends State<CartTab> {
   Future<void> _pickVoucher() async {
     final ids = _checkoutIds;
     if (ids.isEmpty) {
-      PsToast.show(context, 'Select items first to see vouchers that apply.');
+      PsToast.show(context, 'Select items first, then enter their product voucher code.');
       return;
     }
     final code = await PsBottomSheet.show<String>(
       context,
-      title: 'Select Voucher',
-      builder: (_) => PsVoucherSheet(
-        selectedCode: _voucherCode,
-        load: () async {
-          final d = await _checkout.vouchersFor(ids);
-          return (platform: d.platform, store: d.store);
-        },
-      ),
+      title: 'Product voucher',
+      builder: (_) => VoucherCodeSheet(initial: _voucherCode),
     );
     if (code == null) return;
     setState(() => _voucherCode = code.isEmpty ? null : code);

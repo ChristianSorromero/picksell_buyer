@@ -7,44 +7,47 @@ use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\Complaint;
 use App\Models\Order;
-use App\Models\Product;
-use App\Models\ProductVariation;
+use App\Models\ProductReview;
 use App\Models\ReturnRequest;
-use App\Services\ReturnWorkflow;
+use App\Models\ReturnRequestEvent;
+use App\Services\AdminNotificationService;
+use App\Services\Orders\OrderCancellationService;
 use App\Support\BuyerPresenter;
 use App\Support\OrderStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
-/** COM-C20 Order Card, BUY-C01…C14, API-C06 Order Service. */
+/** The buyer's orders, read from and written to the website's tables with the website's rules. */
 class OrderController extends Controller
 {
-    public const REPORT_CATEGORIES = ['Damaged Item', 'Missing Item', 'Wrong Item', 'Quality Issue', 'Delivery Delay', 'Other'];
-    public const RETURN_REASONS = ReturnRequest::REASONS;
-
-    public function __construct(private ReturnWorkflow $returns) {}
-
     private function find(Request $request, Order $order): Order
     {
         abort_if($order->buyer_id !== $request->user()->id, 404, 'Order not found.');
+
         return $order;
+    }
+
+    private function detail(Order $order)
+    {
+        $order->refresh()->load('seller', 'product', 'buyer', 'returnRequest.refund', 'statusHistories');
+
+        return response()->json(['order' => BuyerPresenter::orderDetail($order)]);
     }
 
     /** GET /buyer/orders?tab=to_ship|in_transit|out_for_delivery|to_rate|completed|cancelled|all */
     public function index(Request $request)
     {
-        $data = $request->validate(['tab' => ['nullable', Rule::in([...array_keys(OrderStatus::TABS), 'all'])]]);
-        $tab = $data['tab'] ?? 'all';
-
+        $data = $request->validate(['tab' => ['nullable', Rule::in(['all', ...array_keys(OrderStatus::TABS)])]]);
         $orders = Order::where('buyer_id', $request->user()->id)->with('seller', 'product')->latest()->get();
-        if ($tab !== 'all') {
-            $orders = $orders->filter(fn ($o) => OrderStatus::tab($o->canonical_status) === $tab);
-        }
 
-        $counts = collect(array_keys(OrderStatus::TABS))->mapWithKeys(fn ($t) => [$t => 0])->all();
-        Order::where('buyer_id', $request->user()->id)->get(['id', 'status', 'tracking_status', 'rating'])
-            ->each(function ($o) use (&$counts) { $counts[OrderStatus::tab($o->canonical_status)]++; });
+        $counts = collect(array_keys(OrderStatus::TABS))->mapWithKeys(fn ($tab) => [$tab => 0])->all();
+        $orders->each(function (Order $o) use (&$counts) { $counts[OrderStatus::tab($o)]++; });
+
+        $tab = $data['tab'] ?? 'all';
+        if ($tab !== 'all') {
+            $orders = $orders->filter(fn (Order $o) => OrderStatus::tab($o) === $tab);
+        }
 
         return response()->json([
             'orders' => $orders->map(fn ($o) => BuyerPresenter::orderCard($o))->values(),
@@ -54,200 +57,212 @@ class OrderController extends Controller
 
     public function show(Request $request, Order $order)
     {
-        $order = $this->find($request, $order)->load('seller', 'product', 'logistics', 'courier', 'events', 'returnRequest');
-        return response()->json(['order' => BuyerPresenter::orderDetail($order)]);
+        return $this->detail($this->find($request, $order));
     }
 
-    /** BUY-C09 — only before the seller hands the parcel over. */
-    public function cancel(Request $request, Order $order)
+    /** POST /buyer/orders/{id}/cancel {reason?} — website rule: Placed, Confirmed or Preparing only. */
+    public function cancel(Request $request, Order $order, OrderCancellationService $cancellations)
     {
-        $order = $this->find($request, $order);
-        $data = $request->validate(['reason' => 'required|string|max:200']);
+        $data = $request->validate(['reason' => ['nullable', 'string', 'max:1000']]);
+        $cancellations->cancel($this->find($request, $order), $request->user(), 'buyer', $data['reason'] ?? null);
 
-        if (!in_array($order->canonical_status, [OrderStatus::PLACED, OrderStatus::PREPARING], true)) {
-            return response()->json(['message' => 'This order can no longer be cancelled because it has already shipped.'], 422);
-        }
-
-        DB::transaction(function () use ($order, $data) {
-            $order->forceFill(['cancel_reason' => $data['reason'], 'cancelled_at' => now()]);
-            $order->update(['status' => 'cancelled']);
-
-            // Put the stock back.
-            Product::whereKey($order->product_id)->increment('stock', $order->quantity);
-            if ($order->variation_ids) {
-                ProductVariation::whereIn('id', $order->variation_ids)->increment('stock', $order->quantity);
-            }
-        });
-
-        return $this->show($request, $order->fresh());
+        return $this->detail($order);
     }
 
-    /** Rate a delivered order (doubles as the product review). */
+    /**
+     * POST /buyer/orders/{id}/rate {rating, feedback?} — the order rating the seller sees. Once the
+     * seller has confirmed delivery (completed) it is also the product review, as on the website.
+     */
     public function rate(Request $request, Order $order)
     {
-        $order = $this->find($request, $order);
+        $this->find($request, $order);
         $data = $request->validate([
             'rating'   => 'required|integer|min:1|max:5',
             'feedback' => 'nullable|string|max:1000',
         ]);
+        abort_unless(in_array(OrderStatus::of($order), OrderStatus::RATEABLE, true), 422, 'You can rate an order once it has been delivered.');
+        abort_if($order->rating !== null, 422, 'You already rated this order.');
 
-        if ($order->canonical_status !== OrderStatus::DELIVERED) {
-            return response()->json(['message' => 'You can rate an order once it has been delivered.'], 422);
+        $order->update(['rating' => $data['rating'], 'feedback' => $data['feedback'] ?? null]);
+        if ($order->status === 'completed' && $order->product_id) {
+            ProductReview::updateOrCreate(
+                ['product_id' => $order->product_id, 'buyer_id' => $order->buyer_id, 'order_id' => $order->id],
+                ['rating' => $data['rating'], 'body' => $data['feedback'] ?? null],
+            );
         }
 
-        $order->update($data + ['rated_at' => now()]);
-
-        return $this->show($request, $order->fresh());
+        return $this->detail($order);
     }
 
-    /** BUY-C10 — files a complaint into the admin disputes queue. */
+    /** POST /buyer/orders/{id}/report {category, details, evidence[]?} — becomes a complaint for admins. */
     public function report(Request $request, Order $order)
     {
-        $order = $this->find($request, $order);
+        $this->find($request, $order);
         $data = $request->validate([
-            'category'   => ['required', Rule::in(self::REPORT_CATEGORIES)],
+            'category'   => ['required', Rule::in(config('picksell.report_categories'))],
             'details'    => 'required|string|min:10|max:2000',
-            'evidence'   => 'nullable|array|max:3',
+            'evidence'   => 'nullable|array|max:5',
             'evidence.*' => 'image|mimes:jpg,jpeg,png,webp|max:5120',
-        ], ['details.min' => 'Please describe the issue in at least 10 characters.']);
+        ]);
+        abort_if(in_array(OrderStatus::of($order), ['placed', 'cancelled'], true), 422, 'You can report a problem once the seller is handling your order.');
 
-        $paths = collect($request->file('evidence', []))->map(fn ($f) => $f->store('uploads/complaints', 'local'))->all();
-
+        // The website's complaint page shows one evidence file.
+        $evidence = $request->file('evidence', [])[0] ?? null;
         $complaint = Complaint::create([
             'filed_by'        => $request->user()->id,
             'against_user_id' => $order->seller_id,
             'order_id'        => $order->id,
-            'category'        => $data['category'],
-            'subject'         => "[{$order->order_number}] {$data['category']}",
+            'subject'         => "{$data['category']} — order {$order->order_number}",
             'details'         => $data['details'],
-            'evidence_path'   => $paths[0] ?? null,
-            'evidence_paths'  => $paths ?: null,
+            'evidence_path'   => $evidence?->store('complaints', 'public'),
             'status'          => 'open',
         ]);
 
         return response()->json([
-            'message' => 'Report submitted. Our support team will get back to you within 24–48 hours.',
-            'ticket'  => ['id' => $complaint->id, 'reference' => 'TKT-' . str_pad($complaint->id, 6, '0', STR_PAD_LEFT), 'status' => 'open'],
+            'message' => 'Thanks, we received your report. PickSell support will review it.',
+            'ticket'  => $this->ticket($complaint->load('order')),
         ], 201);
     }
 
-    /** GET /buyer/support/tickets — BUY-A09 Support Ticket list. */
-    public function tickets(Request $request)
+    /**
+     * POST /buyer/orders/{id}/return {reason, details, quantity?, evidence[]?} — the website's
+     * return request (BuyerReturnRequestController): the seller reviews it first.
+     */
+    public function requestReturn(Request $request, Order $order, AdminNotificationService $notifications)
     {
-        $tickets = Complaint::where('filed_by', $request->user()->id)->with('order')->latest()->get()
-            ->map(fn ($c) => [
-                'id'           => $c->id,
-                'reference'    => 'TKT-' . str_pad($c->id, 6, '0', STR_PAD_LEFT),
-                'subject'      => $c->subject,
-                'category'     => $c->category,
-                'status'       => $c->status,
-                'order_number' => $c->order?->order_number,
-                'order_id'     => $c->order_id,
-                'admin_notes'  => $c->status === 'resolved' || $c->status === 'dismissed' ? $c->admin_notes : null,
-                'created_at'   => BuyerPresenter::date($c->created_at),
-                'updated_at'   => BuyerPresenter::date($c->updated_at),
+        $this->find($request, $order);
+        abort_unless(in_array($order->status, ['delivered', 'completed'], true), 422, 'Returns can only be requested for delivered orders.');
+        abort_if($order->returnRequest()->exists(), 409, 'A return request already exists for this order.');
+
+        // The app may send the label it showed; store the website's code.
+        $request->merge(['reason' => array_search($request->input('reason'), ReturnRequest::REASONS, true) ?: $request->input('reason')]);
+        // Same limits as the website: up to 5 photos or videos, 10 MB each ("evidence" from the app).
+        $fileRules = ['nullable', 'array', 'max:5'];
+        $eachFile = 'file|mimes:jpg,jpeg,png,webp,mp4,webm|max:10240';
+        $data = $request->validate([
+            'reason'        => ['required', Rule::in(array_keys(ReturnRequest::REASONS))],
+            'details'       => 'required|string|max:2000',
+            'quantity'      => 'sometimes|integer|min:1|max:'.$order->quantity,
+            'evidence'      => $fileRules,
+            'evidence.*'    => $eachFile,
+            'attachments'   => $fileRules,
+            'attachments.*' => $eachFile,
+        ]);
+        $files = [...$request->file('evidence', []), ...$request->file('attachments', [])];
+        abort_if(count($files) > 5, 422, 'Attach up to 5 photos or videos.');
+
+        $quantity = (int) ($data['quantity'] ?? $order->quantity);
+        $returnRequest = DB::transaction(function () use ($order, $data, $quantity, $files) {
+            $returnRequest = ReturnRequest::create([
+                'order_id' => $order->id,
+                'buyer_id' => $order->buyer_id,
+                'seller_id' => $order->seller_id,
+                'reason' => $data['reason'],
+                'details' => $data['details'],
+                'quantity' => $quantity,
+                'refund_amount' => round(((float) $order->amount / max((int) $order->quantity, 1)) * $quantity, 2),
+                'attachments' => collect($files)->map(fn ($file) => $file->store('return-requests', 'public'))->all(),
+                'status' => 'requested',
+            ]);
+            ReturnRequestEvent::create([
+                'return_request_id' => $returnRequest->id,
+                'actor_user_id' => $order->buyer_id,
+                'event_type' => 'request_submitted',
+                'from_status' => null,
+                'to_status' => 'requested',
+                'notes' => $data['details'],
+                'metadata' => ['reason' => $data['reason'], 'quantity' => $quantity],
             ]);
 
-        return response()->json(['tickets' => $tickets, 'categories' => self::REPORT_CATEGORIES]);
-    }
-
-    /** BUY-C11 — within the return window after delivery. */
-    public function requestReturn(Request $request, Order $order)
-    {
-        $order = $this->find($request, $order)->load('returnRequest');
-        $data = $request->validate([
-            'quantity'   => "required|integer|min:1|max:{$order->quantity}",
-            'reason'     => ['required', Rule::in(self::RETURN_REASONS)],
-            'details'    => 'nullable|string|max:2000',
-            // COD only: refunds are paid in cash by a rider. Older app builds sent wallets.
-            'refund_to'  => 'nullable|in:cash',
-            'evidence'   => 'nullable|array|max:4',
-            'evidence.*' => 'image|mimes:jpg,jpeg,png,webp|max:5120',
-        ], ['refund_to.in' => 'Refunds are paid in cash by a Picksell rider.']);
-
-        if (!ReturnRequest::canBeRequestedFor($order)) {
-            return response()->json(['message' => ReturnRequest::refusalFor($order, $data['reason'])], 422);
-        }
-        if ($refusal = ReturnRequest::refusalFor($order, $data['reason'])) {
-            return response()->json(['message' => $refusal, 'errors' => ['reason' => [$refusal]]], 422);
-        }
-
-        $paths = collect($request->file('evidence', []))->map(fn ($f) => $f->store('uploads/returns', 'local'))->all();
-        $return = $this->returns->open($order, $request->user(), $data, $paths);
+            return $returnRequest;
+        });
+        $notifications->notifyAdmins(
+            'return.requested',
+            'Return/refund requested',
+            "A buyer requested a return for order {$order->order_number}.",
+            "/admin/returns/{$returnRequest->id}",
+        );
 
         return response()->json([
-            'message'        => 'Return request submitted.',
-            'return_request' => BuyerPresenter::returnRequest($return),
+            'message'        => 'Return/refund request sent to the seller.',
+            'return_request' => BuyerPresenter::returnRequest($returnRequest),
         ], 201);
     }
 
-    /** POST /buyer/orders/{order}/reorder — BUY-C13, current price & stock. */
+    /** POST /buyer/orders/{id}/reorder — puts the product back in the cart. */
     public function reorder(Request $request, Order $order)
     {
-        $order = $this->find($request, $order);
-        $product = Product::find($order->product_id);
+        $this->find($request, $order);
+        $product = $order->product()->with('seller')->first();
+        abort_unless($product && $product->isPurchasable() && $product->stock > 0, 422, 'This product is no longer available.');
 
-        if (!$product || $product->status !== 'active' || $product->stock <= 0) {
-            return response()->json(['message' => 'This item is currently unavailable.'], 422);
-        }
-
-        $variationIds = collect($order->variation_ids ?? [])
-            ->filter(fn ($id) => ProductVariation::whereKey($id)->where('stock', '>', 0)->exists())->values()->all();
-        $quantity = min($order->quantity, (int) $product->stock, (int) config('picksell.max_quantity_per_item'));
         $cart = Cart::firstOrCreate(['buyer_id' => $request->user()->id]);
-
-        $item = CartItem::where('cart_id', $cart->id)->where('product_id', $product->id)->get()
-            ->first(fn ($i) => ($i->variation_ids ?: []) == $variationIds);
-        if ($item) {
-            $item->update(['quantity' => min($item->quantity + $quantity, (int) $product->stock)]);
-        } else {
-            $item = CartItem::create([
-                'cart_id' => $cart->id, 'product_id' => $product->id, 'quantity' => $quantity,
-                'variation_id' => $variationIds[0] ?? null, 'variation_ids' => $variationIds ?: null,
-            ]);
-        }
+        $item = CartItem::firstOrNew(['cart_id' => $cart->id, 'product_id' => $product->id, 'variation_id' => null]);
+        $item->quantity = min((int) $item->quantity + (int) $order->quantity, (int) $product->stock);
+        $item->save();
 
         return response()->json([
-            'message'      => "{$product->name} added to cart.",
+            'message'      => "{$product->name} is back in your cart.",
             'cart_item_id' => $item->id,
-            'price_changed' => $order->unit_price !== null && round($product->effective_price, 2) != round($order->unit_price, 2),
-        ], 201);
+            'cart_count'   => (int) CartItem::where('cart_id', $cart->id)->sum('quantity'),
+        ]);
     }
 
-    /** GET /buyer/reorder — recently ordered products with current availability. */
+    /** GET /buyer/reorder — products from past orders, one entry each. */
     public function reorderCandidates(Request $request)
     {
         $orders = Order::where('buyer_id', $request->user()->id)->whereNotNull('product_id')
+            ->whereIn('status', ['delivered', 'completed', 'cancelled', 'returned'])
             ->with('product.seller', 'seller')->latest()->get()->unique('product_id')->take(20);
 
-        return response()->json(['items' => $orders->map(function ($o) {
-            $p = $o->product;
-            $current = $p ? round($p->effective_price, 2) : null;
+        return response()->json(['items' => $orders->map(function (Order $o) {
+            $product = $o->product;
+            $last = round($o->amount / max((int) $o->quantity, 1), 2);
+            $current = $product ? BuyerPresenter::money($product->effective_price) : null;
+
             return [
-                'order_id'       => $o->id,
-                'product'        => $p ? BuyerPresenter::product($p) : null,
-                'product_name'   => $o->product_name,
-                'seller_name'    => $o->seller?->business_name ?: $o->seller?->full_name,
-                'last_price'     => BuyerPresenter::money($o->unit_price ?? $o->amount / max(1, $o->quantity)),
-                'current_price'  => $current,
-                'price_changed'  => $current !== null && $o->unit_price !== null && $current != round($o->unit_price, 2),
-                'available'      => $p && $p->status === 'active' && $p->stock > 0,
-                'last_ordered_at' => BuyerPresenter::date($o->created_at),
+                'order_id'      => $o->id,
+                'product'       => $product ? BuyerPresenter::product($product) : null,
+                'product_name'  => $o->product_name,
+                'seller_name'   => $o->seller?->business_name ?: $o->seller?->full_name,
+                'last_price'    => $last,
+                'current_price' => $current,
+                'price_changed' => $current !== null && abs($current - $last) >= 0.01,
+                'available'     => $product && $product->isPurchasable() && $product->stock > 0,
             ];
         })->values()]);
+    }
+
+    /** GET /buyer/support/tickets — the buyer's complaints and their status on the website. */
+    public function tickets(Request $request)
+    {
+        $tickets = Complaint::where('filed_by', $request->user()->id)->with('order')->latest()->get();
+
+        return response()->json(['tickets' => $tickets->map(fn ($c) => $this->ticket($c))->values()]);
     }
 
     public function options()
     {
         return response()->json([
-            'cancel_reasons' => [
-                'Need to change delivery address', 'Need to change the variation or quantity',
-                'Found a better price elsewhere', 'Ordered by mistake', 'Other',
-            ],
-            'report_categories' => self::REPORT_CATEGORIES,
-            'return_reasons'    => self::RETURN_REASONS,
-            'refund_methods'    => config('picksell.refund_methods'),
-            'return_window_days' => (int) config('picksell.return_window_days'),
+            'cancel_reasons'     => config('picksell.cancel_reasons'),
+            'report_categories'  => config('picksell.report_categories'),
+            'return_reasons'     => array_values(ReturnRequest::REASONS),
+            'refund_methods'     => [],
         ]);
+    }
+
+    private function ticket(Complaint $c): array
+    {
+        return [
+            'id'           => $c->id,
+            'reference'    => 'PS-C'.str_pad((string) $c->id, 5, '0', STR_PAD_LEFT),
+            'subject'      => $c->subject,
+            'status'       => $c->status,
+            'order_number' => $c->order?->order_number,
+            'order_id'     => $c->order_id,
+            'admin_notes'  => $c->admin_notes,
+            'created_at'   => BuyerPresenter::date($c->created_at),
+            'updated_at'   => BuyerPresenter::date($c->updated_at),
+        ];
     }
 }

@@ -6,23 +6,19 @@ import '../../../page_transitions.dart';
 import '../../../services/account_service.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/cart_service.dart';
-import '../../../services/recently_viewed_service.dart';
 import '../../../services/wishlist_service.dart';
 import '../../landing_page1.dart';
-import '../cart/payment_method_page.dart';
 import '../nav.dart';
 import '../orders/reorder_page.dart';
-import 'address_book_page.dart';
 import 'change_password_page.dart';
 import 'edit_profile_page.dart';
 import 'help_support_page.dart';
 import 'my_picks_page.dart';
 import 'notifications_page.dart';
 import 'recently_viewed_page.dart';
-import 'voucher_wallet_page.dart';
 
-/// Account (BUY-A01…A12): summary, order shortcuts, saved items, address
-/// book, payment, vouchers, support and sign-out.
+/// Account (BUY-A01…A12): summary, order shortcuts, saved items, delivery
+/// address, payment, support and sign-out.
 class AccountTab extends StatefulWidget {
   const AccountTab({super.key});
 
@@ -66,7 +62,6 @@ class _AccountTabState extends State<AccountTab> {
     );
     if (!ok) return;
     await AuthService().logout();
-    await RecentlyViewed.clear();
     CartStore.instance.reset();
     WishlistStore.instance.clear();
     NotificationBadge.instance.value = 0;
@@ -116,8 +111,6 @@ class _AccountTabState extends State<AccountTab> {
                   PsMenuTile(icon: Icons.history_rounded, label: 'Recently Viewed', onTap: () => _push(const RecentlyViewedPage())),
                   const Divider(),
                   PsMenuTile(icon: Icons.replay_rounded, label: 'Buy Again', subtitle: 'Reorder past purchases', onTap: () => _push(const ReorderPage())),
-                  const Divider(),
-                  PsMenuTile(icon: Icons.confirmation_number_outlined, label: 'Voucher Wallet', onTap: () => _push(const VoucherWalletPage())),
                 ],
               ),
             ),
@@ -128,16 +121,17 @@ class _AccountTabState extends State<AccountTab> {
                 children: [
                   PsMenuTile(
                     icon: Icons.location_on_outlined,
-                    label: 'My Addresses',
-                    subtitle: a.defaultAddress?.fullAddress ?? 'Add a delivery address',
-                    onTap: () => _push(const AddressBookPage()),
+                    label: 'Delivery Address',
+                    subtitle: a.deliveryAddress?.complete == true ? a.deliveryAddress!.fullAddress : 'Add your delivery address',
+                    onTap: () => _push(EditProfilePage(profile: a.profile, focusAddress: true)),
                   ),
                   const Divider(),
                   PsMenuTile(
                     icon: Icons.payments_outlined,
-                    label: 'Payment Methods',
+                    label: 'Payment Method',
                     subtitle: 'Cash on Delivery',
-                    onTap: () => _push(PaymentMethodPage(readOnly: true, billingAddress: a.defaultAddress)),
+                    trailing: const SizedBox.shrink(),
+                    onTap: () => PsToast.show(context, 'PickSell orders are paid in cash when they arrive.'),
                   ),
                   const Divider(),
                   PsMenuTile(icon: Icons.person_outline_rounded, label: 'Edit Profile', onTap: () => _push(EditProfilePage(profile: a.profile))),

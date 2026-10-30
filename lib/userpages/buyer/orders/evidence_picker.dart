@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -42,7 +43,10 @@ class EvidencePicker extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.file(File(p), width: 80, height: 80, fit: BoxFit.cover),
+                // On the web image_picker returns a blob: URL, not a file path.
+                child: kIsWeb
+                    ? Image.network(p, width: 80, height: 80, fit: BoxFit.cover)
+                    : Image.file(File(p), width: 80, height: 80, fit: BoxFit.cover),
               ),
               Positioned(
                 top: 2,

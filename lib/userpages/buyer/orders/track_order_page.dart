@@ -70,7 +70,17 @@ class TrackOrderPage extends StatelessWidget {
                 lines: [PsOrderLineRow(name: s.productName, image: s.image, quantity: s.quantity, unitPrice: s.unitPrice, variationLabel: s.variationLabel)],
               ),
               const SizedBox(height: PsSpace.lg),
-              Text('Shipment History', style: PsText.heading),
+              if (o.tracking != null && o.tracking!.events.isNotEmpty) ...[
+                Text('Pickrush Tracking · ${o.tracking!.trackingNo}', style: PsText.heading),
+                const SizedBox(height: PsSpace.sm),
+                PsTrackingEventList(events: [
+                  // Oldest first, as the list expects; the API sends newest first.
+                  for (final scan in o.tracking!.events.reversed)
+                    TrackingEvent(status: 'scan', title: scan.headline, location: scan.location, occurredAt: scan.at),
+                ]),
+                const SizedBox(height: PsSpace.md),
+              ],
+              Text('Order History', style: PsText.heading),
               const SizedBox(height: PsSpace.sm),
               PsTrackingEventList(events: o.events),
               PsPrimaryButton(label: 'Contact Support', icon: Icons.support_agent_rounded, uppercase: false, onPressed: support),

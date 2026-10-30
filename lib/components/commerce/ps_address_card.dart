@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../core/theme/ps_colors.dart';
 import '../../core/theme/ps_tokens.dart';
 import '../../core/theme/ps_typography.dart';
-import '../../models/address.dart';
 import '../shared/ps_card.dart';
 
 /// COM-C18 Address Card — structured PH address with landmark.
@@ -22,22 +21,6 @@ class PsAddressCard extends StatelessWidget {
     this.trailing,
     this.selected = false,
   });
-
-  factory PsAddressCard.of(Address a, {Key? key, String? title, VoidCallback? onEdit, VoidCallback? onTap, Widget? trailing, bool selected = false}) =>
-      PsAddressCard(
-        key: key,
-        name: a.recipientName,
-        phone: a.displayPhone,
-        address: a.fullAddress,
-        label: a.label.label,
-        landmark: a.landmark,
-        isDefault: a.isDefault,
-        title: title,
-        onEdit: onEdit,
-        onTap: onTap,
-        trailing: trailing,
-        selected: selected,
-      );
 
   final String name;
   final String phone;

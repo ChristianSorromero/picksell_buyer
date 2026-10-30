@@ -3,24 +3,23 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../components/components.dart';
-import '../page_transitions.dart';
 import '../services/auth_service.dart';
-import 'buyer/buyer_shell.dart';
-import 'login.dart';
 
-/// Figma "Buyer Registration" 4 — enter the six-digit code emailed after
-/// sign-up (or after logging in to an unverified account). A correct code
-/// activates the buyer account and signs them in.
+/// Figma "Buyer Registration" — enter the six-digit code emailed during
+/// sign-up. As on the website, a correct code only proves the email: the
+/// page pops with the registration token and the form continues.
 class EmailVerificationPage extends StatefulWidget {
   const EmailVerificationPage({
     super.key,
     required this.email,
+    this.firstName,
     this.maskedEmail,
     this.expiresIn = const Duration(minutes: 5),
     this.resendIn = const Duration(seconds: 60),
   });
 
   final String email;
+  final String? firstName;
 
   /// "j***e@gmail.com" from the API; falls back to [email].
   final String? maskedEmail;
@@ -35,7 +34,6 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
   static const _codeLength = 6;
 
   final _auth = AuthService();
-  final _session = SessionManager();
   final _code = TextEditingController();
 
   late DateTime _expiresAt = DateTime.now().add(widget.expiresIn);
@@ -92,10 +90,11 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
       _error = null;
     });
 
-    final result = await _auth.verifyEmail(email: widget.email, code: _code.text);
+    final result = await _auth.verifyRegistrationCode(email: widget.email, code: _code.text);
     if (!mounted) return;
 
-    if (!result.success) {
+    final token = result.data?['registration_token'] as String?;
+    if (!result.success || token == null) {
       setState(() => _verifying = false);
       if (result.isNetworkError) {
         await PsDialog.error(context, title: 'Can’t reach Picksell', message: result.message);
@@ -105,27 +104,15 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
       return;
     }
 
-    final user = result.data?['user'] as Map<String, dynamic>?;
-    final token = result.data?['token'] as String?;
-    if (user != null && token != null) {
-      await _session.save(
-        token: token,
-        userId: user['id'] as int,
-        name: user['name']?.toString() ?? '',
-        email: user['email']?.toString() ?? '',
-      );
-    }
-    if (!mounted) return;
-
-    PsToast.success(context, result.message);
-    Navigator.of(context).pushAndRemoveUntil(fadeRoute(const BuyerDashboardPage()), (_) => false);
+    PsToast.success(context, 'Email verified');
+    Navigator.of(context).pop(token);
   }
 
   Future<void> _resend() async {
     if (_resending || _resendLeft > Duration.zero) return;
     setState(() => _resending = true);
 
-    final result = await _auth.resendCode(email: widget.email);
+    final result = await _auth.sendRegistrationCode(email: widget.email, firstName: widget.firstName);
     if (!mounted) return;
     setState(() => _resending = false);
 
@@ -144,18 +131,8 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
     } else if (result.isNetworkError) {
       await PsDialog.error(context, title: 'Can’t reach Picksell', message: result.message);
     } else {
-      await PsDialog.error(
-        context,
-        title: 'Couldn’t resend the code',
-        message: result.message,
-        secondaryLabel: 'Return to login',
-        onSecondary: _returnToLogin,
-      );
+      await PsDialog.error(context, title: 'Couldn’t resend the code', message: result.message);
     }
-  }
-
-  void _returnToLogin() {
-    Navigator.of(context).pushAndRemoveUntil(fadeRoute(const LoginPage()), (_) => false);
   }
 
   @override
@@ -169,9 +146,9 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
           onPressed: _code.text.length == _codeLength ? _verify : null,
         ),
         secondary: PsSecondaryButton(
-          label: 'Return to login',
+          label: 'Change email',
           expand: true,
-          onPressed: _verifying ? null : _returnToLogin,
+          onPressed: _verifying ? null : () => Navigator.of(context).pop(),
         ),
       ),
       body: ListView(
@@ -214,8 +191,9 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
           const SizedBox(height: PsSpace.lg),
           _ExpiryRow(expired: _expired, left: _clock(_expiresLeft)),
           const SizedBox(height: PsSpace.xs),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text('Didn’t receive the code?', style: PsText.bodyMuted),
               TextButton(

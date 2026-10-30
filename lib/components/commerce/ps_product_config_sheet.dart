@@ -24,10 +24,10 @@ class ProductSelection {
   final String? label;
 }
 
-/// COM-C10 Add-to-Cart / COM-C11 Buy-Now configurator. Validates that a
-/// variation is chosen for every type and that quantity stays within the
-/// stock of the chosen options, then runs [onSubmit] with a spinner and
-/// shows any server rejection inline instead of closing.
+/// COM-C10 Add-to-Cart / COM-C11 Buy-Now configurator. A cart line holds one
+/// option, as on the website, so choosing an option clears any other group.
+/// Quantity stays within the product's stock (the website's stock check).
+/// Runs [onSubmit] with a spinner and shows any server rejection inline.
 class PsProductConfigSheet extends StatefulWidget {
   const PsProductConfigSheet({
     super.key,
@@ -74,7 +74,7 @@ class _PsProductConfigSheetState extends State<PsProductConfigSheet> {
   late final Map<String, int> _selected = {
     for (final g in widget.detail.variationGroups)
       for (final o in g.options)
-        if (widget.initialVariationIds.contains(o.id)) g.name: o.id,
+        if (widget.initialVariationIds.take(1).contains(o.id)) g.name: o.id,
   };
   late int _quantity = widget.initialQuantity;
   Set<String> _missing = {};
@@ -83,35 +83,25 @@ class _PsProductConfigSheetState extends State<PsProductConfigSheet> {
 
   ProductDetail get d => widget.detail;
 
-  /// Lowest stock across the product and every chosen option.
-  int get _available {
-    var stock = d.product.stock;
-    for (final g in d.variationGroups) {
-      final id = _selected[g.name];
-      if (id == null) continue;
-      final option = g.options.firstWhere((o) => o.id == id);
-      if (option.stock < stock) stock = option.stock;
-    }
-    return stock;
-  }
+  int get _available => d.product.stock;
 
   int get _max => _available < d.maxQuantity ? _available : d.maxQuantity;
 
   Future<void> _submit() async {
-    final missing = d.variationGroups.where((g) => !_selected.containsKey(g.name)).map((g) => g.name).toSet();
-    if (missing.isNotEmpty) {
-      setState(() => _missing = missing);
+    if (d.variationGroups.isNotEmpty && _selected.isEmpty) {
+      setState(() => _missing = {for (final g in d.variationGroups) g.name});
       return;
     }
     if (_max <= 0) {
-      setState(() => _error = 'This option is out of stock.');
+      setState(() => _error = 'This item is out of stock.');
       return;
     }
 
-    final ids = [for (final g in d.variationGroups) _selected[g.name]!];
-    final label = d.variationGroups.isEmpty
+    final chosen = _selected.entries.firstOrNull;
+    final ids = [if (chosen != null) chosen.value];
+    final label = chosen == null
         ? null
-        : [for (final g in d.variationGroups) g.options.firstWhere((o) => o.id == _selected[g.name]).value].join(', ');
+        : '${chosen.key}: ${d.variationGroups.firstWhere((g) => g.name == chosen.key).options.firstWhere((o) => o.id == chosen.value).value}';
 
     setState(() {
       _busy = true;
@@ -177,8 +167,10 @@ class _PsProductConfigSheetState extends State<PsProductConfigSheet> {
               selected: _selected,
               missing: _missing,
               onChanged: (type, id) => setState(() {
-                _selected[type] = id;
-                _missing = _missing.difference({type});
+                _selected
+                  ..clear()
+                  ..[type] = id;
+                _missing = {};
                 _error = null;
               }),
             ),

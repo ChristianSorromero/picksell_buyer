@@ -75,6 +75,10 @@ return [
 
     'schedule_timezone' => env('APP_SCHEDULE_TIMEZONE', 'Asia/Manila'),
 
+    // Commission on each order, in percent. Must equal the website's PLATFORM_COMMISSION_RATE so
+    // orders placed in the app are charged exactly like website orders.
+    'platform_commission_rate' => (float) env('PLATFORM_COMMISSION_RATE', 10),
+
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration

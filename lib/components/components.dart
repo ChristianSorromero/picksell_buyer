@@ -63,5 +63,6 @@ export 'commerce/ps_wishlist_button.dart'; //      COM-C07
 
 // 03 Buyer logistics & account (BUY-C*, BUY-A*)
 export 'buyer/ps_account.dart'; //                 BUY-A01, A02
+export 'buyer/ps_address_fields.dart'; //          BUY-A03
 export 'buyer/ps_order_actions.dart'; //           BUY-C09, C10, C13, C14
 export 'buyer/ps_tracking.dart'; //                BUY-C01, C03…C08, C12

@@ -124,8 +124,6 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                   name: o.shipTo!.recipientName,
                   phone: o.shipTo!.displayPhone,
                   address: o.shipTo!.fullAddress,
-                  label: o.shipTo!.label?.label,
-                  landmark: o.shipTo!.landmark,
                 ),
               const SizedBox(height: PsSpace.sm),
               PsOrderSummary(

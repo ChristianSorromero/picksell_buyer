@@ -338,6 +338,7 @@ class HomeFeed {
     this.hotDiscounts = const [],
     this.featured = const [],
     this.recommended = const [],
+    this.recentlyViewed = const [],
   });
 
   final List<HomeBanner> banners;
@@ -346,12 +347,16 @@ class HomeFeed {
   final List<Product> featured;
   final List<Product> recommended;
 
+  /// Shared with the website's "Recently Viewed" row (signed-in buyers only).
+  final List<Product> recentlyViewed;
+
   factory HomeFeed.fromJson(Json j) => HomeFeed(
         banners: listOf(j['banners'], HomeBanner.fromJson),
         categories: listOf(j['categories'], Category.fromJson),
         hotDiscounts: listOf(j['hot_discounts'], Product.fromJson),
         featured: listOf(j['featured'], Product.fromJson),
         recommended: listOf(j['recommended'], Product.fromJson),
+        recentlyViewed: listOf(j['recently_viewed'], Product.fromJson),
       );
 }
 

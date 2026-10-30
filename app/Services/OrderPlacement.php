@@ -6,126 +6,104 @@ use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\Order;
 use App\Models\Product;
-use App\Models\ProductVariation;
 use App\Models\User;
+use App\Notifications\NewSellerOrder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 /**
- * Turns a buyer's selected cart lines into orders — one order per line,
- * one shipping fee per seller parcel — for both the mobile API and the
- * web shop, charging exactly what CheckoutPricing quoted.
+ * Places the buyer's selected cart lines as orders exactly like the website's checkout
+ * (BuyerController::placeOrder): one order per cart line, price = product price minus its
+ * discount and, if the code matches, the product's own voucher; Cash on Delivery to the buyer's
+ * profile address. Keep the two in step.
  */
 class OrderPlacement
 {
-    public function __construct(private CheckoutPricing $pricing) {}
+    public function __construct(private CommissionService $commission) {}
 
     /** The buyer's own cart lines among [$ids]. */
     public function items(User $buyer, array $ids): Collection
     {
         $cart = Cart::firstOrCreate(['buyer_id' => $buyer->id]);
-        return CartItem::where('cart_id', $cart->id)->whereIn('id', $ids)->with('product.seller')->get();
+
+        return CartItem::where('cart_id', $cart->id)->whereIn('id', $ids)->with('product.seller', 'variation')->get();
+    }
+
+    /** What one cart line costs per unit, with the product voucher applied when [$voucherCode] matches. */
+    public static function unitPrice(Product $product, ?string $voucherCode): float
+    {
+        $price = $product->effective_price;
+        if (! empty($voucherCode) && $product->voucher_code === $voucherCode) {
+            $price = $price * (1 - $product->voucher_discount / 100);
+        }
+
+        return $price;
     }
 
     /**
-     * @param  array  $shipTo  delivery snapshot, shaped like BuyerAddress::snapshot()
-     * @return array  ['result' => 'placed', 'checkout_ref', 'totals', 'orders']
-     *                | ['result' => 'empty'] | ['result' => 'changed', 'quote'] | ['result' => 'voucher', 'message']
+     * @return Collection<int, Order>
+     *
+     * @throws ValidationException (field item_ids) when a line is unavailable or short of stock
      */
-    public function place(
-        User $buyer,
-        array $itemIds,
-        array $shipTo,
-        string $paymentMethod,
-        ?string $shippingCode = 'standard',
-        ?string $voucherCode = null,
-        ?User $logistics = null,
-    ): array {
-        return DB::transaction(function () use ($buyer, $itemIds, $shipTo, $paymentMethod, $shippingCode, $voucherCode, $logistics) {
-            $items = $this->items($buyer, $itemIds);
-            if ($items->isEmpty()) return ['result' => 'empty'];
+    public function place(User $buyer, array $itemIds, ?string $voucherCode): Collection
+    {
+        $items = $this->items($buyer, $itemIds);
+        if ($items->isEmpty()) {
+            throw ValidationException::withMessages(['item_ids' => 'No items selected.']);
+        }
 
-            // Lock stock rows so two checkouts can't oversell the last unit.
-            Product::whereIn('id', $items->pluck('product_id'))->lockForUpdate()->get();
-            ProductVariation::whereIn('id', $items->flatMap(fn ($i) => $this->pricing->variationIds($i)))->lockForUpdate()->get();
-            $items->each(fn ($i) => $i->product->refresh());
-
-            $quote = $this->pricing->quote($items, $shippingCode ?? 'standard', $voucherCode);
-            if ($quote['has_issues']) return ['result' => 'changed', 'quote' => $quote];
-            if ($quote['voucher_error']) return ['result' => 'voucher', 'message' => $quote['voucher_error']];
-
-            $checkoutRef = 'CO-' . strtoupper(Str::random(10));
-            $shipping = $quote['shipping_option'];
-            $logistics ??= $this->logisticsFor($shipTo['province'] ?? null);
-            $rate = (float) config('picksell.commission_rate');
-            $serviceFeeLeft = $quote['totals']['service_fee'];
-            $orders = collect();
-
-            foreach ($quote['groups'] as $group) {
-                foreach ($group['items'] as $index => $line) {
-                    $item = $items->firstWhere('id', $line['cart_item_id']);
-                    $product = $item->product;
-                    $shippingFee = $index === 0 ? $group['shipping_fee'] : 0;  // one parcel fee per seller
-                    $serviceFee = $serviceFeeLeft;
-                    $serviceFeeLeft = 0;
-                    $amount = round($line['line_total'] - $line['discount'], 2);
-
-                    $orders->push(Order::create([
-                        'order_number'            => $this->orderNumber(),
-                        'checkout_ref'            => $checkoutRef,
-                        'product_id'              => $product->id,
-                        'buyer_id'                => $buyer->id,
-                        'seller_id'               => $product->seller_id,
-                        'logistics_id'            => $logistics?->id,
-                        'product_name'            => $product->name,
-                        'quantity'                => $line['quantity'],
-                        'variation_label'         => $line['variation_label'],
-                        'variation_ids'           => $line['variation_ids'] ?: null,
-                        'unit_price'              => $line['unit_price'],
-                        'subtotal'                => $line['line_total'],
-                        'discount'                => $line['discount'],
-                        'voucher_code'            => $line['discount'] > 0 ? $quote['voucher']['code'] : null,
-                        'shipping_fee'            => $shippingFee,
-                        'service_fee'             => $serviceFee,
-                        'amount'                  => $amount,
-                        'total'                   => round($amount + $shippingFee + $serviceFee, 2),
-                        'commission'              => round($amount * $rate, 2),
-                        'status'                  => 'pending',
-                        'shipping_option'         => $shipping['code'],
-                        'estimated_delivery_from' => $shipping['estimated_from'],
-                        'estimated_delivery_to'   => $shipping['estimated_to'],
-                        'payment_method'          => $paymentMethod,
-                        'payment_status'          => 'unpaid',
-                        'ship_to'                 => $shipTo,
-                    ]));
-
-                    $product->decrement('stock', $line['quantity']);
-                    if ($line['variation_ids']) {
-                        ProductVariation::whereIn('id', $line['variation_ids'])->decrement('stock', $line['quantity']);
-                    }
-                    $item->delete();
-                }
+        $placed = DB::transaction(function () use ($buyer, $items, $voucherCode) {
+            // Lock the products so moderation, other buyers and stock changes cannot interleave.
+            $products = Product::whereIn('id', $items->pluck('product_id'))->with('seller')->lockForUpdate()->get()->keyBy('id');
+            $unavailable = $items->filter(fn ($item) => ! $products->get($item->product_id)?->isPurchasable());
+            if ($unavailable->isNotEmpty()) {
+                throw ValidationException::withMessages(['item_ids' => self::unavailableMessage($unavailable)]);
+            }
+            // Several cart lines (e.g. variations) can draw on the same product's stock.
+            $shortStock = $items->groupBy('product_id')
+                ->filter(fn ($lines, $productId) => $products[$productId]->stock < $lines->sum('quantity'));
+            if ($shortStock->isNotEmpty()) {
+                throw ValidationException::withMessages(['item_ids' => 'Not enough stock for: '.$shortStock->keys()->map(fn ($productId) => $products[$productId]->name)->join(', ').'.']);
             }
 
-            return ['result' => 'placed', 'checkout_ref' => $checkoutRef, 'totals' => $quote['totals'], 'orders' => $orders];
+            return $items->map(function (CartItem $item) use ($buyer, $products, $voucherCode) {
+                $product = $products[$item->product_id];
+                $amount = self::unitPrice($product, $voucherCode) * $item->quantity;
+                $commission = $this->commission->calculate((string) round($amount, 2));
+
+                $order = Order::create([
+                    'order_number' => 'ORD-'.strtoupper(Str::random(8)),
+                    'product_id' => $product->id,
+                    'buyer_id' => $buyer->id,
+                    'seller_id' => $product->seller_id,
+                    'product_name' => $product->name,
+                    'quantity' => $item->quantity,
+                    'amount' => $amount,
+                    'commission' => $commission['commission'],
+                    'commission_rate' => $commission['rate'],
+                    'status' => 'placed',
+                    'tracking_status' => 'Order placed and awaiting seller preparation',
+                ]);
+
+                $product->decrement('stock', $item->quantity);
+                $item->delete();
+
+                return $order;
+            });
         });
+
+        foreach ($placed as $order) {
+            $order->seller?->notify(new NewSellerOrder($order));
+        }
+
+        return $placed;
     }
 
-    /** The approved logistics provider serving [$province], else the first approved one. */
-    public function logisticsFor(?string $province): ?User
+    public static function unavailableMessage(Collection $items): string
     {
-        $approved = User::where('role', 'logistics')->where('status', 'approved');
-        return ($province ? (clone $approved)->where('delivery_area', 'like', '%' . $province . '%')->first() : null)
-            ?? $approved->orderBy('id')->first();
-    }
-
-    private function orderNumber(): string
-    {
-        do {
-            $number = 'PS-' . random_int(10000000, 99999999);
-        } while (Order::where('order_number', $number)->exists());
-
-        return $number;
+        return 'No longer available: '.$items->map(fn ($item) => $item->product?->name ?? 'a removed product')->join(', ')
+            .'. Remove '.($items->count() === 1 ? 'it' : 'them').' from your cart to continue.';
     }
 }

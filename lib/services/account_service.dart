@@ -2,10 +2,10 @@ import 'package:flutter/foundation.dart';
 
 import '../core/network/api_client.dart';
 import '../models/account.dart';
-import '../models/address.dart';
 import '../models/json.dart';
 
-/// Profile, address book and notifications for the signed-in buyer.
+/// Profile (including the delivery address) and notifications for the
+/// signed-in buyer.
 class AccountService {
   AccountService({ApiClient? client}) : _api = client ?? ApiClient.instance;
 
@@ -13,19 +13,33 @@ class AccountService {
 
   Future<AccountOverview> overview() async => AccountOverview.fromJson(await _api.getJson('/buyer/profile'));
 
+  /// The website delivers every order to this address, so changing it here
+  /// changes where new orders go.
   Future<BuyerProfile> updateProfile({
     required String firstName,
     required String lastName,
     required String birthday,
     required String contactNo,
+    required String province,
+    required String municipality,
+    required String barangay,
+    String? middleInitial,
+    String? street,
+    String? houseNo,
     String? sex,
   }) async {
     final j = await _api.patchJson('/buyer/profile', {
       'first_name': firstName,
       'last_name': lastName,
+      'middle_initial': middleInitial,
       'birthday': birthday,
       'contact_no': contactNo,
       'sex': sex,
+      'province': province,
+      'municipality': municipality,
+      'barangay': barangay,
+      'street': street,
+      'house_no': houseNo,
     });
     return BuyerProfile.fromJson(mapOrNull(j['user']) ?? const {});
   }
@@ -36,24 +50,6 @@ class AccountService {
         'password': password,
         'password_confirmation': confirmation,
       });
-
-  // ── BUY-A03 Address Manager ──────────────────────────────────────────────
-
-  Future<List<Address>> addresses() async =>
-      listOf((await _api.getJson('/buyer/addresses'))['addresses'], Address.fromJson);
-
-  Future<Address> saveAddress(Address address, {int? id}) async {
-    final j = id == null
-        ? await _api.postJson('/buyer/addresses', address.toJson())
-        : await _api.patchJson('/buyer/addresses/$id', address.toJson());
-    return Address.fromJson(mapOrNull(j['address']) ?? const {});
-  }
-
-  Future<Address> makeDefault(int id) async =>
-      Address.fromJson(mapOrNull((await _api.patchJson('/buyer/addresses/$id', {'is_default': true}))['address']) ?? const {});
-
-  Future<List<Address>> deleteAddress(int id) async =>
-      listOf((await _api.deleteJson('/buyer/addresses/$id'))['addresses'], Address.fromJson);
 
   // ── BUY-A12 Notifications ────────────────────────────────────────────────
 

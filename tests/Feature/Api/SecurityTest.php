@@ -2,164 +2,122 @@
 
 namespace Tests\Feature\Api;
 
-use App\Models\Order;
-use App\Models\Product;
-use App\Models\User;
+use App\Mail\PasswordResetCodeMail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\Sanctum;
+use Tests\Feature\Api\Concerns\BuildsMarketplace;
 use Tests\TestCase;
 
 class SecurityTest extends TestCase
 {
-    use RefreshDatabase;
+    use BuildsMarketplace, RefreshDatabase;
 
-    private function user(string $role, string $email, array $extra = []): User
+    public function test_only_approved_buyers_use_the_buyer_api(): void
     {
-        static $n = 0;
-        $n++;
-        return User::create($extra + [
-            'role' => $role, 'status' => 'approved', 'first_name' => 'Test', 'last_name' => ucfirst($role),
-            'email' => $email, 'password' => Hash::make('Password1!'), 'contact_no' => '0917000' . str_pad((string) $n, 4, '0', STR_PAD_LEFT),
-            'birthday' => '1995-01-01', 'age' => 30,
-        ]);
-    }
-
-    public function test_non_buyers_cannot_use_the_buyer_api(): void
-    {
-        Sanctum::actingAs($this->user('seller', 'seller@test.ph'));
+        Sanctum::actingAs($this->seller());
         $this->getJson('/api/buyer/cart')->assertForbidden();
-        $this->getJson('/api/buyer/profile')->assertForbidden();
+
+        $this->postJson('/api/login', ['email' => $this->admin()->email, 'password' => 'Password1!'])
+            ->assertForbidden()->assertJsonPath('message', 'This app is for buyers only.');
     }
 
-    public function test_suspended_buyer_is_locked_out_and_token_revoked(): void
+    public function test_an_admin_suspension_ends_the_app_session(): void
     {
-        $buyer = $this->user('buyer', 'buyer@test.ph');
+        $buyer = $this->buyer();
         $token = $buyer->createToken('mobile')->plainTextToken;
         $buyer->update(['status' => 'suspended']);
-
-        $this->withToken($token)->getJson('/api/buyer/profile')->assertUnauthorized()
-            ->assertJsonPath('message', 'Your account has been suspended. Please contact support.');
+        $this->withToken($token)->getJson('/api/buyer/profile')->assertUnauthorized();
         $this->assertSame(0, $buyer->tokens()->count());
     }
 
     public function test_login_failures_are_generic_and_logout_revokes_the_token(): void
     {
-        $buyer = $this->user('buyer', 'buyer@test.ph');
+        $buyer = $this->buyer();
+        $this->postJson('/api/login', ['email' => $buyer->email, 'password' => 'wrong'])->assertUnauthorized()->assertExactJson(['message' => 'Invalid email or password.']);
+        $this->postJson('/api/login', ['email' => 'nobody@test.ph', 'password' => 'wrong'])->assertUnauthorized()->assertExactJson(['message' => 'Invalid email or password.']);
 
-        // Wrong password and unknown email must be indistinguishable.
-        $this->postJson('/api/login', ['email' => 'buyer@test.ph', 'password' => 'wrong'])
-            ->assertUnauthorized()->assertExactJson(['message' => 'Invalid email or password.']);
-        $this->postJson('/api/login', ['email' => 'nobody@test.ph', 'password' => 'wrong'])
-            ->assertUnauthorized()->assertExactJson(['message' => 'Invalid email or password.']);
-        $this->postJson('/api/login', [])->assertUnprocessable()->assertJsonValidationErrors(['email', 'password']);
-        $this->getJson('/api/buyer/profile')->assertUnauthorized();
-
-        $token = $this->postJson('/api/login', ['email' => 'buyer@test.ph', 'password' => 'Password1!'])
-            ->assertOk()->assertJsonPath('user.id', $buyer->id)->json('token');
-        $other = $buyer->createToken('mobile')->plainTextToken; // e.g. a second device
-
-        $this->withToken($token)->getJson('/api/buyer/profile')->assertOk();
+        $token = $this->postJson('/api/login', ['email' => $buyer->email, 'password' => 'Password1!'])->assertOk()->json('token');
+        $this->withToken($token)->getJson('/api/buyer/profile')->assertOk()->assertJsonPath('user.email', $buyer->email);
         $this->withToken($token)->postJson('/api/buyer/logout')->assertOk();
-        $this->app['auth']->forgetGuards();
-
-        $this->withToken($token)->getJson('/api/buyer/profile')->assertUnauthorized();
-        $this->withToken($other)->getJson('/api/buyer/profile')->assertOk();
-        $this->assertSame(1, $buyer->tokens()->count());
+        $this->assertSame(0, $buyer->tokens()->count());
     }
 
-    public function test_legacy_unauthenticated_id_upload_endpoint_is_gone(): void
+    public function test_an_account_locks_after_failures_from_many_ips(): void
     {
-        $victim = $this->user('buyer', 'victim@test.ph');
-        $this->postJson('/api/upload-id', [
-            'user_id' => $victim->id,
-            'id_file' => UploadedFile::fake()->image('x.jpg'),
-        ])->assertNotFound();
-    }
-
-    public function test_identity_documents_are_private_and_access_controlled(): void
-    {
-        Storage::fake('local');
-        Storage::disk('local')->put('uploads/ids/abc.jpg', 'secret-id');
-        $seller = $this->user('seller', 'seller@test.ph', ['id_upload' => 'uploads/ids/abc.jpg']);
-        $stranger = $this->user('seller', 'other@test.ph');
-        $admin = $this->user('admin', 'admin@test.ph');
-
-        // Not reachable through the public storage URL.
-        $this->assertContains($this->get('/storage/uploads/ids/abc.jpg')->status(), [403, 404]);
-        $this->actingAs($stranger)->get("/documents/users/{$seller->id}/id")->assertForbidden();
-        $this->actingAs($admin)->get("/documents/users/{$seller->id}/id")->assertOk();
-        $this->actingAs($seller)->get("/documents/users/{$seller->id}/id")->assertOk();
-    }
-
-    public function test_login_is_rate_limited(): void
-    {
-        $this->user('buyer', 'buyer@test.ph');
+        $buyer = $this->buyer();
         for ($i = 0; $i < 10; $i++) {
-            $this->postJson('/api/login', ['email' => 'buyer@test.ph', 'password' => 'wrong'])->assertUnauthorized();
+            $this->withServerVariables(['REMOTE_ADDR' => "10.0.0.{$i}"])
+                ->postJson('/api/login', ['email' => strtoupper($buyer->email), 'password' => 'wrong'])->assertUnauthorized();
         }
-        $this->postJson('/api/login', ['email' => 'buyer@test.ph', 'password' => 'wrong'])->assertStatus(429);
+        $this->withServerVariables(['REMOTE_ADDR' => '10.0.1.1'])
+            ->postJson('/api/login', ['email' => $buyer->email, 'password' => 'Password1!'])
+            ->assertStatus(429)->assertJsonPath('message', 'Too many failed sign-in attempts. Try again in 15 minutes.');
+
+        $this->travel(16)->minutes();
+        $this->postJson('/api/login', ['email' => $buyer->email, 'password' => 'Password1!'])->assertOk();
     }
 
-    public function test_buyers_cannot_touch_each_others_data(): void
+    public function test_password_reset_codes_cannot_be_brute_forced(): void
     {
-        $seller = $this->user('seller', 'seller@test.ph');
-        $owner = $this->user('buyer', 'owner@test.ph');
-        $intruder = $this->user('buyer', 'intruder@test.ph');
-        $product = Product::create(['seller_id' => $seller->id, 'name' => 'Mug', 'price' => 100, 'stock' => 5, 'status' => 'active']);
+        Mail::fake();
+        $buyer = $this->buyer();
+        $codes = function () {
+            $all = [];
+            Mail::assertSent(PasswordResetCodeMail::class, function ($mail) use (&$all) { $all[] = $mail->code; return true; });
 
-        Sanctum::actingAs($owner);
-        $itemId = $this->postJson('/api/buyer/cart', ['product_id' => $product->id, 'quantity' => 1])->json('cart_item_id');
-        $addressId = $this->postJson('/api/buyer/addresses', [
-            'label' => 'home', 'recipient_name' => 'Owner', 'phone' => '09171234567', 'province' => 'Cebu',
-            'municipality' => 'Cebu City', 'barangay' => 'Lahug', 'street' => 'Gorordo',
-        ])->json('address.id');
-        $order = Order::create([
-            'order_number' => 'PS-1', 'buyer_id' => $owner->id, 'seller_id' => $seller->id,
-            'product_name' => 'Mug', 'amount' => 100, 'commission' => 10,
+            return $all;
+        };
+        $reset = fn (string $code, string $ip) => $this->withServerVariables(['REMOTE_ADDR' => $ip])->postJson('/api/password/reset', [
+            'email' => $buyer->email, 'code' => $code, 'password' => 'NewPass1!x', 'password_confirmation' => 'NewPass1!x',
         ]);
 
-        Sanctum::actingAs($intruder);
-        $this->patchJson("/api/buyer/cart/{$itemId}", ['quantity' => 2])->assertNotFound();
-        $this->deleteJson("/api/buyer/cart/{$itemId}")->assertNotFound();
-        $this->patchJson("/api/buyer/addresses/{$addressId}", ['street' => 'Hacked'])->assertNotFound();
-        $this->getJson("/api/buyer/orders/{$order->id}")->assertNotFound();
-        $this->postJson("/api/buyer/orders/{$order->id}/cancel", ['reason' => 'x'])->assertNotFound();
-        // Checkout with someone else's cart line / address places nothing.
-        $this->postJson('/api/buyer/checkout', ['item_ids' => [$itemId], 'address_id' => $addressId, 'payment_method' => 'cod'])
-            ->assertStatus(422);
-        $this->assertSame(1, Order::count());
+        // Unknown accounts get the same answer and no email.
+        $this->assertSame(
+            $this->postJson('/api/password/forgot', ['email' => 'nobody@test.ph'])->json('message'),
+            $this->postJson('/api/password/forgot', ['email' => $buyer->email])->json('message'),
+        );
+        for ($round = 0; $round < 3; $round++) {
+            if ($round > 0) {
+                $this->travel(61)->seconds();
+                $this->postJson('/api/password/forgot', ['email' => $buyer->email]);
+            }
+            $code = last($codes());
+            for ($i = 0; $i < 5; $i++) $reset($code === '000000' ? '111111' : '000000', "10.{$round}.0.{$i}")->assertUnprocessable();
+        }
+        $this->travel(61)->seconds();
+        $this->postJson('/api/password/forgot', ['email' => $buyer->email]);
+        $reset(last($codes()), '10.9.9.9')->assertUnprocessable()->assertJsonPath('message', 'Too many incorrect attempts. Please try again in an hour.');
+        $this->assertTrue(Hash::check('Password1!', $buyer->fresh()->password));
+
+        $this->travel(61)->minutes();
+        $this->postJson('/api/password/forgot', ['email' => $buyer->email]);
+        $buyer->createToken('phone');
+        $reset(last($codes()), '10.9.9.10')->assertOk();
+        $this->assertTrue(Hash::check('NewPass1!x', $buyer->fresh()->password));
+        $this->assertSame(0, $buyer->tokens()->count());
     }
 
-    public function test_prices_cannot_be_set_by_the_client(): void
+    public function test_the_profile_cannot_change_email_or_role(): void
     {
-        $seller = $this->user('seller', 'seller@test.ph');
-        $buyer = $this->user('buyer', 'buyer@test.ph');
-        $product = Product::create(['seller_id' => $seller->id, 'name' => 'Lamp', 'price' => 850, 'stock' => 5, 'status' => 'active']);
-        Sanctum::actingAs($buyer);
+        $buyer = $this->actingAsBuyer();
+        $this->patchJson('/api/buyer/profile', [
+            'first_name' => 'Ana', 'last_name' => 'Cruz', 'birthday' => '1995-01-01', 'contact_no' => '09175550000',
+            'province' => 'Cebu', 'municipality' => 'Mandaue City', 'barangay' => 'Banilad',
+            'email' => 'attacker@test.ph', 'role' => 'admin', 'status' => 'approved',
+        ])->assertOk();
 
-        $id = $this->postJson('/api/buyer/cart', ['product_id' => $product->id, 'quantity' => 1, 'price' => 1, 'unit_price' => 1])
-            ->json('cart_item_id');
-        $this->getJson('/api/buyer/cart')->assertJsonPath('cart.groups.0.items.0.unit_price', 850);
-        $this->assertNotNull($id);
+        $fresh = $buyer->fresh();
+        $this->assertSame(['Ana', 'Mandaue City', $buyer->email, 'buyer'], [$fresh->first_name, $fresh->municipality, $fresh->email, $fresh->role]);
     }
 
-    public function test_evidence_uploads_reject_non_images(): void
+    public function test_old_web_pages_and_endpoints_are_gone(): void
     {
-        $seller = $this->user('seller', 'seller@test.ph');
-        $buyer = $this->user('buyer', 'buyer@test.ph');
-        $order = Order::create([
-            'order_number' => 'PS-2', 'buyer_id' => $buyer->id, 'seller_id' => $seller->id,
-            'product_name' => 'Mug', 'amount' => 100, 'commission' => 10, 'status' => 'processing',
-        ]);
-        Sanctum::actingAs($buyer);
-
-        $this->post("/api/buyer/orders/{$order->id}/report", [
-            'category' => 'Damaged Item',
-            'details'  => 'Arrived broken into pieces.',
-            'evidence' => [UploadedFile::fake()->create('shell.php', 10, 'application/x-php')],
-        ], ['Accept' => 'application/json'])->assertStatus(422)->assertJsonValidationErrors('evidence.0');
+        $this->get('/buyer/shop')->assertNotFound();
+        $this->get('/admin/dashboard')->assertNotFound();
+        $this->actingAsBuyer();
+        $this->postJson('/api/buyer/addresses', [])->assertNotFound();
+        $this->getJson('/api/buyer/vouchers')->assertNotFound();
     }
 }

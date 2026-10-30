@@ -10,7 +10,11 @@ class AuthService {
 
   final ApiClient _api;
 
-  /// Step 2 of buyer registration: is this email / mobile still free?
+  // ── Registration: the website's flow ─────────────────────────────────
+  // 1. prove the email with a code → registration_token
+  // 2. submit the details with a valid ID → pending until an admin approves
+
+  /// Is this email / mobile still free?
   Future<ApiResult> checkContact({
     required String email,
     required String contactNo,
@@ -21,41 +25,59 @@ class AuthService {
     });
   }
 
-  /// Creates a pending buyer account and emails a six-digit code.
-  /// `contactNo` is the local format (09XXXXXXXXX); `birthday` is yyyy-MM-dd.
+  /// Emails a six-digit code to the address being registered (also used to resend).
+  Future<ApiResult> sendRegistrationCode({required String email, String? firstName}) =>
+      _api.send('POST', '/register/email-code', body: {'email': email, 'first_name': firstName});
+
+  /// On success `data['registration_token']` lets [register] use this email.
+  Future<ApiResult> verifyRegistrationCode({required String email, required String code}) =>
+      _api.send('POST', '/register/email-code/verify', body: {'email': email, 'code': code});
+
+  /// Creates the buyer account, pending admin approval (the website's rule).
+  /// `contactNo` is 09XXXXXXXXX, `birthday` yyyy-MM-dd, [idPhoto] a picked image path.
   Future<ApiResult> register({
+    required String registrationToken,
     required String firstName,
     required String lastName,
+    String? middleInitial,
+    required String sex,
     required String birthday,
     required String email,
     required String contactNo,
+    required String province,
+    required String municipality,
+    required String barangay,
+    String? street,
+    String? houseNo,
+    required String idPhoto,
     required String password,
     required String passwordConfirmation,
     required bool acceptedTerms,
+    required bool confirmedAccurate,
   }) {
-    return _api.send('POST', '/register', body: {
+    return _api.multipart('/register', fields: {
+      'registration_token': registrationToken,
       'first_name': firstName,
       'last_name': lastName,
+      if (middleInitial != null) 'middle_initial': middleInitial,
+      'sex': sex,
       'birthday': birthday,
       'email': email,
       'contact_no': contactNo,
+      'province': province,
+      'municipality': municipality,
+      'barangay': barangay,
+      if (street != null) 'street': street,
+      if (houseNo != null) 'house_no': houseNo,
       'password': password,
       'password_confirmation': passwordConfirmation,
       if (acceptedTerms) 'terms': '1',
-    });
+      if (confirmedAccurate) 'confirmed': '1',
+    }, singleFiles: {'id_upload': idPhoto});
   }
 
-  /// On success `data` holds `token` + `user`, same shape as [login].
-  Future<ApiResult> verifyEmail({required String email, required String code}) {
-    return _api.send('POST', '/register/verify', body: {'email': email, 'code': code});
-  }
-
-  Future<ApiResult> resendCode({required String email}) {
-    return _api.send('POST', '/register/resend', body: {'email': email});
-  }
-
-  /// A 403 with `data['needs_verification'] == true` means the account
-  /// exists but the emailed code was never entered.
+  /// A 403 carries `data['status']` (pending, disapproved, suspended) for
+  /// accounts that can't sign in yet.
   Future<ApiResult> login({
     required String email,
     required String password,

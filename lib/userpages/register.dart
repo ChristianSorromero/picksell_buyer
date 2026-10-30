@@ -4,14 +4,17 @@ import 'package:flutter/services.dart';
 import '../components/components.dart';
 import '../page_transitions.dart';
 import '../services/auth_service.dart';
+import 'buyer/orders/evidence_picker.dart';
 import 'email_verification_page.dart';
 import 'login.dart';
 
-/// Buyer registration (Figma "Buyer Registration" 1–3):
-///   1. Personal Information — first/last name, date of birth (18+)
-///   2. Contact Information  — email + PH mobile, checked against the API
-///   3. Security and Consent — password rules, confirmation, terms
-/// then hands off to [EmailVerificationPage] for the six-digit code.
+/// Buyer registration, the same flow as the website's sign-up:
+///   1. Personal Information — name, date of birth (18+), sex
+///   2. Contact Information  — email + PH mobile; the email is proven with
+///      a six-digit code ([EmailVerificationPage]) before going on
+///   3. Address and ID       — delivery address (PSGC) and a valid ID photo
+///   4. Security and Consent — password rules, terms, accuracy confirmation
+/// The account is then created as pending until an admin approves it.
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
 
@@ -21,7 +24,8 @@ class RegisterPage extends StatefulWidget {
 
 enum _Step {
   personal('Personal Information', 'Create your account', 'Let’s start with your personal information.'),
-  contact('Contact Information', 'Your contact details', 'We’ll use these details to verify your account.'),
+  contact('Contact Information', 'Your contact details', 'We’ll send a code to verify your email.'),
+  address('Address and ID', 'Address and valid ID', 'We deliver to this address. Admins check your ID before approving your account.'),
   security('Security and Consent', 'Secure your account', 'Create a strong password to protect your account.');
 
   const _Step(this.label, this.title, this.subtitle);
@@ -35,11 +39,21 @@ enum _Step {
     switch (field) {
       case 'first_name':
       case 'last_name':
+      case 'middle_initial':
       case 'birthday':
+      case 'sex':
         return personal;
       case 'email':
       case 'contact_no':
+      case 'registration_token':
         return contact;
+      case 'province':
+      case 'municipality':
+      case 'barangay':
+      case 'street':
+      case 'house_no':
+      case 'id_upload':
+        return address;
       default:
         return security;
     }
@@ -61,17 +75,33 @@ class _RegisterPageState extends State<RegisterPage> {
 
   // Step 1
   final _firstName = TextEditingController();
+  final _middleInitial = TextEditingController();
   final _lastName = TextEditingController();
   DateTime? _birthday;
+  String? _sex;
 
   // Step 2
   final _email = TextEditingController();
   final _mobile = TextEditingController();
 
-  // Step 3
+  /// From the verified email code; tied to [_verifiedEmail].
+  String? _registrationToken;
+  String? _verifiedEmail;
+
+  // Step 3 — kept here because the step's widgets are rebuilt when it reappears.
+  final _addressKey = GlobalKey<PsAddressFieldsState>();
+  String _province = '';
+  String _municipality = '';
+  String _barangay = '';
+  String? _street;
+  String? _houseNo;
+  List<String> _idPhoto = [];
+
+  // Step 4
   final _password = TextEditingController();
   final _confirm = TextEditingController();
   bool _acceptedTerms = false;
+  bool _confirmedAccurate = false;
 
   final _lastNameFocus = FocusNode();
   final _mobileFocus = FocusNode();
@@ -85,7 +115,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   void dispose() {
-    for (final c in [_firstName, _lastName, _email, _mobile, _password, _confirm]) {
+    for (final c in [_firstName, _middleInitial, _lastName, _email, _mobile, _password, _confirm]) {
       c.dispose();
     }
     for (final f in [_lastNameFocus, _mobileFocus, _confirmFocus]) {
@@ -106,24 +136,31 @@ class _RegisterPageState extends State<RegisterPage> {
         return PsValidators.personName(_lastName.text, 'Last name');
       case 'birthday':
         return PsValidators.birthDate(_birthday);
+      case 'sex':
+        return _sex == null ? 'Select your sex.' : null;
       case 'email':
         return PsValidators.email(_email.text);
       case 'contact_no':
         return PsValidators.phMobile(_mobileDigits);
+      case 'id_upload':
+        return _idPhoto.isEmpty ? 'Upload a photo of a valid ID.' : null;
       case 'password':
         return PsValidators.password(_password.text);
       case 'password_confirmation':
         return PsValidators.confirmPassword(_confirm.text, _password.text);
       case 'terms':
         return _acceptedTerms ? null : 'Please agree to the Terms of Service and Privacy Policy.';
+      case 'confirmed':
+        return _confirmedAccurate ? null : 'Confirm that your information and ID are accurate.';
     }
     return null;
   }
 
   static const Map<_Step, List<String>> _fields = {
-    _Step.personal: ['first_name', 'last_name', 'birthday'],
+    _Step.personal: ['first_name', 'last_name', 'birthday', 'sex'],
     _Step.contact: ['email', 'contact_no'],
-    _Step.security: ['password', 'password_confirmation', 'terms'],
+    _Step.address: ['id_upload'],
+    _Step.security: ['password', 'password_confirmation', 'terms', 'confirmed'],
   };
 
   /// Validates every field on [step]; returns true when all pass.
@@ -141,6 +178,10 @@ class _RegisterPageState extends State<RegisterPage> {
         }
       }
     });
+    if (step == _Step.address) {
+      final addressOk = _addressKey.currentState?.validate() ?? false;
+      ok = ok && addressOk;
+    }
     return ok;
   }
 
@@ -170,7 +211,14 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() {
       for (final f in fields) {
         final msg = result.fieldError(f);
-        if (msg != null) _errors[f] = msg;
+        if (msg == null) continue;
+        // A stale or used code token: verify the email again.
+        if (f == 'registration_token' || (f == 'email' && msg.contains('6-digit code'))) {
+          _registrationToken = null;
+          _errors['email'] = 'Verify your email again to continue.';
+        } else {
+          _errors[f] = msg;
+        }
       }
       final earliest = fields.map(_Step.ofField).reduce((a, b) => a.index <= b.index ? a : b);
       if (earliest != _step) _goTo(earliest);
@@ -182,8 +230,19 @@ class _RegisterPageState extends State<RegisterPage> {
 
   void _goTo(_Step step) {
     FocusManager.instance.primaryFocus?.unfocus();
+    if (_step == _Step.address) _keepAddress();
     _forward = step.index > _step.index;
     _step = step;
+  }
+
+  void _keepAddress() {
+    final a = _addressKey.currentState;
+    if (a == null) return;
+    _province = a.province;
+    _municipality = a.municipality;
+    _barangay = a.barangay;
+    _street = a.street;
+    _houseNo = a.houseNo;
   }
 
   Future<void> _continue() async {
@@ -193,7 +252,9 @@ class _RegisterPageState extends State<RegisterPage> {
       case _Step.personal:
         setState(() => _goTo(_Step.contact));
       case _Step.contact:
-        await _checkContact();
+        await _checkContactAndVerify();
+      case _Step.address:
+        setState(() => _goTo(_Step.security));
       case _Step.security:
         await _createAccount();
     }
@@ -226,48 +287,88 @@ class _RegisterPageState extends State<RegisterPage> {
 
   // ── API calls ────────────────────────────────────────────────────────────
 
-  Future<void> _checkContact() async {
+  Future<void> _checkContactAndVerify() async {
+    final email = _email.text.trim().toLowerCase();
     setState(() => _busy = true);
-    final result = await _auth.checkContact(
-      email: _email.text.trim(),
-      contactNo: PsPhoneField.toLocalFormat(_mobileDigits),
-    );
+    final check = await _auth.checkContact(email: email, contactNo: PsPhoneField.toLocalFormat(_mobileDigits));
+    if (!mounted) return;
+    if (!check.success) {
+      setState(() => _busy = false);
+      if (!_applyServerErrors(check)) await _showRequestError(check);
+      return;
+    }
+
+    // Already proven in this sign-up: don't send another code.
+    if (_registrationToken != null && _verifiedEmail == email) {
+      setState(() {
+        _busy = false;
+        _goTo(_Step.address);
+      });
+      return;
+    }
+
+    final sent = await _auth.sendRegistrationCode(email: email, firstName: _firstName.text.trim());
     if (!mounted) return;
     setState(() => _busy = false);
-
-    if (result.success) {
-      setState(() => _goTo(_Step.security));
-    } else if (!_applyServerErrors(result)) {
-      await _showRequestError(result);
+    if (!sent.success && sent.statusCode != 429) {
+      if (!_applyServerErrors(sent)) await _showRequestError(sent, title: 'Couldn’t send the code');
+      return;
     }
+
+    final data = sent.data ?? const {};
+    final token = await Navigator.of(context).push<String>(fadeRoute(EmailVerificationPage(
+      email: email,
+      firstName: _firstName.text.trim(),
+      maskedEmail: data['masked_email']?.toString(),
+      expiresIn: Duration(seconds: (data['expires_in'] as num?)?.toInt() ?? 300),
+      resendIn: Duration(seconds: (data['resend_in'] as num?)?.toInt() ?? 60),
+    )));
+    if (!mounted || token == null) return;
+    setState(() {
+      _registrationToken = token;
+      _verifiedEmail = email;
+      _errors.remove('email');
+      _goTo(_Step.address);
+    });
   }
 
   Future<void> _createAccount() async {
+    final token = _registrationToken;
+    if (token == null || _verifiedEmail != _email.text.trim().toLowerCase()) {
+      setState(() {
+        _errors['email'] = 'Verify your email to continue.';
+        _goTo(_Step.contact);
+      });
+      return;
+    }
     setState(() => _busy = true);
     final b = _birthday!;
+    final middle = _middleInitial.text.trim();
     final result = await _auth.register(
+      registrationToken: token,
       firstName: _firstName.text.trim(),
       lastName: _lastName.text.trim(),
+      middleInitial: middle.isEmpty ? null : middle,
+      sex: _sex!,
       birthday: '${b.year}-${b.month.toString().padLeft(2, '0')}-${b.day.toString().padLeft(2, '0')}',
-      email: _email.text.trim(),
+      email: _verifiedEmail!,
       contactNo: PsPhoneField.toLocalFormat(_mobileDigits),
+      province: _province,
+      municipality: _municipality,
+      barangay: _barangay,
+      street: _street,
+      houseNo: _houseNo,
+      idPhoto: _idPhoto.first,
       password: _password.text,
       passwordConfirmation: _confirm.text,
       acceptedTerms: _acceptedTerms,
+      confirmedAccurate: _confirmedAccurate,
     );
     if (!mounted) return;
     setState(() => _busy = false);
 
     if (result.success) {
-      final data = result.data!;
-      Navigator.of(context).pushReplacement(
-        fadeRoute(EmailVerificationPage(
-          email: data['email']?.toString() ?? _email.text.trim(),
-          maskedEmail: data['masked_email']?.toString(),
-          expiresIn: Duration(seconds: (data['expires_in'] as num?)?.toInt() ?? 300),
-          resendIn: Duration(seconds: (data['resend_in'] as num?)?.toInt() ?? 60),
-        )),
-      );
+      Navigator.of(context).pushReplacement(fadeRoute(_RegistrationSubmittedPage(message: result.message)));
     } else if (!_applyServerErrors(result)) {
       await _showRequestError(result, title: 'Couldn’t create your account');
     }
@@ -322,7 +423,11 @@ class _RegisterPageState extends State<RegisterPage> {
           footer: PsFooterActions(
             showDivider: _step != _Step.personal,
             primary: PsPrimaryButton(
-              label: _step == _Step.security ? 'Create account' : 'Continue',
+              label: switch (_step) {
+                _Step.contact => _registrationToken != null && _verifiedEmail == _email.text.trim().toLowerCase() ? 'Continue' : 'Send code',
+                _Step.security => 'Submit registration',
+                _ => 'Continue',
+              },
               loading: _busy,
               onPressed: _continue,
             ),
@@ -376,9 +481,18 @@ class _RegisterPageState extends State<RegisterPage> {
             errorText: _errors['first_name'],
             textCapitalization: TextCapitalization.words,
             autofillHints: const [AutofillHints.givenName],
-            maxLength: 100,
+            maxLength: 50,
             onChanged: (_) => _onEdited('first_name'),
             onSubmitted: (_) => _lastNameFocus.requestFocus(),
+          ),
+          gap,
+          PsTextField(
+            label: 'Middle Initial',
+            hint: 'Optional',
+            controller: _middleInitial,
+            errorText: _errors['middle_initial'],
+            textCapitalization: TextCapitalization.characters,
+            maxLength: 5,
           ),
           gap,
           PsTextField(
@@ -390,7 +504,7 @@ class _RegisterPageState extends State<RegisterPage> {
             textCapitalization: TextCapitalization.words,
             autofillHints: const [AutofillHints.familyName],
             textInputAction: TextInputAction.done,
-            maxLength: 100,
+            maxLength: 50,
             onChanged: (_) => _onEdited('last_name'),
           ),
           gap,
@@ -403,12 +517,28 @@ class _RegisterPageState extends State<RegisterPage> {
             initialDate: DateTime(now.year - PsValidators.minimumAge, now.month, now.day),
             onChanged: (d) {
               _birthday = d;
-              // Age is checked immediately so an under-18 date is flagged
-              // right away, as in the design.
+              // Age is checked immediately so an under-18 date is flagged right away.
               _attempted.add(_Step.personal);
               _onEdited('birthday');
             },
           ),
+          gap,
+          const PsFieldLabel('Sex'),
+          Wrap(
+            spacing: PsSpace.xs,
+            children: [
+              for (final s in const ['Male', 'Female'])
+                PsOptionChip(
+                  label: s,
+                  selected: _sex == s,
+                  onTap: () {
+                    _sex = s;
+                    _onEdited('sex');
+                  },
+                ),
+            ],
+          ),
+          if (_errors['sex'] != null) PsFieldError(_errors['sex']!),
         ];
 
       case _Step.contact:
@@ -424,6 +554,17 @@ class _RegisterPageState extends State<RegisterPage> {
             onChanged: (_) => _onEdited('email'),
             onSubmitted: (_) => _mobileFocus.requestFocus(),
           ),
+          if (_registrationToken != null && _verifiedEmail == _email.text.trim().toLowerCase())
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.verified_rounded, size: 16, color: PsColors.success),
+                  const SizedBox(width: 4),
+                  Text('Email verified', style: PsText.caption.copyWith(color: PsColors.success, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
           gap,
           PsPhoneField(
             controller: _mobile,
@@ -432,6 +573,34 @@ class _RegisterPageState extends State<RegisterPage> {
             onChanged: (_) => _onEdited('contact_no'),
             onSubmitted: (_) => _continue(),
           ),
+        ];
+
+      case _Step.address:
+        return [
+          PsAddressFields(
+            key: _addressKey,
+            province: _province,
+            municipality: _municipality,
+            barangay: _barangay,
+            street: _street,
+            houseNo: _houseNo,
+            errors: _errors,
+          ),
+          gap,
+          const PsFieldLabel('Valid ID'),
+          Padding(
+            padding: const EdgeInsets.only(bottom: PsSpace.xs),
+            child: Text('A clear photo of a government-issued ID. Only PickSell admins see it.', style: PsText.caption),
+          ),
+          EvidencePicker(
+            paths: _idPhoto,
+            max: 1,
+            onChanged: (p) {
+              _idPhoto = p;
+              _onEdited('id_upload');
+            },
+          ),
+          if (_errors['id_upload'] != null) PsFieldError(_errors['id_upload']!),
         ];
 
       case _Step.security:
@@ -474,8 +643,65 @@ class _RegisterPageState extends State<RegisterPage> {
               PsInlineLink('Privacy Policy', () => _showLegal('Privacy Policy')),
             ],
           ),
+          const SizedBox(height: PsSpace.xs),
+          PsCheckboxTile(
+            value: _confirmedAccurate,
+            errorText: _errors['confirmed'],
+            onChanged: (v) {
+              _confirmedAccurate = v;
+              _onEdited('confirmed');
+            },
+            label: const ['I confirm that my information and ID are accurate.'],
+          ),
         ];
     }
+  }
+}
+
+/// Shown after sign-up: like the website, the account waits for an admin.
+class _RegistrationSubmittedPage extends StatelessWidget {
+  const _RegistrationSubmittedPage({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return PsAppShell(
+      topBar: const PsTopBar.brand(showBack: false),
+      footer: PsFooterActions(
+        primary: PsPrimaryButton(
+          label: 'Back to log in',
+          onPressed: () => Navigator.of(context).pushReplacement(fadeRoute(const LoginPage())),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(PsSpace.gutter, PsSpace.xl, PsSpace.gutter, PsSpace.lg),
+        children: [
+          Center(
+            child: Container(
+              width: 96,
+              height: 96,
+              decoration: const BoxDecoration(color: PsColors.primarySoft, shape: BoxShape.circle),
+              child: const Icon(Icons.hourglass_top_rounded, size: 44, color: PsColors.primary),
+            ),
+          ),
+          const SizedBox(height: PsSpace.lg),
+          Text('Registration submitted', textAlign: TextAlign.center, style: PsText.display),
+          const SizedBox(height: PsSpace.sm),
+          Text(
+            message.isEmpty ? 'Please wait for admin approval. You will be notified via email.' : message,
+            textAlign: TextAlign.center,
+            style: PsText.subtitle,
+          ),
+          const SizedBox(height: PsSpace.md),
+          Text(
+            'An admin checks your ID first. Once approved, log in with your email and password.',
+            textAlign: TextAlign.center,
+            style: PsText.caption,
+          ),
+        ],
+      ),
+    );
   }
 }
 

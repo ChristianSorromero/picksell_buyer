@@ -2,25 +2,28 @@
 
 namespace App\Support;
 
-use App\Models\BuyerAddress;
 use App\Models\Order;
+use App\Models\Pickrush\Parcel;
 use App\Models\Product;
+use App\Models\ProductReview;
 use App\Models\ReturnRequest;
 use App\Models\User;
-use App\Models\Voucher;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 
 /**
- * JSON shapes returned by the mobile buyer API. Keep in sync with the Dart
- * models in lib/models/.
+ * JSON shapes returned by the mobile buyer API, built from the shared Picksell tables. Keep in
+ * sync with the Dart models in lib/models/.
  */
 final class BuyerPresenter
 {
+    /** Public URL of a file on the website's public storage. */
     public static function image(?string $path): ?string
     {
-        if (!$path) return null;
-        return str_starts_with($path, 'http') ? $path : url('storage/' . ltrim($path, '/'));
+        if (! $path) return null;
+
+        return str_starts_with($path, 'http') ? $path : Storage::disk('public')->url(ltrim($path, '/'));
     }
 
     public static function money(float|string|null $v): float
@@ -33,30 +36,31 @@ final class BuyerPresenter
         return $d?->toIso8601String();
     }
 
-    /** Card-sized product (lists, grids, cart, wishlist). */
+    /** Card-sized product. Load `seller`, and for ratings withAvg('reviews', 'rating') + withCount('reviews'). */
     public static function product(Product $p, array $wishlistIds = []): array
     {
-        $price = self::money($p->effective_price);
         $hasDiscount = $p->discount > 0;
+        $images = $p->images->map(fn ($image) => $image->url)->values()->all();
 
         return [
             'id'               => $p->id,
             'name'             => $p->name,
             'category'         => $p->category ?? '',
-            'price'            => $price,
+            'price'            => self::money($p->effective_price),
             'original_price'   => $hasDiscount ? self::money($p->price) : null,
             'discount_percent' => $hasDiscount ? (int) round($p->discount) : null,
             'stock'            => (int) $p->stock,
-            'image'            => self::image($p->image),
-            'images'           => array_values(array_filter([self::image($p->image)])),
+            'image'            => self::image($p->primary_image),
+            'images'           => $images,
             'rating'           => $p->reviews_avg_rating !== null ? round((float) $p->reviews_avg_rating, 1) : null,
             'review_count'     => (int) ($p->reviews_count ?? 0),
             'sold_count'       => (int) ($p->sold_count ?? 0),
             'is_featured'      => (bool) $p->is_featured,
-            'is_available'     => $p->status === 'active' && $p->stock > 0,
+            'is_available'     => $p->isPurchasable() && $p->stock > 0,
             'wishlisted'       => in_array($p->id, $wishlistIds, true),
+            'voucher_code'     => $p->voucher_code,
+            'voucher_discount' => $p->voucher_code ? (float) $p->voucher_discount : null,
             'seller'           => $p->relationLoaded('seller') && $p->seller ? self::sellerBrief($p->seller) : null,
-            // Kept for older app builds.
             'seller_name'      => $p->seller?->business_name ?: $p->seller?->full_name ?? '',
             'seller_location'  => self::location($p->seller),
         ];
@@ -86,78 +90,51 @@ final class BuyerPresenter
         ])->values()->all();
     }
 
-    public static function review(Order $o): array
+    public static function review(ProductReview $r): array
     {
-        $buyer = $o->buyer;
-        $name = $buyer ? trim($buyer->first_name . ' ' . mb_substr((string) $buyer->last_name, 0, 1) . '.') : 'Picksell buyer';
+        $buyer = $r->buyer;
 
         return [
-            'id'              => $o->id,
-            'reviewer'        => $name,
-            'rating'          => (int) $o->rating,
-            'comment'         => $o->feedback,
-            'variation_label' => $o->variation_label,
-            'created_at'      => self::date($o->rated_at ?? $o->updated_at),
+            'id'         => $r->id,
+            'reviewer'   => $buyer ? trim($buyer->first_name.' '.mb_substr((string) $buyer->last_name, 0, 1).'.') : 'PickSell buyer',
+            'rating'     => (int) $r->rating,
+            'comment'    => $r->body,
+            'created_at' => self::date($r->created_at),
         ];
     }
 
-    public static function address(BuyerAddress $a): array
+    /** The buyer's profile address, where the website books every parcel. */
+    public static function deliveryAddress(User $u): array
     {
         return [
-            'id'             => $a->id,
-            'label'          => $a->label,
-            'recipient_name' => $a->recipient_name,
-            'phone'          => $a->phone,
-            'province'       => $a->province,
-            'municipality'   => $a->municipality,
-            'barangay'       => $a->barangay,
-            'street'         => $a->street,
-            'house_no'       => $a->house_no,
-            'postal_code'    => $a->postal_code,
-            'landmark'       => $a->landmark,
-            'full_address'   => $a->full_address,
-            'is_default'     => $a->is_default,
-        ];
-    }
-
-    public static function voucher(Voucher $v, ?float $eligibleSubtotal = null): array
-    {
-        $discount = $eligibleSubtotal === null ? null : $v->discountFor($eligibleSubtotal);
-
-        return [
-            'code'         => $v->code,
-            'scope'        => $v->scope,
-            'seller'       => $v->seller ? self::sellerBrief($v->seller) : null,
-            'title'        => $v->title,
-            'type'         => $v->type,
-            'value'        => $v->value,
-            'min_spend'    => $v->min_spend,
-            'max_discount' => $v->max_discount,
-            'is_limited'   => $v->is_limited,
-            'expires_at'   => self::date($v->expires_at),
-            'eligible'     => $discount === null ? null : $discount > 0,
-            'discount'     => $discount,
+            'recipient_name' => $u->full_name,
+            'phone'          => $u->contact_no,
+            'province'       => $u->province,
+            'municipality'   => $u->municipality,
+            'barangay'       => $u->barangay,
+            'street'         => $u->street,
+            'house_no'       => $u->house_no,
+            'full_address'   => collect([$u->house_no, $u->street, $u->barangay, $u->municipality, $u->province])->filter(fn ($part) => filled($part))->join(', '),
+            'complete'       => filled($u->province) && filled($u->municipality) && filled($u->barangay),
         ];
     }
 
     public static function orderCard(Order $o): array
     {
-        $status = $o->canonical_status;
+        $quantity = max((int) $o->quantity, 1);
 
         return [
             'id'              => $o->id,
             'order_number'    => $o->order_number,
-            'checkout_ref'    => $o->checkout_ref,
-            'status'          => $status,
-            'tab'             => OrderStatus::tab($status),
+            'status'          => OrderStatus::of($o),
+            'tab'             => OrderStatus::tab($o),
             'seller'          => $o->seller ? self::sellerBrief($o->seller) : null,
             'product_id'      => $o->product_id,
             'product_name'    => $o->product_name,
-            'image'           => self::image($o->product?->image),
-            'variation_label' => $o->variation_label,
+            'image'           => self::image($o->product?->primary_image),
             'quantity'        => (int) $o->quantity,
-            'unit_price'      => self::money($o->unit_price ?? ($o->quantity ? $o->amount / $o->quantity : $o->amount)),
-            'total'           => self::money($o->total ?? $o->amount),
+            'unit_price'      => self::money($o->amount / $quantity),
+            'total'           => self::money($o->amount),
             'rating'          => $o->rating,
             'created_at'      => self::date($o->created_at),
         ];
@@ -165,117 +142,127 @@ final class BuyerPresenter
 
     public static function orderDetail(Order $o): array
     {
-        $status = $o->canonical_status;
+        $status = OrderStatus::of($o);
         $return = $o->returnRequest;
-        // Change-of-mind returns follow the return window; defect claims get longer.
-        $canReturn = ReturnRequest::canBeRequestedFor($o);
+        $parcel = Parcel::forOrder($o);
+        $cancellation = $status === 'cancelled' ? $o->statusHistories->last(fn ($h) => $h->to_status === 'cancelled') : null;
 
         return self::orderCard($o) + [
-            'subtotal'          => self::money($o->subtotal ?? $o->amount),
-            'discount'          => self::money($o->discount),
-            'voucher_code'      => $o->voucher_code,
-            'shipping_fee'      => self::money($o->shipping_fee),
-            'service_fee'       => self::money($o->service_fee),
-            'shipping_option'   => self::shippingOptionName($o->shipping_option),
-            'estimated_delivery' => $o->estimated_delivery_from ? [
-                'from' => $o->estimated_delivery_from->toDateString(),
-                'to'   => $o->estimated_delivery_to?->toDateString(),
-            ] : null,
-            'payment_method'    => self::paymentMethodName($o->payment_method),
-            'payment_status'    => $o->payment_status,
-            'ship_to'           => $o->ship_to,
-            'waybill_number'    => $o->waybill_number,
-            'logistics'         => $o->logistics ? ['name' => $o->logistics->business_name ?: $o->logistics->full_name] : null,
-            'courier'           => $o->courier ? [
-                'name'         => $o->courier->full_name,
-                'vehicle'      => trim(($o->courier->vehicle_type ?? '') . ($o->courier->plate_number ? ' · ' . $o->courier->plate_number : '')) ?: null,
-                'phone'        => in_array($status, [OrderStatus::ASSIGNED_TO_RIDER, OrderStatus::OUT_FOR_DELIVERY, OrderStatus::DELIVERY_FAILED], true)
-                    ? $o->courier->contact_no : null, // only while the rider is active on this order
-            ] : null,
-            'events'            => $o->events->map(fn ($e) => [
-                'status'      => $e->status,
-                'title'       => $e->title,
-                'description' => $e->description,
-                'location'    => $e->location,
-                'occurred_at' => self::date($e->occurred_at),
-            ])->values(),
+            'subtotal'          => self::money($o->amount),
+            'discount'          => 0.0,
+            'shipping_fee'      => 0.0,
+            'service_fee'       => 0.0,
+            'payment_method'    => 'Cash on Delivery',
+            'cod_amount'        => self::money($o->amount),
+            'ship_to'           => $o->buyer ? self::deliveryAddress($o->buyer) : null,
+            'waybill_number'    => $parcel?->tracking_no ?? $o->waybill_number,
+            'logistics'         => $parcel ? ['name' => 'Pickrush'] : null,
+            'tracking_status'   => $o->tracking_status,
+            'events'            => self::timeline($o),
+            'tracking'          => $parcel ? self::tracking($parcel) : null,
             'feedback'          => $o->feedback,
-            'cancel_reason'     => $o->cancel_reason,
-            'cancelled_at'      => self::date($o->cancelled_at),
+            'cancel_reason'     => $cancellation?->reason,
+            'cancelled_at'      => self::date($cancellation?->created_at),
             'delivered_at'      => self::date($o->delivered_at),
             'return_request'    => $return ? self::returnRequest($return) : null,
             'actions'           => [
-                'can_cancel'  => in_array($status, [OrderStatus::PLACED, OrderStatus::PREPARING], true),
-                'can_rate'    => $status === OrderStatus::DELIVERED,
-                'can_return'  => $canReturn,
-                'can_report'  => $status !== OrderStatus::PLACED && $status !== OrderStatus::CANCELLED,
-                'can_reorder' => in_array($status, [OrderStatus::DELIVERED, OrderStatus::COMPLETED, OrderStatus::CANCELLED, OrderStatus::RETURNED], true),
-                'can_track'   => !in_array($status, [OrderStatus::CANCELLED], true),
+                'can_cancel'  => in_array($status, OrderStatus::CANCELLABLE, true),
+                'can_rate'    => in_array($status, OrderStatus::RATEABLE, true) && ! $o->rating,
+                'can_return'  => in_array($status, OrderStatus::RATEABLE, true) && ! $return,
+                'can_report'  => ! in_array($status, ['placed', 'cancelled'], true),
+                'can_reorder' => in_array($status, ['delivered', 'completed', 'cancelled', 'returned'], true),
+                'can_track'   => $status !== 'cancelled',
             ],
         ];
     }
 
+    /** Order steps from the status history (or, for older orders, the step timestamps). */
+    public static function timeline(Order $o): array
+    {
+        $steps = $o->statusHistories->map(fn ($h) => [OrderStatus::LEGACY[$h->to_status] ?? $h->to_status, $h->created_at, $h->reason]);
+        if ($steps->isEmpty()) {
+            $steps = collect(\App\Services\Orders\OrderLifecycleService::TIMESTAMPS)
+                ->map(fn ($column, $status) => [$status, $o->{$column}, null])
+                ->filter(fn ($step) => $step[1] !== null)
+                ->prepend(['placed', $o->created_at, null])
+                ->values();
+        }
+
+        return $steps->map(fn ($step) => [
+            'status'      => $step[0],
+            'title'       => OrderStatus::EVENTS[$step[0]][0] ?? ucfirst(str_replace('_', ' ', $step[0])),
+            'description' => $step[0] === 'cancelled' && $step[2] ? "Reason: {$step[2]}" : (OrderStatus::EVENTS[$step[0]][1] ?? null),
+            'location'    => null,
+            'occurred_at' => self::date($step[1]),
+        ])->values()->all();
+    }
+
+    /** Pickrush scans for the parcel, newest first (what the website's tracking page shows). */
+    public static function tracking(Parcel $parcel): array
+    {
+        $parcel->load('events.hub', 'events.toHub');
+
+        return [
+            'tracking_no' => $parcel->tracking_no,
+            'status'      => ucfirst(str_replace('_', ' ', (string) $parcel->current_status)),
+            'events'      => $parcel->events->reverse()->values()->map(fn ($event) => [
+                'headline' => $event->headline(),
+                'location' => $event->hub?->name,
+                'at'       => self::date($event->occurred_at),
+            ])->all(),
+        ];
+    }
+
+    /** A website return request in the app's five-stage shape; `stage` keeps the website step. */
     public static function returnRequest(ReturnRequest $r): array
     {
-        $agreed = in_array($r->status, [ReturnRequest::RESOLVED, ReturnRequest::COMPLETED], true);
-        $resolution = fn () => [
-            'type'             => $r->resolution_type,
-            'label'            => ReturnRequest::RESOLUTIONS[$r->resolution_type][0] ?? null,
-            'amount'           => self::money($r->resolution_amount ?? 0),
-            'item_must_return' => $r->requires_item_return,
-            'note'             => $r->seller_note,
-        ];
+        $stage = match ($r->status) {
+            'requested' => 'requested',
+            'awaiting_item', 'received', 'inspected' => 'under_review',
+            'approved_for_refund', 'refund_due' => 'processing',
+            'completed' => 'refunded',
+            'rejected' => 'rejected',
+            default => 'under_review',
+        };
 
         return [
             'id'            => $r->id,
-            // The five stages older app builds know; `stage` has the detail.
-            'status'        => match ($r->status) {
-                ReturnRequest::REQUESTED => 'requested',
-                ReturnRequest::RESOLVED  => 'processing',
-                ReturnRequest::COMPLETED => 'refunded',
-                ReturnRequest::REJECTED  => 'rejected',
-                default                  => 'under_review',
-            },
+            'status'        => $stage,
             'stage'         => $r->status,
-            'stage_label'   => ReturnRequest::STAGE_LABELS[$r->status] ?? $r->status,
-            // What the buyer has to do next, if anything: 'reply' or 'decide'.
-            'awaiting'      => match ($r->status) {
-                ReturnRequest::INFO_REQUESTED => 'reply',
-                ReturnRequest::PROPOSED       => 'decide',
-                default                       => null,
-            },
-            'info_request'  => $r->status === ReturnRequest::INFO_REQUESTED ? $r->info_request : null,
-            'proposal'      => $r->status === ReturnRequest::PROPOSED ? $resolution() : null,
-            'resolution'    => $agreed ? $resolution() : null,
-            'quantity'      => $r->quantity,
-            'reason'        => $r->reason,
+            'stage_label'   => self::returnStageLabel($r),
+            'quantity'      => (int) $r->quantity,
+            'reason'        => ReturnRequest::REASONS[$r->reason] ?? $r->reason,
             'details'       => $r->details,
-            'refund_amount' => self::money($agreed ? ($r->resolution_amount ?? 0) : $r->refund_amount),
-            'refund_to'     => self::paymentMethodName($r->refund_to) ?? $r->refund_to,
-            // Evidence lives on the private disk; only admins can open it.
-            'evidence_count' => count($r->evidence_paths ?? []),
+            'refund_amount' => self::money($r->refund?->amount ?? $r->refund_amount),
+            'refund_to'     => 'Handled by PickSell support',
+            'seller_note'   => $r->seller_note,
+            'tracking'      => $r->status === 'awaiting_item' && $r->tracking_number
+                ? ['carrier' => $r->carrier, 'number' => $r->tracking_number, 'status' => $r->tracking_status]
+                : null,
             'requested_at'  => self::date($r->created_at),
-            'reviewed_at'   => self::date($r->admin_approved_at ?? $r->reviewed_at),
-            'processing_at' => self::date($r->resolved_at ?? $r->processing_at),
-            'refunded_at'   => self::date($r->refunded_at ?? ($r->status === ReturnRequest::COMPLETED ? $r->completed_at : null)),
+            'reviewed_at'   => self::date($r->approved_at ?? $r->reviewed_at),
+            'processing_at' => self::date($r->refund_due_at ?? $r->admin_resolved_at),
+            'refunded_at'   => self::date($r->status === 'completed' ? $r->completed_at : null),
             'rejected_at'   => self::date($r->rejected_at),
             'completed_at'  => self::date($r->completed_at),
-            'resolution_note' => $r->resolution_note,
+            'resolution_note' => $r->admin_decision ?: $r->admin_notes,
         ];
     }
 
-    public static function shippingOptionName(?string $code): ?string
+    public static function returnStageLabel(ReturnRequest $r): string
     {
-        if (!$code) return null;
-        return collect(config('picksell.shipping_options'))->firstWhere('code', $code)['name'] ?? $code;
-    }
-
-    public static function paymentMethodName(?string $code): ?string
-    {
-        if (!$code) return null;
-        // Older records may name methods that are no longer offered.
-        $legacy = ['bank_transfer' => 'Bank Transfer', 'gcash' => 'GCash', 'maya' => 'Maya', 'card' => 'Credit / Debit Card'];
-        return collect([...config('picksell.payment_methods'), ...config('picksell.refund_methods')])->firstWhere('code', $code)['name']
-            ?? $legacy[$code] ?? $code;
+        return match ($r->status) {
+            'requested' => 'Waiting for the seller to review your request',
+            'awaiting_item' => 'Approved: send the item back to the seller',
+            'received' => 'The seller received the item; PickSell is inspecting it',
+            'inspected' => 'Inspected; waiting for refund approval',
+            'approved_for_refund' => 'Refund approved',
+            'refund_due' => 'Refund on its way',
+            'completed' => 'Refund completed',
+            'rejected' => $r->dispute_status === 'open'
+                ? 'The seller declined; PickSell support is reviewing it'
+                : 'Request declined',
+            default => ucfirst(str_replace('_', ' ', $r->status)),
+        };
     }
 }
