@@ -67,9 +67,13 @@ orders 25 and 26, and the rehearsed repair of orders 5 and 24. It's safe to drop
 | picksell-buyer | feature/shared-database | `app/Models/Order.php` (actor fix); `scripts/check-website-drift.php`; `documentation/stabilization/*` | none |
 | pickrush | main | none | Gradle wrapper change; generated plugin files (line endings only, from `flutter pub get`) |
 
-**Not committed.** Picksell has ambiguous uncommitted work from before this session, so nothing
-there was staged; the owner chooses the commit grouping (D8). Proposed Picksell commits: (1) the
+**picksell-buyer: committed locally** on `feature/shared-database`: `8b576fa` (actor fix),
+`8123e95` (drift script and these reports), plus this note. **Not pushed.**
+
+**Picksell: not committed.** It has ambiguous uncommitted work from before this session, so
+nothing there was staged; the owner chooses the grouping (D8). Proposed commits: (1) the
 `/api/mobile` port as its owner intends; (2) "Never credit Pickrush staff as a website user in
 order history", with `Order.php` and `StaffScanOrderSyncTest`; (3) "Add pickrush:reconcile-order",
-with the command and its test. picksell-buyer: one commit for the actor fix, one for the drift
-script and the stabilization docs. Nothing has been pushed.
+with the command and its test.
+
+**pickrush:** nothing from this work.
