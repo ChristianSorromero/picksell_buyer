@@ -77,7 +77,10 @@ class Order extends Model
 
     private function recordStatusChange(?string $from): void
     {
+        // Only a website account can be credited: changed_by references users, and Pickrush staff
+        // sign in on their own guard with ids from a different table.
         $actor = auth()->user();
+        $actor = $actor instanceof User ? $actor : null;
         OrderStatusHistory::create([
             'order_id' => $this->id,
             'changed_by' => $this->statusChangedBy ?? $actor?->id,
