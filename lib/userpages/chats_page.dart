@@ -1,19 +1,26 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
-import '../app_colors.dart';
-import '../app_text_styles.dart';
+import '../components/shared/ps_app_shell.dart';
+import '../components/shared/ps_buttons.dart';
+import '../components/shared/ps_search_bar.dart';
+import '../components/shared/ps_top_bar.dart';
+import '../components/shared/states/ps_empty_state.dart';
 import '../core/network/api_client.dart';
+import '../core/theme/ps_colors.dart';
+import '../core/theme/ps_tokens.dart';
+import '../core/theme/ps_typography.dart';
 import '../models/chat.dart';
 import '../services/chat_service.dart';
 
+/// Soft token washes for contact avatars, picked by contact id so a contact
+/// keeps the same color in the list, while searching and in the thread.
 const List<Color> _avatarTints = [
-  AppColors.tileYellow,
-  AppColors.tileMint,
-  AppColors.tileRose,
-  AppColors.tileCream,
-  AppColors.tileGrey,
+  PsColors.primarySoft,
+  PsColors.infoSoft,
+  PsColors.successSoft,
+  PsColors.warningSoft,
+  PsColors.neutralSoft,
 ];
 
 // ─────────────────────────── CONTACTS LIST ───────────────────────────
@@ -65,67 +72,38 @@ class _ChatsPageState extends State<ChatsPage> {
     return _contacts.where((c) => c.name.toLowerCase().contains(q) || c.lastMessage.toLowerCase().contains(q)).toList();
   }
 
+  void _toggleSearch() => setState(() {
+        _searching = !_searching;
+        if (!_searching) { _query = ''; _searchController.clear(); }
+      });
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            if (_searching) _buildSearchField(),
-            const SizedBox(height: 8),
-            Expanded(child: _buildBody()),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 20, 0),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => Navigator.of(context).maybePop(),
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-            color: AppColors.textPrimary,
-          ),
-          Text('Chats', style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-          const Spacer(),
-          GestureDetector(
-            onTap: () => setState(() {
-              _searching = !_searching;
-              if (!_searching) { _query = ''; _searchController.clear(); }
-            }),
-            child: Icon(_searching ? Icons.close_rounded : Icons.search_rounded, size: 22, color: AppColors.textPrimary),
+    return PsAppShell(
+      topBar: PsTopBar(
+        title: 'Chats',
+        actions: [
+          PsIconButton(
+            icon: _searching ? Icons.close_rounded : Icons.search_rounded,
+            tooltip: _searching ? 'Close search' : 'Search chats',
+            onPressed: _toggleSearch,
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildSearchField() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-      child: TextField(
-        controller: _searchController,
-        autofocus: true,
-        onChanged: (v) => setState(() => _query = v),
-        style: AppTextStyles.input,
-        cursorColor: AppColors.primary,
-        decoration: InputDecoration(
-          hintText: 'Search chats',
-          hintStyle: AppTextStyles.hint,
-          filled: true,
-          fillColor: AppColors.inputFill,
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(vertical: 12),
-          prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AppColors.textSecondary),
-          prefixIconConstraints: const BoxConstraints(minWidth: 44),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-        ),
+      body: Column(
+        children: [
+          if (_searching)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(PsSpace.gutter, 0, PsSpace.gutter, PsSpace.xs),
+              child: PsSearchBar(
+                hint: 'Search chats',
+                controller: _searchController,
+                autofocus: true,
+                onChanged: (v) => setState(() => _query = v),
+              ),
+            ),
+          Expanded(child: _buildBody()),
+        ],
       ),
     );
   }
@@ -134,29 +112,27 @@ class _ChatsPageState extends State<ChatsPage> {
     if (_loading) return const Center(child: CircularProgressIndicator());
     final contacts = _visible;
     if (contacts.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.chat_bubble_outline_rounded, size: 48, color: AppColors.textHint),
-            const SizedBox(height: 12),
-            Text('No conversations yet', style: AppTextStyles.body),
-            const SizedBox(height: 4),
-            Text('Start a chat from a product page', style: AppTextStyles.small),
-          ],
-        ),
-      );
+      return _query.trim().isEmpty
+          ? const PsEmptyState(
+              icon: Icons.chat_bubble_outline_rounded,
+              title: 'No conversations yet',
+              message: 'Start a chat from a product page',
+            )
+          : PsEmptyState(
+              icon: Icons.search_off_rounded,
+              title: 'No matching chats',
+              message: 'Nothing matches “${_query.trim()}”.',
+            );
     }
     return RefreshIndicator(
       onRefresh: _load,
-      color: AppColors.primary,
+      color: PsColors.primaryStrong,
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+        padding: const EdgeInsets.fromLTRB(PsSpace.gutter, 0, PsSpace.gutter, PsSpace.lg),
         itemCount: contacts.length,
-        separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.border),
+        separatorBuilder: (_, __) => const Divider(height: 1, indent: _ContactTile.textInset),
         itemBuilder: (_, i) => _ContactTile(
           contact: contacts[i],
-          tint: _avatarTints[i % _avatarTints.length],
           onTap: () async {
             await Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => ChatConversationPage(contact: contacts[i]),
@@ -169,59 +145,90 @@ class _ChatsPageState extends State<ChatsPage> {
   }
 }
 
-class _ContactTile extends StatelessWidget {
-  const _ContactTile({required this.contact, required this.tint, required this.onTap});
+/// Initials on a soft token wash; same tint wherever the contact appears.
+class _ChatAvatar extends StatelessWidget {
+  const _ChatAvatar({required this.contact, this.size = 48});
   final ChatContact contact;
-  final Color tint;
-  final VoidCallback onTap;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          children: [
-            Container(
-              width: 52, height: 52,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: tint, shape: BoxShape.circle),
-              child: Text(contact.initials, style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return ExcludeSemantics(
+      child: Container(
+        width: size, height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: _avatarTints[contact.id % _avatarTints.length], shape: BoxShape.circle),
+        child: Text(contact.initials, style: PsText.bodyStrong.copyWith(fontSize: size * 0.32)),
+      ),
+    );
+  }
+}
+
+class _ContactTile extends StatelessWidget {
+  const _ContactTile({required this.contact, required this.onTap});
+  final ChatContact contact;
+  final VoidCallback onTap;
+
+  /// Divider indent: lines up with the name, past the avatar.
+  static const double textInset = 48 + PsSpace.sm;
+
+  @override
+  Widget build(BuildContext context) {
+    final unread = contact.hasUnread;
+    return Semantics(
+      button: true,
+      label: [
+        contact.name,
+        if (unread) '${contact.unread} unread',
+        contact.lastMessage,
+        contact.timeLabel,
+      ].where((s) => s.isNotEmpty).join(', '),
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: PsRadius.card,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: PsSpace.sm),
+          child: Row(
+            children: [
+              _ChatAvatar(contact: contact),
+              const SizedBox(width: PsSpace.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(contact.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: PsText.bodyStrong),
+                    const SizedBox(height: 2),
+                    Text(contact.lastMessage, maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: unread
+                            ? PsText.body.copyWith(fontSize: 13.5, fontWeight: FontWeight.w600)
+                            : PsText.bodyMuted),
+                  ],
+                ),
+              ),
+              const SizedBox(width: PsSpace.xs),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(contact.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                  const SizedBox(height: 3),
-                  Text(contact.lastMessage, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.small.copyWith(
-                        fontWeight: contact.hasUnread ? FontWeight.w500 : FontWeight.w400,
-                        color: contact.hasUnread ? AppColors.textPrimary : AppColors.textSecondary,
+                  Text(contact.timeLabel,
+                      style: PsText.caption.copyWith(
+                        fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
+                        color: unread ? PsColors.primaryStrong : PsColors.textMuted,
                       )),
+                  const SizedBox(height: 6),
+                  if (unread)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: PsColors.primary, borderRadius: BorderRadius.circular(PsRadius.pill)),
+                      child: Text(contact.unread > 99 ? '99+' : '${contact.unread}',
+                          style: PsText.badge.copyWith(letterSpacing: 0, color: PsColors.onPrimary)),
+                    ),
                 ],
               ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(contact.timeLabel, style: AppTextStyles.caption.copyWith(letterSpacing: 0, fontWeight: FontWeight.w500)),
-                const SizedBox(height: 6),
-                if (contact.hasUnread)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                    constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                    alignment: Alignment.center,
-                    child: Text('${contact.unread}', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: Colors.white)),
-                  ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -323,94 +330,106 @@ class _ChatConversationPageState extends State<ChatConversationPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: AppColors.textPrimary),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Row(
+    return PsAppShell(
+      topBar: PsTopBar(
+        titleWidget: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 36, height: 36,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(color: AppColors.tileYellow, shape: BoxShape.circle),
-              child: Text(widget.contact.initials, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
+            _ChatAvatar(contact: widget.contact, size: 36),
+            const SizedBox(width: PsSpace.xs),
+            Flexible(
               child: Text(widget.contact.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                  style: PsText.heading.copyWith(fontSize: 16)),
             ),
           ],
         ),
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: AppColors.border),
-        ),
+        bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider(height: 1)),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _messages.isEmpty
-                    ? Center(child: Text('No messages yet. Start the conversation!', style: AppTextStyles.small, textAlign: TextAlign.center))
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        itemCount: _messages.length,
-                        itemBuilder: (_, i) => _MessageBubble(message: _messages[i]),
-                      ),
-          ),
-          _buildInput(),
-        ],
-      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _messages.isEmpty
+              ? const PsEmptyState(
+                  icon: Icons.chat_bubble_outline_rounded,
+                  title: 'No messages yet',
+                  message: 'Say hello to start the conversation.',
+                )
+              : ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.symmetric(horizontal: PsSpace.gutter, vertical: PsSpace.sm),
+                  itemCount: _messages.length,
+                  itemBuilder: (_, i) => _MessageBubble(message: _messages[i]),
+                ),
+      footer: _buildInput(),
     );
   }
 
   Widget _buildInput() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
       decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: AppColors.border)),
+        color: PsColors.surface,
+        border: Border(top: BorderSide(color: PsColors.border)),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _inputController,
-              style: AppTextStyles.input,
-              cursorColor: AppColors.primary,
-              textCapitalization: TextCapitalization.sentences,
-              onSubmitted: (_) => _send(),
-              decoration: InputDecoration(
-                hintText: 'Type a message...',
-                hintStyle: AppTextStyles.hint,
-                filled: true,
-                fillColor: AppColors.inputFill,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(PsSpace.gutter, PsSpace.xs, PsSpace.xs, PsSpace.xs),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _inputController,
+                  style: PsText.input,
+                  textCapitalization: TextCapitalization.sentences,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => _send(),
+                  decoration: InputDecoration(
+                    hintText: 'Type a message…',
+                    hintStyle: PsText.hint,
+                    isDense: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(PsRadius.pill),
+                      borderSide: const BorderSide(color: PsColors.border),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(PsRadius.pill),
+                      borderSide: const BorderSide(color: PsColors.border),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(PsRadius.pill),
+                      borderSide: const BorderSide(color: PsColors.primary, width: 1.4),
+                    ),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: PsSpace.xxs),
+              Tooltip(
+                message: 'Send message',
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: InkResponse(
+                    onTap: _send,
+                    radius: PsSize.minTap / 2 + 2,
+                    child: SizedBox.square(
+                      dimension: PsSize.minTap + 4,
+                      child: Center(
+                        child: Container(
+                          width: PsSize.minTap, height: PsSize.minTap,
+                          decoration: const BoxDecoration(color: PsColors.primary, shape: BoxShape.circle),
+                          child: _sending
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: PsColors.onPrimary),
+                                )
+                              : const Icon(Icons.send_rounded, color: PsColors.onPrimary, size: 20),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 10),
-          GestureDetector(
-            onTap: _send,
-            child: Container(
-              width: 44, height: 44,
-              decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-              child: _sending
-                  ? const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.send_rounded, color: Colors.white, size: 20),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -423,31 +442,33 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMine = message.isMine;
+    const corner = Radius.circular(PsRadius.lg);
+    const tail = Radius.circular(PsSpace.xxs);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: PsSpace.xs),
       child: Column(
         crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
           Container(
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: isMine ? AppColors.primary : Colors.white,
+              // Dark onPrimary text keeps the coral bubble readable (~6:1).
+              color: isMine ? PsColors.primary : PsColors.surface,
+              border: isMine ? null : Border.all(color: PsColors.border),
               borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(18),
-                topRight: const Radius.circular(18),
-                bottomLeft: Radius.circular(isMine ? 18 : 4),
-                bottomRight: Radius.circular(isMine ? 4 : 18),
+                topLeft: corner,
+                topRight: corner,
+                bottomLeft: isMine ? corner : tail,
+                bottomRight: isMine ? tail : corner,
               ),
-              boxShadow: [BoxShadow(color: Colors.black.withAlpha(13), blurRadius: 4, offset: const Offset(0, 1))],
             ),
-            child: Text(message.body,
-                style: GoogleFonts.inter(fontSize: 14, color: isMine ? Colors.white : AppColors.textPrimary)),
+            child: Text(message.body, style: PsText.body.copyWith(color: isMine ? PsColors.onPrimary : PsColors.textPrimary)),
           ),
-          const SizedBox(height: 3),
+          const SizedBox(height: PsSpace.xxs),
           Text(
             '${message.createdAt.hour.toString().padLeft(2, '0')}:${message.createdAt.minute.toString().padLeft(2, '0')}',
-            style: AppTextStyles.caption.copyWith(fontSize: 10, letterSpacing: 0),
+            style: PsText.caption.copyWith(fontSize: 11.5),
           ),
         ],
       ),
