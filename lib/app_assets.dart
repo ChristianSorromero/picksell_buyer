@@ -29,4 +29,20 @@ class AppAssets {
     'assets/tiles/clothes.jpg',
     'assets/tiles/decor.jpg',
   ];
+
+  /// Decorative, offline-only products used by the login waterfall.
+  static const List<String> loginWaterfall = [
+    'assets/images/login_waterfall/camera.png',
+    'assets/images/login_waterfall/cream.png',
+    'assets/images/login_waterfall/dress.png',
+    'assets/images/login_waterfall/headphone.png',
+    'assets/images/login_waterfall/lotion.png',
+    'assets/images/login_waterfall/perfume.png',
+    'assets/images/login_waterfall/shoes.png',
+    'assets/images/login_waterfall/smart_watch.png',
+    'assets/images/login_waterfall/sneakers.png',
+    'assets/images/login_waterfall/toy.png',
+    'assets/images/login_waterfall/vacuum.png',
+    'assets/images/login_waterfall/petchair.png',
+  ];
 }

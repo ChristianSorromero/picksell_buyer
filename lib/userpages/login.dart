@@ -5,6 +5,7 @@ import '../app_assets.dart';
 import '../components/components.dart';
 import '../components/shared/auth/register_prompt.dart';
 import '../components/shared/auth/social_button.dart';
+import '../components/shared/auth/waterfall_product_carousel.dart';
 import '../page_transitions.dart';
 import '../services/auth_service.dart';
 import 'buyer/buyer_shell.dart';
@@ -64,7 +65,10 @@ class _LoginPageState extends State<LoginPage> {
     final user = result.data?['user'];
     final token = result.data?['token'];
     // Never enter the shell without a credential to send.
-    if (user is! Map<String, dynamic> || user['id'] is! int || token is! String || token.isEmpty) {
+    if (user is! Map<String, dynamic> ||
+        user['id'] is! int ||
+        token is! String ||
+        token.isEmpty) {
       await PsDialog.error(
         context,
         title: 'Couldn’t log you in',
@@ -80,7 +84,9 @@ class _LoginPageState extends State<LoginPage> {
     );
 
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(fadeRoute(const BuyerDashboardPage()), (_) => false);
+    Navigator.of(
+      context,
+    ).pushAndRemoveUntil(fadeRoute(const BuyerDashboardPage()), (_) => false);
   }
 
   Future<void> _handleLoginError(ApiResult result) async {
@@ -90,7 +96,9 @@ class _LoginPageState extends State<LoginPage> {
     if (result.statusCode == 403 && data['status'] != null) {
       await PsDialog.error(
         context,
-        title: data['status'] == 'pending' ? 'Waiting for approval' : 'Can’t log in',
+        title: data['status'] == 'pending'
+            ? 'Waiting for approval'
+            : 'Can’t log in',
         message: result.message,
       );
       return;
@@ -110,7 +118,9 @@ class _LoginPageState extends State<LoginPage> {
 
     await PsDialog.error(
       context,
-      title: result.isNetworkError ? 'Can’t reach Picksell' : 'Couldn’t log you in',
+      title: result.isNetworkError
+          ? 'Can’t reach Picksell'
+          : 'Couldn’t log you in',
       message: result.message,
     );
   }
@@ -119,72 +129,129 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return AutofillGroup(
       child: PsAppShell(
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(PsSpace.gutter, PsSpace.xl, PsSpace.gutter, PsSpace.md),
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        body: Stack(
           children: [
-            const Center(
-              child: Image(image: AssetImage(AppAssets.logo), height: 72, fit: BoxFit.contain),
+            const Positioned.fill(
+              child: Opacity(opacity: 0.28, child: WaterfallProductCarousel()),
             ),
-            const SizedBox(height: PsSpace.lg),
-            Text('Welcome back!', textAlign: TextAlign.center, style: PsText.display),
-            const SizedBox(height: PsSpace.xs),
-            Text(
-              'Log in to continue shopping and manage your orders.',
-              textAlign: TextAlign.center,
-              style: PsText.subtitle,
-            ),
-            const SizedBox(height: PsSpace.xl),
-            PsTextField(
-              label: 'Email',
-              hint: 'name@example.com',
-              controller: _emailController,
-              errorText: _emailError,
-              keyboardType: TextInputType.emailAddress,
-              autofillHints: const [AutofillHints.email, AutofillHints.username],
-              inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
-              onChanged: (_) {
-                if (_emailError != null) setState(() => _emailError = null);
-              },
-              onSubmitted: (_) => _passwordFocus.requestFocus(),
-            ),
-            const SizedBox(height: 22),
-            PsTextField(
-              label: 'Password',
-              hint: 'Enter your password',
-              controller: _passwordController,
-              focusNode: _passwordFocus,
-              obscure: true,
-              errorText: _passwordError,
-              textInputAction: TextInputAction.done,
-              autofillHints: const [AutofillHints.password],
-              labelTrailing: GestureDetector(
-                onTap: () => Navigator.of(context).push(fadeRoute(ForgotPasswordPage(initialEmail: _emailController.text.trim()))),
-                behavior: HitTestBehavior.opaque,
-                child: Text('Forgot password?', style: PsText.link.copyWith(fontSize: 13)),
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0x88FFFFFF),
+                      Color(0xCCFFFFFF),
+                      Color(0xEEF9F8F6),
+                    ],
+                  ),
+                ),
               ),
-              onChanged: (_) {
-                if (_passwordError != null) setState(() => _passwordError = null);
-              },
-              onSubmitted: (_) => _login(),
             ),
-            const SizedBox(height: PsSpace.lg),
-            PsPrimaryButton(label: 'Log in', loading: _isLoading, onPressed: _login),
-            const SizedBox(height: PsSpace.lg),
-            const OrContinueWith(),
-            const SizedBox(height: PsSpace.md),
-            SocialButton.google(
-              label: 'Continue with Google',
-              onPressed: () => _comingSoon('Google sign-in'),
-            ),
-            const SizedBox(height: PsSpace.sm),
-            SocialButton.facebook(
-              label: 'Continue with Facebook',
-              onPressed: () => _comingSoon('Facebook sign-in'),
-            ),
-            const SizedBox(height: PsSpace.lg),
-            RegisterPrompt(
-              onRegister: () => Navigator.of(context).push(fadeRoute(const RegisterPage())),
+            ListView(
+              padding: const EdgeInsets.fromLTRB(
+                PsSpace.gutter,
+                PsSpace.xl,
+                PsSpace.gutter,
+                PsSpace.md,
+              ),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              children: [
+                const Center(
+                  child: Image(
+                    image: AssetImage(AppAssets.logo),
+                    height: 72,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+                const SizedBox(height: PsSpace.lg),
+                Text(
+                  'Welcome back!',
+                  textAlign: TextAlign.center,
+                  style: PsText.display,
+                ),
+                const SizedBox(height: PsSpace.xs),
+                Text(
+                  'Log in to continue shopping and manage your orders.',
+                  textAlign: TextAlign.center,
+                  style: PsText.subtitle,
+                ),
+                const SizedBox(height: PsSpace.xl),
+                PsTextField(
+                  label: 'Email',
+                  hint: 'name@example.com',
+                  controller: _emailController,
+                  errorText: _emailError,
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [
+                    AutofillHints.email,
+                    AutofillHints.username,
+                  ],
+                  inputFormatters: [
+                    FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                  ],
+                  onChanged: (_) {
+                    if (_emailError != null) setState(() => _emailError = null);
+                  },
+                  onSubmitted: (_) => _passwordFocus.requestFocus(),
+                ),
+                const SizedBox(height: 22),
+                PsTextField(
+                  label: 'Password',
+                  hint: 'Enter your password',
+                  controller: _passwordController,
+                  focusNode: _passwordFocus,
+                  obscure: true,
+                  errorText: _passwordError,
+                  textInputAction: TextInputAction.done,
+                  autofillHints: const [AutofillHints.password],
+                  labelTrailing: GestureDetector(
+                    onTap: () => Navigator.of(context).push(
+                      fadeRoute(
+                        ForgotPasswordPage(
+                          initialEmail: _emailController.text.trim(),
+                        ),
+                      ),
+                    ),
+                    behavior: HitTestBehavior.opaque,
+                    child: Text(
+                      'Forgot password?',
+                      style: PsText.link.copyWith(fontSize: 13),
+                    ),
+                  ),
+                  onChanged: (_) {
+                    if (_passwordError != null) {
+                      setState(() => _passwordError = null);
+                    }
+                  },
+                  onSubmitted: (_) => _login(),
+                ),
+                const SizedBox(height: PsSpace.lg),
+                PsPrimaryButton(
+                  label: 'Log in',
+                  loading: _isLoading,
+                  onPressed: _login,
+                ),
+                const SizedBox(height: PsSpace.lg),
+                const OrContinueWith(),
+                const SizedBox(height: PsSpace.md),
+                SocialButton.google(
+                  label: 'Continue with Google',
+                  onPressed: () => _comingSoon('Google sign-in'),
+                ),
+                const SizedBox(height: PsSpace.sm),
+                SocialButton.facebook(
+                  label: 'Continue with Facebook',
+                  onPressed: () => _comingSoon('Facebook sign-in'),
+                ),
+                const SizedBox(height: PsSpace.lg),
+                RegisterPrompt(
+                  onRegister: () => Navigator.of(
+                    context,
+                  ).push(fadeRoute(const RegisterPage())),
+                ),
+              ],
             ),
           ],
         ),

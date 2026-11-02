@@ -22,7 +22,12 @@ class _HomeTabState extends State<HomeTab> {
 
   Future<(HomeFeed, List<Product>)> _load() async {
     final feed = await _catalog.home();
-    WishlistStore.instance.sync([...feed.hotDiscounts, ...feed.featured, ...feed.recommended, ...feed.recentlyViewed]);
+    WishlistStore.instance.sync([
+      ...feed.hotDiscounts,
+      ...feed.featured,
+      ...feed.recommended,
+      ...feed.recentlyViewed,
+    ]);
 
     // BUY-A06: the server's list, shared with the website.
     return (feed, feed.recentlyViewed.take(6).toList());
@@ -37,42 +42,61 @@ class _HomeTabState extends State<HomeTab> {
         load: _load,
         loading: const SingleChildScrollView(
           physics: NeverScrollableScrollPhysics(),
-          child: Column(children: [SizedBox(height: PsSpace.md), PsProductGridSkeleton(count: 6)]),
+          child: Column(
+            children: [
+              SizedBox(height: PsSpace.md),
+              PsProductGridSkeleton(count: 6),
+            ],
+          ),
         ),
         isEmpty: (d) => d.$1.recommended.isEmpty && d.$1.hotDiscounts.isEmpty,
         empty: const PsEmptyState(
           icon: Icons.storefront_outlined,
           title: 'No products yet',
-          message: 'Sellers haven’t listed anything yet. Pull down to check again.',
+          message:
+              'Sellers haven’t listed anything yet. Pull down to check again.',
         ),
         builder: (context, data, reload) {
           final (feed, recent) = data;
-          void open(Product p) => openProduct(context, p.id).then((_) => _view.currentState?.reload());
+          void open(Product p) => openProduct(
+            context,
+            p.id,
+          ).then((_) => _view.currentState?.reload());
 
           return CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               if (feed.categories.isNotEmpty)
                 SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: PsSpace.xs, bottom: PsSpace.sm),
-                    child: PsFilterChips<String>(
-                      selected: '',
-                      options: [
-                        const PsFilterOption('', 'All Categories'),
-                        for (final c in feed.categories) PsFilterOption(c.name, c.name),
-                      ],
-                      onSelected: (c) => c.isEmpty
-                          ? ShellNav.tab.value = BuyerTab.discover
-                          : openProductList(context, title: c, category: c),
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const PsSectionHeader(title: 'Shop by category'),
+                      PsFilterChips<String>(
+                        selected: '',
+                        options: [
+                          const PsFilterOption('', 'All Categories'),
+                          for (final c in feed.categories)
+                            PsFilterOption(c.name, c.name),
+                        ],
+                        onSelected: (c) => c.isEmpty
+                            ? ShellNav.tab.value = BuyerTab.discover
+                            : openProductList(context, title: c, category: c),
+                      ),
+                    ],
                   ),
                 ),
               SliverToBoxAdapter(
                 child: PsBannerCarousel(
                   banners: feed.banners,
                   onTap: (b) {
-                    if (b.kind == 'deals') openProductList(context, title: 'Hot Discounts', onSale: true);
+                    if (b.kind == 'deals') {
+                      openProductList(
+                        context,
+                        title: 'Hot Discounts',
+                        onSale: true,
+                      );
+                    }
                   },
                 ),
               ),
@@ -81,18 +105,39 @@ class _HomeTabState extends State<HomeTab> {
                   child: PsSectionHeader(
                     title: 'Hot Discounts',
                     subtitle: 'Biggest markdowns right now',
-                    onViewAll: () => openProductList(context, title: 'Hot Discounts', onSale: true),
+                    onViewAll: () => openProductList(
+                      context,
+                      title: 'Hot Discounts',
+                      onSale: true,
+                    ),
                   ),
                 ),
-                PsProductGrid(products: feed.hotDiscounts.take(4).toList(), onTap: open),
+                PsProductGrid(
+                  products: feed.hotDiscounts.take(4).toList(),
+                  onTap: open,
+                ),
               ],
               if (recent.isNotEmpty) ...[
-                const SliverToBoxAdapter(child: PsSectionHeader(title: 'Recently Viewed')),
-                SliverToBoxAdapter(child: _HorizontalProducts(products: recent, onTap: open)),
+                const SliverToBoxAdapter(
+                  child: PsSectionHeader(title: 'Recently Viewed'),
+                ),
+                SliverToBoxAdapter(
+                  child: _HorizontalProducts(products: recent, onTap: open),
+                ),
               ],
               if (feed.featured.isNotEmpty) ...[
-                const SliverToBoxAdapter(child: PsSectionHeader(title: 'Featured Picks', subtitle: 'Hand-picked by the Picksell team')),
-                SliverToBoxAdapter(child: _HorizontalProducts(products: feed.featured, onTap: open)),
+                const SliverToBoxAdapter(
+                  child: PsSectionHeader(
+                    title: 'Featured Picks',
+                    subtitle: 'Hand-picked by the Picksell team',
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: _HorizontalProducts(
+                    products: feed.featured,
+                    onTap: open,
+                  ),
+                ),
               ],
               if (feed.recommended.isNotEmpty) ...[
                 SliverToBoxAdapter(
@@ -121,13 +166,19 @@ class _HorizontalProducts extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 296,
+      height: 320,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: PsSpace.page,
         itemCount: products.length,
         separatorBuilder: (_, __) => const SizedBox(width: PsSpace.sm),
-        itemBuilder: (_, i) => SizedBox(width: 164, child: PsProductCard(product: products[i], onTap: () => onTap(products[i]))),
+        itemBuilder: (_, i) => SizedBox(
+          width: 164,
+          child: PsProductCard(
+            product: products[i],
+            onTap: () => onTap(products[i]),
+          ),
+        ),
       ),
     );
   }
