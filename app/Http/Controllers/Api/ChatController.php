@@ -41,10 +41,14 @@ class ChatController extends Controller
             ->get(['sender_id', 'receiver_id'])
             ->map(fn ($m) => $m->sender_id === $buyer->id ? $m->receiver_id : $m->sender_id)->unique();
         $orderedSellerIds = Order::where('buyer_id', $buyer->id)->pluck('seller_id');
+        $contactIds = collect($chattedIds->all())
+            ->concat($orderedSellerIds->all())
+            ->unique()
+            ->values();
 
-        $sellers = User::whereIn('id', $chattedIds->merge($orderedSellerIds)->unique())
+        $sellers = User::whereIn('id', $contactIds)
             ->where('role', 'seller')->where('status', 'approved')->get();
-        $admins = User::whereIn('id', $chattedIds)->where('role', 'admin')->get();
+        $admins = User::whereIn('id', $contactIds)->where('role', 'admin')->get();
 
         $contacts = $admins->concat($sellers)->map(function (User $u) use ($buyer) {
             $last = $this->thread($buyer->id, $u->id)->latest()->latest('id')->first();

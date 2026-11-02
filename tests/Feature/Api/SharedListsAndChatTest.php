@@ -87,4 +87,16 @@ class SharedListsAndChatTest extends TestCase
         $this->postJson('/api/chat/send', ['receiver_id' => $admin->id, 'body' => 'Help please'])->assertCreated();
         $this->assertContains('PickSell Support', collect($this->getJson('/api/chat/contacts')->json('contacts'))->pluck('name'));
     }
+
+    public function test_contacts_include_the_seller_from_an_order_without_collection_errors(): void
+    {
+        $seller = $this->seller();
+        $product = $this->product($seller);
+        $buyer = $this->actingAsBuyer();
+        $this->order($buyer, $product);
+
+        $response = $this->getJson('/api/chat/contacts')->assertOk();
+
+        $this->assertSame([$seller->id], collect($response->json('contacts'))->pluck('id')->all());
+    }
 }

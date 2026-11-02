@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../app_colors.dart';
 import '../app_text_styles.dart';
+import '../core/network/api_client.dart';
 import '../models/chat.dart';
 import '../services/chat_service.dart';
 
@@ -46,9 +47,17 @@ class _ChatsPageState extends State<ChatsPage> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final contacts = await _service.getContacts();
-    if (mounted) setState(() { _contacts = contacts; _loading = false; });
+    try {
+      final contacts = await _service.getContacts();
+      if (mounted) setState(() => _contacts = contacts);
+    } on ApiException catch (e) {
+      if (mounted) _showError(e.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
+
+  void _showError(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 
   List<ChatContact> get _visible {
     final q = _query.trim().toLowerCase();
@@ -255,20 +264,32 @@ class _ChatConversationPageState extends State<ChatConversationPage> {
 
   Future<void> _loadMessages() async {
     setState(() => _loading = true);
-    final msgs = await _service.getMessages(widget.contact.id);
-    if (mounted) {
-      setState(() { _messages = msgs; _loading = false; });
-      _scrollToBottom();
+    try {
+      final msgs = await _service.getMessages(widget.contact.id);
+      if (mounted) {
+        setState(() => _messages = msgs);
+        _scrollToBottom();
+      }
+    } on ApiException catch (e) {
+      if (mounted) _showError(e.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _pollMessages() async {
-    final msgs = await _service.getMessages(widget.contact.id);
-    if (mounted && msgs.length != _messages.length) {
-      setState(() => _messages = msgs);
-      _scrollToBottom();
+    try {
+      final msgs = await _service.getMessages(widget.contact.id);
+      if (mounted && msgs.length != _messages.length) {
+        setState(() => _messages = msgs);
+        _scrollToBottom();
+      }
+    } on ApiException catch (e) {
+      if (mounted) _showError(e.message);
     }
   }
+
+  void _showError(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -287,11 +308,16 @@ class _ChatConversationPageState extends State<ChatConversationPage> {
     if (body.isEmpty || _sending) return;
     setState(() => _sending = true);
     _inputController.clear();
-    final msg = await _service.sendMessage(widget.contact.id, body);
-    if (mounted) {
-      if (msg != null) setState(() => _messages.add(msg));
-      setState(() => _sending = false);
-      _scrollToBottom();
+    try {
+      final msg = await _service.sendMessage(widget.contact.id, body);
+      if (mounted) {
+        setState(() => _messages.add(msg));
+        _scrollToBottom();
+      }
+    } on ApiException catch (e) {
+      if (mounted) _showError(e.message);
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
   }
 
