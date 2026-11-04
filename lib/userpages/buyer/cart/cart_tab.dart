@@ -237,7 +237,7 @@ class _CartTabState extends State<CartTab> {
         final quote = _store.quote;
         return PsAppShell(
           topBar: PsTopBar(
-            title: 'Cart${quote.itemCount > 0 ? ' (${quote.itemCount})' : ''}',
+            title: 'Cart${quote.lineCount > 0 ? ' (${quote.lineCount})' : ''}',
             showBack: false,
             actions: [
               if (!quote.isEmpty)

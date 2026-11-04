@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/status/order_status.dart';
+import '../../core/theme/ps_tokens.dart';
 import '../../core/theme/ps_typography.dart';
 import '../../format_utils.dart';
 import '../../models/order.dart';
@@ -8,8 +9,8 @@ import '../shared/ps_buttons.dart';
 import '../shared/ps_status_badge.dart';
 import 'ps_order_summary.dart';
 
-/// COM-C20 Order Card — seller, status badge, item, total and the one
-/// contextual action for the order's current state.
+/// COM-C20 Order Card — seller, status badge, item, total and the contextual
+/// actions for the order's current state.
 class PsOrderCard extends StatelessWidget {
   const PsOrderCard({
     super.key,
@@ -26,37 +27,46 @@ class PsOrderCard extends StatelessWidget {
   final VoidCallback? onRate;
   final VoidCallback? onBuyAgain;
 
-  Widget? _action() {
-    switch (order.status) {
-      case OrderStatus.delivered:
-        return onRate == null
-            ? null
-            : PsSecondaryButton.outlined(label: 'Rate', onPressed: onRate);
-      case OrderStatus.completed:
-      case OrderStatus.cancelled:
-      case OrderStatus.returned:
-        return onBuyAgain == null
-            ? null
-            : PsSecondaryButton.outlined(
-                label: 'Buy Again',
-                onPressed: onBuyAgain,
-              );
-      default:
-        return onTrack == null
-            ? null
-            : PsPrimaryButton(
-                label: 'Track Order',
-                uppercase: false,
-                expand: false,
-                height: 44,
-                onPressed: onTrack,
-              );
-    }
+  List<Widget> _actions() {
+    // The API puts an order in "To Rate" exactly when it can still be rated (delivered or
+    // completed, no rating yet — the same rule as the rate endpoint), so the card follows it.
+    final canRate = order.tab == OrderTab.toRate;
+    final ended = switch (order.status) {
+      OrderStatus.completed ||
+      OrderStatus.cancelled ||
+      OrderStatus.returned => true,
+      _ => false,
+    };
+    final inProgress = !ended && order.status != OrderStatus.delivered;
+
+    return [
+      if (canRate && onRate != null)
+        PsSecondaryButton.outlined(label: 'Rate Order', onPressed: onRate),
+      if (ended && onBuyAgain != null)
+        PsSecondaryButton.outlined(label: 'Buy Again', onPressed: onBuyAgain),
+      if (inProgress && onTrack != null)
+        PsPrimaryButton(
+          label: 'Track Order',
+          uppercase: false,
+          expand: false,
+          height: 44,
+          onPressed: onTrack,
+        ),
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
-    final action = _action();
+    final actions = _actions();
+    final totals = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(order.orderNumber, style: PsText.caption),
+        const SizedBox(height: 2),
+        Text('TOTAL AMOUNT', style: PsText.overline.copyWith(fontSize: 11)),
+        Text(formatPesoFixed(order.total), style: PsText.price),
+      ],
+    );
     return Semantics(
       button: true,
       label:
@@ -77,25 +87,29 @@ class PsOrderCard extends StatelessWidget {
               onTap: onTap,
             ),
           ],
-          footer: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          // One action sits beside the total; two get their own row so neither is squeezed.
+          footer: actions.length < 2
+              ? Row(
                   children: [
-                    Text(order.orderNumber, style: PsText.caption),
-                    const SizedBox(height: 2),
-                    Text(
-                      'TOTAL AMOUNT',
-                      style: PsText.overline.copyWith(fontSize: 11),
+                    Expanded(child: totals),
+                    ...actions,
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    totals,
+                    const SizedBox(height: PsSpace.sm),
+                    Row(
+                      children: [
+                        for (var i = 0; i < actions.length; i++) ...[
+                          if (i > 0) const SizedBox(width: PsSpace.xs),
+                          Expanded(child: actions[i]),
+                        ],
+                      ],
                     ),
-                    Text(formatPesoFixed(order.total), style: PsText.price),
                   ],
                 ),
-              ),
-              if (action != null) action,
-            ],
-          ),
         ),
       ),
     );

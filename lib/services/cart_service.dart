@@ -25,7 +25,7 @@ class CartStore extends ChangeNotifier {
 
   void _apply(Json j) {
     _quote = CartQuote.fromJson(mapOrNull(j['cart']));
-    _count = _quote.lines.length;
+    _count = _quote.lineCount;
     notifyListeners();
   }
 

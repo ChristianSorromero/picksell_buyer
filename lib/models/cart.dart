@@ -142,10 +142,16 @@ class CartQuote {
   final AppliedVoucher? voucher;
   final String? voucherError;
   final bool hasIssues;
+
+  /// Units across all lines (the API's `item_count`); not what the badge or header show.
   final int itemCount;
   final CostTotals totals;
 
   List<CartLine> get lines => [for (final g in groups) ...g.items];
+
+  /// Distinct cart lines: two of one item is one line. The badge and the cart header both count
+  /// this, like the website's cart badge and /api/mobile's `cart_count`.
+  int get lineCount => lines.length;
   bool get isEmpty => groups.isEmpty;
 
   factory CartQuote.fromJson(Json? j) => j == null
