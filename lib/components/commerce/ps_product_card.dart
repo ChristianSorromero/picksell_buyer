@@ -67,7 +67,7 @@ class PsProductCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  'SOLD OUT',
+                  p.unavailableLabel!.toUpperCase(),
                   style: PsText.badge.copyWith(color: Colors.white),
                 ),
               ),
@@ -120,7 +120,7 @@ class PsProductCard extends StatelessWidget {
     return Semantics(
       button: true,
       label:
-          '${p.name}, ${p.onSale ? '${p.discountPercent}% off, ' : ''}${p.inStock ? '' : 'sold out'}',
+          '${p.name}, ${p.onSale ? '${p.discountPercent}% off, ' : ''}${p.unavailableLabel?.toLowerCase() ?? ''}',
       child: Material(
         color: PsColors.surface,
         shape: RoundedRectangleBorder(

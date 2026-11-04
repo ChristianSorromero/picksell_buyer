@@ -133,7 +133,7 @@ class FakeBuyerApi {
 
   Future<http.Response> handle(http.Request r) async {
     requests.add(r);
-    final path = r.url.path.replaceFirst(RegExp(r'^/api'), '');
+    final path = r.url.path.replaceFirst(RegExp(r'^/api/mobile'), '');
     final isJson = (r.headers['content-type'] ?? '').contains('json');
     final body = r.body.isEmpty || !isJson ? <String, dynamic>{} : jsonDecode(r.body) as Map<String, dynamic>;
 
@@ -141,7 +141,7 @@ class FakeBuyerApi {
       case ('GET', '/buyer/cart'):
         return _json({'cart': _quote(cart)});
       case ('GET', '/buyer/cart/count'):
-        return _json({'cart_count': cart.fold<int>(0, (s, l) => s + (l['quantity'] as int))});
+        return _json({'cart_count': cart.length}); // lines, as /api/mobile counts them
       case ('POST', '/buyer/cart'):
         final product = body['product_id'] == 7 ? shirt : mug;
         final ids = (body['variation_ids'] as List? ?? []).cast<int>();

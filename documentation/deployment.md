@@ -1,5 +1,12 @@
 # Putting the buyer app online (api.pick-sell.shop)
 
+> **Superseded for new builds (2026-11-04).** The app now uses the main PickSell
+> app's buyer API, `/api/mobile`, served by the website itself. Build it with
+> `API_BASE_URL=<the website's https address>/api/mobile` once the deployed
+> website includes `routes/buyer-api.php`. The steps below run this project's
+> separate API, which stays available as a rollback option until that switch is
+> verified.
+
 The app's server runs **on the same laptop as the website**, next to it, and
 is reached through the same Cloudflare Tunnel at `https://api.pick-sell.shop`.
 Phones then work from anywhere with internet; nothing is plugged into the

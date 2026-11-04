@@ -18,8 +18,13 @@ pricing, cancelling, returns) follow the website.
 ```
 C:\php84\php.exe artisan test        # API tests (on a copy of the website's tables)
 flutter analyze && flutter test      # app checks
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api/mobile
 ```
+
+The app uses the main PickSell Laravel app's buyer API, `/api/mobile`
+(`routes/buyer-api.php` in the Picksell repo): run `php artisan serve` there.
+This project's own `/api` is kept only as a reference and rollback option
+while that switch is verified.
 
 Copy `.env.example` to `.env` and point the `DB_*` settings at the website's
 database. Never run seeders or add migrations for website tables here.

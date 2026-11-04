@@ -129,7 +129,9 @@ class PsCartItemTile extends StatelessWidget {
                     child: Text(
                       issue == CartLineIssue.insufficientStock && line.availableStock > 0
                           ? 'Only ${line.availableStock} left — lower the quantity.'
-                          : issue.message,
+                          : issue == CartLineIssue.unavailable && line.product.sellerOnVacation
+                              ? 'Seller is on vacation — not taking orders right now.'
+                              : issue.message,
                       style: PsText.caption.copyWith(color: PsColors.error, fontWeight: FontWeight.w600),
                     ),
                   ),

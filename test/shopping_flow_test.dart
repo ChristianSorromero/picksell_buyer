@@ -33,15 +33,16 @@ void main() {
     test('loads the server-priced cart and keeps the badge count in sync', () async {
       final quote = await CartStore.instance.load();
       expect(quote.groups.single.items, hasLength(2));
-      expect(CartStore.instance.count, 3);
+      // The badge counts lines, like the website and /api/mobile's cart_count.
+      expect(CartStore.instance.count, 2);
       expect(quote.totals.merchandiseSubtotal, 1000);
 
       await CartStore.instance.setQuantity(quote.lines.first, 3);
-      expect(CartStore.instance.count, 5);
+      expect(CartStore.instance.count, 2);
       expect(CartStore.instance.quote.totals.merchandiseSubtotal, 1800);
 
       await CartStore.instance.remove(CartStore.instance.quote.lines.last);
-      expect(CartStore.instance.count, 3);
+      expect(CartStore.instance.count, 1);
     });
 
     test('surfaces the server’s stock limit as an ApiException', () async {

@@ -1,18 +1,22 @@
 import 'json.dart';
 
 class SellerBrief {
-  const SellerBrief({required this.id, required this.name, this.location = '', this.verified = false});
+  const SellerBrief({required this.id, required this.name, this.location = '', this.verified = false, this.onVacation = false});
 
   final int id;
   final String name;
   final String location;
   final bool verified;
 
+  /// The seller paused orders: their products stay visible but can't be bought.
+  final bool onVacation;
+
   factory SellerBrief.fromJson(Json j) => SellerBrief(
         id: toInt(j['id']),
         name: j['name'] as String? ?? '',
         location: j['location'] as String? ?? '',
         verified: j['verified'] == true,
+        onVacation: j['on_vacation'] == true,
       );
 }
 
@@ -23,6 +27,7 @@ class SellerSummary extends SellerBrief {
     required super.name,
     super.location,
     super.verified,
+    super.onVacation,
     this.rating,
     this.reviewCount = 0,
     this.positiveRate,
@@ -41,6 +46,7 @@ class SellerSummary extends SellerBrief {
         name: j['name'] as String? ?? '',
         location: j['location'] as String? ?? '',
         verified: j['verified'] == true,
+        onVacation: j['on_vacation'] == true,
         rating: toDoubleOrNull(j['rating']),
         reviewCount: toInt(j['review_count']),
         positiveRate: j['positive_rate'] == null ? null : toInt(j['positive_rate']),
@@ -91,6 +97,11 @@ class Product {
   bool get onSale => discountPercent != null && discountPercent! > 0;
   bool get lowStock => inStock && stock <= 5;
   String get sellerName => seller?.name ?? '';
+  bool get sellerOnVacation => seller?.onVacation ?? false;
+
+  /// Why the product can't be bought right now, or null when it can. A vacation pause isn't a
+  /// stock-out, so it gets its own wording.
+  String? get unavailableLabel => inStock ? null : (sellerOnVacation ? 'Seller away' : 'Sold out');
 
   factory Product.fromJson(Json j) {
     final seller = mapOrNull(j['seller']);

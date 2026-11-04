@@ -19,12 +19,13 @@ class CartStore extends ChangeNotifier {
 
   CartQuote get quote => _quote;
 
-  /// Units in the cart (bottom-nav badge).
+  /// Cart lines (bottom-nav badge), counted like the website's cart badge and
+  /// the API's `cart_count`: two of one item is one line.
   int get count => _count;
 
   void _apply(Json j) {
     _quote = CartQuote.fromJson(mapOrNull(j['cart']));
-    _count = _quote.itemCount;
+    _count = _quote.lines.length;
     notifyListeners();
   }
 

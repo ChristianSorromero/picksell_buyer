@@ -1,5 +1,13 @@
 import 'json.dart';
 
+/// Starts every message the server sends on a seller's behalf (thank-you and vacation away
+/// replies; Picksell's Message::AUTO_REPLY_PREFIX).
+const String autoReplyPrefix = '[Auto-reply]';
+
+bool _isAutoReply(String body) => body.startsWith(autoReplyPrefix);
+
+String _withoutPrefix(String body) => body.substring(autoReplyPrefix.length).trimLeft();
+
 class ChatContact {
   const ChatContact({
     required this.id,
@@ -18,6 +26,9 @@ class ChatContact {
   final int unread;
 
   bool get hasUnread => unread > 0;
+
+  /// Contact-list preview; an automatic reply is labelled so it isn't read as the seller typing.
+  String get lastMessagePreview => _isAutoReply(lastMessage) ? 'Auto-reply: ${_withoutPrefix(lastMessage)}' : lastMessage;
 
   String get timeLabel {
     final t = lastTime;
@@ -55,6 +66,12 @@ class ChatMessage {
   final int senderId;
   final DateTime createdAt;
   final bool isMine;
+
+  /// Sent automatically on the seller's behalf, not typed by them.
+  bool get isAutoReply => !isMine && _isAutoReply(body);
+
+  /// [body] without the server's auto-reply marker.
+  String get displayBody => isAutoReply ? _withoutPrefix(body) : body;
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
         id: json['id'] as int,

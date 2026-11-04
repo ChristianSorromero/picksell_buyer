@@ -105,7 +105,7 @@ class _MyPicksPageState extends State<MyPicksPage> {
                           minimumSize: const Size.fromHeight(40),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
-                        child: Text(p.inStock ? 'MOVE TO CART' : 'SOLD OUT', style: PsText.badge.copyWith(fontSize: 12)),
+                        child: Text(p.inStock ? 'MOVE TO CART' : p.unavailableLabel!.toUpperCase(), style: PsText.badge.copyWith(fontSize: 12)),
                       ),
                     ),
                   ),

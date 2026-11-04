@@ -180,7 +180,7 @@ class _ContactTile extends StatelessWidget {
       label: [
         contact.name,
         if (unread) '${contact.unread} unread',
-        contact.lastMessage,
+        contact.lastMessagePreview,
         contact.timeLabel,
       ].where((s) => s.isNotEmpty).join(', '),
       excludeSemantics: true,
@@ -199,7 +199,7 @@ class _ContactTile extends StatelessWidget {
                   children: [
                     Text(contact.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: PsText.bodyStrong),
                     const SizedBox(height: 2),
-                    Text(contact.lastMessage, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    Text(contact.lastMessagePreview, maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: unread
                             ? PsText.body.copyWith(fontSize: 13.5, fontWeight: FontWeight.w600)
                             : PsText.bodyMuted),
@@ -453,8 +453,9 @@ class _MessageBubble extends StatelessWidget {
             constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              // Dark onPrimary text keeps the coral bubble readable (~6:1).
-              color: isMine ? PsColors.primary : PsColors.surface,
+              // Dark onPrimary text keeps the coral bubble readable (~6:1). Automatic replies sit
+              // on a muted wash so they don't pass for a message the seller typed.
+              color: isMine ? PsColors.primary : (message.isAutoReply ? PsColors.surfaceMuted : PsColors.surface),
               border: isMine ? null : Border.all(color: PsColors.border),
               borderRadius: BorderRadius.only(
                 topLeft: corner,
@@ -463,7 +464,25 @@ class _MessageBubble extends StatelessWidget {
                 bottomRight: isMine ? tail : corner,
               ),
             ),
-            child: Text(message.body, style: PsText.body.copyWith(color: isMine ? PsColors.onPrimary : PsColors.textPrimary)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (message.isAutoReply)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: PsSpace.xxs),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.smart_toy_outlined, size: 14, color: PsColors.textMuted),
+                        const SizedBox(width: PsSpace.xxs),
+                        Text('Automatic reply', style: PsText.caption.copyWith(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                Text(message.displayBody, style: PsText.body.copyWith(color: isMine ? PsColors.onPrimary : PsColors.textPrimary)),
+              ],
+            ),
           ),
           const SizedBox(height: PsSpace.xxs),
           Text(

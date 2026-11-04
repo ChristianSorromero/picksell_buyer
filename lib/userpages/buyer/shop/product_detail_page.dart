@@ -148,9 +148,9 @@ class _Summary extends StatelessWidget {
       if (p.rating != null) PsRatingInline(rating: p.rating, count: p.reviewCount),
       if (p.soldCount > 0) Text('${compactCount(p.soldCount)} sold', style: PsText.caption),
       Text(
-        p.inStock ? (p.lowStock ? 'Only ${p.stock} left' : 'In stock') : 'Sold out',
+        p.inStock ? (p.lowStock ? 'Only ${p.stock} left' : 'In stock') : p.unavailableLabel!,
         style: PsText.caption.copyWith(
-          color: !p.inStock ? PsColors.error : (p.lowStock ? PsColors.warning : PsColors.success),
+          color: p.sellerOnVacation ? PsColors.warning : !p.inStock ? PsColors.error : (p.lowStock ? PsColors.warning : PsColors.success),
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -176,6 +176,23 @@ class _Summary extends StatelessWidget {
               ],
             ],
           ),
+          if (p.sellerOnVacation) ...[
+            const SizedBox(height: PsSpace.sm),
+            PsCard(
+              color: PsColors.warningSoft,
+              borderColor: PsColors.warning.withAlpha(80),
+              child: Row(
+                children: [
+                  const Icon(Icons.beach_access_outlined, size: 18, color: PsColors.warning),
+                  const SizedBox(width: PsSpace.xs),
+                  Expanded(
+                    child: Text('This seller is on vacation and isn’t taking orders right now. You can still save it to My Picks.',
+                        style: PsText.caption.copyWith(color: PsColors.warning, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -384,7 +401,10 @@ class _BuyBar extends StatelessWidget {
               ),
               const SizedBox(width: PsSpace.xs),
               Expanded(
-                child: PsPrimaryButton(label: available ? 'Buy Now' : 'Sold Out', uppercase: false, onPressed: available ? onBuy : null),
+                child: PsPrimaryButton(
+                    label: available ? 'Buy Now' : (product.sellerOnVacation ? 'Seller Away' : 'Sold Out'),
+                    uppercase: false,
+                    onPressed: available ? onBuy : null),
               ),
             ],
           ),

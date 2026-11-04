@@ -11,15 +11,17 @@ import 'token_store.dart';
 /// -----------------------------------------------------------------------
 /// API CONFIG
 /// -----------------------------------------------------------------------
-/// Override per environment without editing code:
-///   flutter run --dart-define=API_BASE_URL=http://192.168.1.10:8000/api
+/// The app talks to the main PickSell Laravel app's buyer API, `/api/mobile`
+/// (routes/buyer-api.php in the Picksell repo). Override per environment
+/// without editing code:
+///   flutter run --dart-define=API_BASE_URL=http://192.168.1.10:8000/api/mobile
+///   flutter build apk --dart-define=API_BASE_URL=https://pick-sell.shop/api/mobile
 class ApiConfig {
   ApiConfig._();
 
   /// Defaults to the Android emulator, which reaches the PC's localhost
-  /// (php artisan serve) through 10.0.2.2.
-  ///   iOS simulator -> http://127.0.0.1:8000/api
-  ///   ngrok tunnel  -> https://scurvy-scary-bonding.ngrok-free.dev/api
+  /// (php artisan serve in the Picksell project) through 10.0.2.2.
+  ///   iOS simulator -> http://127.0.0.1:8000/api/mobile
   static const String _override = String.fromEnvironment('API_BASE_URL');
 
   /// Web (Chrome) can't reach 10.0.2.2 — that alias exists only inside
@@ -27,8 +29,8 @@ class ApiConfig {
   static String get baseUrl => _override.isNotEmpty
       ? _override
       : kIsWeb
-          ? 'http://127.0.0.1:8000/api'
-          : 'http://10.0.2.2:8000/api';
+          ? 'http://127.0.0.1:8000/api/mobile'
+          : 'http://10.0.2.2:8000/api/mobile';
 }
 
 /// Uniform result wrapper so the UI never has to parse raw http.Response
