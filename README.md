@@ -1,30 +1,25 @@
 # PickSell buyer app
 
-The PickSell buyer mobile app (Flutter, `lib/`) and its API server
-(Laravel, `app/`, `routes/api.php`).
+The PickSell buyer mobile app (Flutter, `lib/`).
 
-The server shares the **PickSell website's database and uploaded files**: an
-order placed in the app is an ordinary website order, and website, seller,
-admin and Pickrush updates appear in the app. Buyer rules (sign-up approval,
-pricing, cancelling, returns) follow the website.
-
-- How the sharing works and which website rule each feature follows:
-  [documentation/shared-database.md](documentation/shared-database.md)
-- Putting it online at `api.pick-sell.shop`:
-  [documentation/deployment.md](documentation/deployment.md)
+The app has no server of its own. It depends on the **PickSell website**: every
+call goes to the website's buyer API, `/api/mobile` (`routes/buyer-api.php` in
+the Picksell repo). An order placed in the app is an ordinary website order, and
+buyer rules (sign-up approval, pricing, vouchers, cancelling, returns) are the
+website's. The app only uses endpoints the website already serves; a feature
+the website's buyer API doesn't offer stays out of the app.
 
 ## Develop
 
 ```
-C:\php84\php.exe artisan test        # API tests (on a copy of the website's tables)
-flutter analyze && flutter test      # app checks
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api/mobile
+flutter analyze && flutter test
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api/mobile        # emulator
+flutter build apk --dart-define=API_BASE_URL=https://pick-sell.shop/api/mobile
 ```
 
-The app uses the main PickSell Laravel app's buyer API, `/api/mobile`
-(`routes/buyer-api.php` in the Picksell repo): run `php artisan serve` there.
-This project's own `/api` is kept only as a reference and rollback option
-while that switch is verified.
+For local runs, start the Picksell website (`php artisan serve` in that repo)
+against a test database, never the live one. Release builds require an
+`https://` API URL.
 
-Copy `.env.example` to `.env` and point the `DB_*` settings at the website's
-database. Never run seeders or add migrations for website tables here.
+The app's former Laravel API was retired on 2026-11-07; it lives in git history
+(before that commit) if it is ever needed for reference.

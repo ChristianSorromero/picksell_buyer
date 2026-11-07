@@ -69,7 +69,4 @@ class CatalogService {
       categories: (j['categories'] as List?)?.map((e) => '$e').toList() ?? const <String>[],
     );
   }
-
-  Future<List<ShippingOption>> shippingOptions() async =>
-      listOf((await _api.getJson('/shipping-options'))['shipping_options'], ShippingOption.fromJson);
 }
