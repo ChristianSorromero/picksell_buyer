@@ -5,6 +5,7 @@ import '../../../models/order.dart';
 import '../../../services/cart_service.dart';
 import '../../../services/order_service.dart';
 import '../nav.dart';
+import 'evidence_picker.dart';
 import 'track_order_page.dart';
 
 /// Shared order actions used by the list, details and tracking screens.
@@ -30,7 +31,8 @@ Future<void> buyAgain(BuildContext context, int orderId) async {
   }
 }
 
-/// Star rating + optional comment. Resolves with the updated order.
+/// The website's rating: product, seller and delivery stars, an optional comment and up to
+/// 3 photos. Resolves with the updated order.
 Future<OrderDetail?> rateOrder(BuildContext context, int orderId, String productName) {
   return PsBottomSheet.show<OrderDetail>(
     context,
@@ -51,6 +53,9 @@ class _RateSheet extends StatefulWidget {
 
 class _RateSheetState extends State<_RateSheet> {
   int _rating = 0;
+  int _sellerRating = 0;
+  int _deliveryRating = 0;
+  List<String> _photos = [];
   final _comment = TextEditingController();
   String? _error;
   bool _busy = false;
@@ -64,8 +69,16 @@ class _RateSheetState extends State<_RateSheet> {
   }
 
   Future<void> _submit() async {
-    if (_rating == 0) {
-      setState(() => _error = 'Tap a star to rate.');
+    // Same messages as the website's rating form.
+    final missing = _rating == 0
+        ? 'Rate the product.'
+        : _sellerRating == 0
+            ? 'Rate the seller’s service.'
+            : _deliveryRating == 0
+                ? 'Rate the delivery.'
+                : null;
+    if (missing != null) {
+      setState(() => _error = missing);
       return;
     }
     setState(() {
@@ -73,7 +86,14 @@ class _RateSheetState extends State<_RateSheet> {
       _error = null;
     });
     try {
-      final o = await OrderService().rate(widget.orderId, rating: _rating, feedback: _comment.text);
+      final o = await OrderService().rate(
+        widget.orderId,
+        rating: _rating,
+        sellerRating: _sellerRating,
+        deliveryRating: _deliveryRating,
+        feedback: _comment.text,
+        photos: _photos,
+      );
       if (!mounted) return;
       PsToast.success(context, 'Thanks for your review!');
       Navigator.of(context).pop(o);
@@ -87,9 +107,21 @@ class _RateSheetState extends State<_RateSheet> {
     }
   }
 
+  Widget _stars(String label, int value, ValueChanged<int> onChanged, {double size = 30}) => Column(
+        children: [
+          Text(label, style: PsText.bodyStrong, textAlign: TextAlign.center),
+          const SizedBox(height: 2),
+          Semantics(
+            label: '$label, ${value == 0 ? 'not rated' : '$value of 5'}',
+            child: PsRatingStars(rating: value.toDouble(), size: size, onChanged: onChanged),
+          ),
+          Text(_labels[value], style: PsText.caption, textAlign: TextAlign.center),
+        ],
+      );
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(PsSpace.gutter, 0, PsSpace.gutter, PsSpace.md),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -97,8 +129,11 @@ class _RateSheetState extends State<_RateSheet> {
         children: [
           Text(widget.productName, style: PsText.bodyMuted, textAlign: TextAlign.center),
           const SizedBox(height: PsSpace.xs),
-          Center(child: PsRatingStars(rating: _rating.toDouble(), size: 34, onChanged: (v) => setState(() => _rating = v))),
-          Text(_labels[_rating], textAlign: TextAlign.center, style: PsText.bodyStrong),
+          _stars('Product', _rating, (v) => setState(() => _rating = v), size: 34),
+          const SizedBox(height: PsSpace.sm),
+          _stars('Seller’s service', _sellerRating, (v) => setState(() => _sellerRating = v)),
+          const SizedBox(height: PsSpace.sm),
+          _stars('Delivery', _deliveryRating, (v) => setState(() => _deliveryRating = v)),
           const SizedBox(height: PsSpace.sm),
           TextField(
             controller: _comment,
@@ -107,6 +142,9 @@ class _RateSheetState extends State<_RateSheet> {
             style: PsText.input,
             decoration: psInputDecoration(hint: 'Share what you liked or didn’t (optional)'),
           ),
+          Text('Photos (optional, up to 3)', style: PsText.caption),
+          const SizedBox(height: PsSpace.xs),
+          EvidencePicker(paths: _photos, onChanged: (p) => setState(() => _photos = p)),
           if (_error != null) PsFieldError(_error!),
           const SizedBox(height: PsSpace.sm),
           PsPrimaryButton(label: 'Submit review', uppercase: false, loading: _busy, onPressed: _submit),

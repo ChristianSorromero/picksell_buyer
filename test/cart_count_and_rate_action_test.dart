@@ -193,14 +193,30 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Rate your order'), findsOneWidget, reason: 'the existing rating sheet');
 
-    await tester.tap(find.byIcon(Icons.star_outline_rounded).last);
+    // Like the website, the seller's service and the delivery must be rated too.
+    await tester.tap(find.byIcon(Icons.star_outline_rounded).at(4)); // product: 5 stars
     await tester.pump();
+    await tester.ensureVisible(find.text('Submit review'));
+    await tester.tap(find.text('Submit review'));
+    await tester.pump();
+    expect(find.text('Rate the seller’s service.'), findsOneWidget);
+    expect(requests.where((r) => r.method == 'POST'), isEmpty);
+
+    await tester.ensureVisible(find.byIcon(Icons.star_outline_rounded).first);
+    await tester.tap(find.byIcon(Icons.star_outline_rounded).at(3)); // seller: 4 stars
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.star_outline_rounded).at(3)); // delivery: 3 stars (row 2 keeps one outline)
+    await tester.pump();
+    await tester.ensureVisible(find.text('Submit review'));
     await tester.tap(find.text('Submit review'));
     await tester.pumpAndSettle();
 
     final post = requests.singleWhere((r) => r.method == 'POST');
     expect(post.url.path, endsWith('/buyer/orders/601/rate'));
-    expect(jsonDecode(post.body), {'rating': 5});
+    expect(post.headers['content-type'], startsWith('multipart/form-data'));
+    final form = post.body;
+    String field(String name) => RegExp('name="$name"\r\n\r\n([^\r]*)').firstMatch(form)?.group(1) ?? '';
+    expect([field('rating'), field('seller_rating'), field('delivery_rating')], ['5', '4', '3']);
     expect(find.text('Rate Order'), findsNothing, reason: 'the list reloads without the rated order');
   });
 }

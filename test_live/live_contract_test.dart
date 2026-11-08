@@ -10,11 +10,13 @@
 // the catalog needs at least one active product with stock. The run places
 // and then cancels one order.
 // ignore_for_file: invalid_use_of_visible_for_testing_member (a test, outside test/ so CI skips it)
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:picksell/core/status/order_status.dart';
+import 'package:picksell/models/order.dart';
 import 'package:picksell/services/account_service.dart';
 import 'package:picksell/services/auth_service.dart';
 import 'package:picksell/services/cart_service.dart';
@@ -28,6 +30,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 const _email = String.fromEnvironment('LIVE_EMAIL');
 const _password = String.fromEnvironment('LIVE_PASSWORD');
+const _onePixelPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -134,12 +137,24 @@ void main() {
     await orders.reorderCandidates();
     await orders.tickets();
 
+    // Rating, as on the website: product, seller and delivery stars plus a photo. Runs when the
+    // account has a delivered order waiting for a rating.
+    final toRate = (await orders.list(tab: OrderTab.toRate)).orders;
+    if (toRate.isNotEmpty) {
+      final photo = File('${Directory.systemTemp.path}/live_rating_photo.png')
+        ..writeAsBytesSync(base64Decode(_onePixelPng));
+      final rated = await orders.rate(toRate.first.id, rating: 5, sellerRating: 4, deliveryRating: 3, feedback: 'Live check rating', photos: [photo.path]);
+      expect(rated.actions.canRate, isFalse);
+    } else {
+      printOnFailure('no delivered order to rate; rating step skipped');
+    }
+
     // Chat with the product's seller.
     final chat = ChatService();
     final sellerId = detail.seller?.id ?? product.seller?.id;
     if (sellerId != null) {
       await catalog.seller(sellerId);
-      await chat.sendMessage(sellerId, 'Live check: is this available?');
+      await chat.sendMessage(sellerId, 'Live check: is this available?', productId: product.id);
       expect(await chat.getMessages(sellerId), isNotEmpty);
       expect(await chat.getContacts(), isNotEmpty);
     }

@@ -238,8 +238,12 @@ class _ContactTile extends StatelessWidget {
 // ─────────────────────────── CONVERSATION ───────────────────────────
 
 class ChatConversationPage extends StatefulWidget {
-  const ChatConversationPage({super.key, required this.contact});
+  const ChatConversationPage({super.key, required this.contact, this.productId, this.productName});
   final ChatContact contact;
+
+  /// Opened from a product: messages say which product they are about until the buyer clears it.
+  final int? productId;
+  final String? productName;
 
   @override
   State<ChatConversationPage> createState() => _ChatConversationPageState();
@@ -253,6 +257,7 @@ class _ChatConversationPageState extends State<ChatConversationPage> {
   bool _loading = true;
   bool _sending = false;
   Timer? _pollTimer;
+  late int? _productId = widget.productId;
 
   @override
   void initState() {
@@ -316,7 +321,7 @@ class _ChatConversationPageState extends State<ChatConversationPage> {
     setState(() => _sending = true);
     _inputController.clear();
     try {
-      final msg = await _service.sendMessage(widget.contact.id, body);
+      final msg = await _service.sendMessage(widget.contact.id, body, productId: _productId);
       if (mounted) {
         setState(() => _messages.add(msg));
         _scrollToBottom();
@@ -371,7 +376,9 @@ class _ChatConversationPageState extends State<ChatConversationPage> {
       ),
       child: SafeArea(
         top: false,
-        child: Padding(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (_productId != null) _askingAbout(),
+          Padding(
           padding: const EdgeInsets.fromLTRB(PsSpace.gutter, PsSpace.xs, PsSpace.xs, PsSpace.xs),
           child: Row(
             children: [
@@ -430,9 +437,38 @@ class _ChatConversationPageState extends State<ChatConversationPage> {
             ],
           ),
         ),
+        ]),
       ),
     );
   }
+
+  /// The website's "Asking about: [product]" bar, with a button to stop asking about it.
+  Widget _askingAbout() => Container(
+        width: double.infinity,
+        color: PsColors.background,
+        padding: const EdgeInsets.fromLTRB(PsSpace.gutter, 2, 0, 2),
+        child: Row(
+          children: [
+            const Icon(Icons.shopping_bag_outlined, size: 16, color: PsColors.textSecondary),
+            const SizedBox(width: PsSpace.xxs),
+            Expanded(
+              child: Text.rich(
+                TextSpan(text: 'Asking about: ', children: [
+                  TextSpan(text: widget.productName ?? 'this product', style: const TextStyle(fontWeight: FontWeight.w700)),
+                ]),
+                style: PsText.caption,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Stop asking about ${widget.productName ?? 'this product'}',
+              icon: const Icon(Icons.close_rounded, size: 18),
+              onPressed: () => setState(() => _productId = null),
+            ),
+          ],
+        ),
+      );
 }
 
 class _MessageBubble extends StatelessWidget {

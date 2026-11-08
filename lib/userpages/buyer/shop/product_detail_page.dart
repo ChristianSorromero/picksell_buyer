@@ -75,6 +75,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => ChatConversationPage(
         contact: ChatContact(id: s.id, name: s.name, initials: s.name.isEmpty ? '?' : s.name[0].toUpperCase(), lastMessage: ''),
+        productId: d.product.id,
+        productName: d.product.name,
       ),
     ));
   }

@@ -20,11 +20,14 @@ class ChatService {
         .toList();
   }
 
-  Future<ChatMessage> sendMessage(int receiverId, String body) async =>
+  /// [productId] tags the message with the product the buyer is asking about, as the website's
+  /// "Asking about" bar does.
+  Future<ChatMessage> sendMessage(int receiverId, String body, {int? productId}) async =>
       ChatMessage.fromJson(
         await _api.postJson('/chat/send', {
           'receiver_id': receiverId,
           'body': body,
+          if (productId != null) 'product_id': productId,
         }),
       );
 }

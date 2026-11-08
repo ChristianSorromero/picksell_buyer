@@ -22,9 +22,26 @@ class OrderService {
   Future<OrderDetail> cancel(int id, String reason) async =>
       _detail(await _api.postJson('/buyer/orders/$id/cancel', {'reason': reason}));
 
-  Future<OrderDetail> rate(int id, {required int rating, String? feedback}) async => _detail(await _api.postJson(
+  /// The website's order rating: the product, the seller's service and the delivery (all 1–5),
+  /// an optional comment and up to 3 photos. Once the order is completed the product stars are
+  /// also the product review.
+  Future<OrderDetail> rate(
+    int id, {
+    required int rating,
+    required int sellerRating,
+    required int deliveryRating,
+    String? feedback,
+    List<String> photos = const [],
+  }) async =>
+      _detail(await _api.multipartJson(
         '/buyer/orders/$id/rate',
-        {'rating': rating, if (feedback != null && feedback.trim().isNotEmpty) 'feedback': feedback.trim()},
+        fields: {
+          'rating': '$rating',
+          'seller_rating': '$sellerRating',
+          'delivery_rating': '$deliveryRating',
+          if (feedback != null && feedback.trim().isNotEmpty) 'feedback': feedback.trim(),
+        },
+        files: {if (photos.isNotEmpty) 'photos': photos},
       ));
 
   /// Returns the ticket reference, e.g. TKT-000012.
