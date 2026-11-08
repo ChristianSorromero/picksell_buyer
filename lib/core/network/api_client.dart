@@ -245,6 +245,24 @@ class ApiClient {
   }) =>
       _unwrap(multipart(path, fields: fields, files: files));
 
+  /// A private file the signed-in buyer may see (the rider's delivery photo).
+  /// Throws [ApiException] (404 when there is none, offline, 401...).
+  Future<Uint8List> getBytes(String path) async {
+    try {
+      final response = await _client.get(_uri(path), headers: await _headers()).timeout(_timeout);
+      if (response.statusCode >= 200 && response.statusCode < 300) return response.bodyBytes;
+      final result = parse(response);
+      if (result.statusCode == 401) sessionExpired.value++;
+      throw ApiException(result);
+    } on SocketException {
+      throw ApiException(ApiResult(success: false, message: 'You\u2019re offline. Check your connection and try again.'));
+    } on TimeoutException {
+      throw ApiException(ApiResult(success: false, message: 'The server took too long to respond. Please try again.'));
+    } on http.ClientException {
+      throw ApiException(ApiResult(success: false, message: 'Couldn\u2019t reach Picksell. Check your connection and try again.'));
+    }
+  }
+
   Future<Map<String, dynamic>> _unwrap(Future<ApiResult> pending) async {
     final result = await pending;
     if (!result.success) throw ApiException(result);

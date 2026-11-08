@@ -75,6 +75,7 @@ class _OrdersPageState extends State<OrdersPage> {
               onTap: () => afterward(openOrder(context, o.id)),
               onTrack: () => afterward(openTracking(context, o.id)),
               onRate: () => afterward(rateOrder(context, o.id, o.productName)),
+              onReceived: () => afterward(confirmReceived(context, o.id, o.productName)),
               onBuyAgain: () => buyAgain(context, o.id),
             );
           },

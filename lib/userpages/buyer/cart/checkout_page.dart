@@ -4,14 +4,19 @@ import '../../../components/components.dart';
 import '../../../format_utils.dart';
 import '../../../models/address.dart';
 import '../../../models/cart.dart';
+import '../../../models/checkout_vouchers.dart';
 import '../../../services/cart_service.dart';
 import '../../../services/checkout_service.dart';
+import '../account/address_book_page.dart';
 import '../account/edit_profile_page.dart';
 import 'order_placed_page.dart';
+import 'voucher_picker_sheet.dart';
 
 /// Order Summary / Checkout (COM-C14…C19) with the website's checkout rules:
-/// delivered to the buyer's profile address, Cash on Delivery, priced by the
-/// product discount and the product's own voucher code. No delivery fee.
+/// delivered to the buyer's default address or one from their address book,
+/// Cash on Delivery, priced by the product discount and the product's own
+/// voucher code, plus the delivery fee to the chosen address, less the store
+/// and PickSell vouchers picked (website: checkout voucher picker).
 class CheckoutPage extends StatefulWidget {
   const CheckoutPage({super.key, required this.lineIds, this.voucherCode});
 
@@ -26,8 +31,16 @@ class _CheckoutPageState extends State<CheckoutPage> {
   final _checkout = CheckoutService();
 
   CartQuote? _quote;
-  DeliveryAddress? _address;
+  CheckoutShipTo? _address;
+
+  /// The address-book entry chosen for this checkout; null ships to the default address.
+  int? _addressId;
   late String? _voucher = widget.voucherCode;
+
+  /// Store and PickSell vouchers picked; the quote keeps only the ones that apply.
+  VoucherPicks _picks = const VoucherPicks();
+  CheckoutVouchers _vouchers = const CheckoutVouchers();
+  double _payable = 0;
   Object? _error;
   bool _quoting = true;
   bool _placing = false;
@@ -38,18 +51,31 @@ class _CheckoutPageState extends State<CheckoutPage> {
     _requote();
   }
 
-  Future<void> _requote() async {
+  Future<void> _requote({String? code}) async {
     setState(() => _quoting = true);
     try {
-      final r = await _checkout.quote(lineIds: widget.lineIds, voucherCode: _voucher);
+      final r = await _checkout.quote(lineIds: widget.lineIds, voucherCode: _voucher, addressId: _addressId, vouchers: _picks, code: code);
       if (!mounted) return;
       setState(() {
         _quote = r.quote;
-        _address = r.deliveryAddress;
+        _address = r.shipTo;
+        _vouchers = r.vouchers;
+        _payable = r.payable;
+        // The server drops picks that no longer apply (spend changed, used up...).
+        _picks = VoucherPicks(stores: r.vouchers.pickedStores, platform: r.vouchers.pickedPlatform);
         _error = null;
         if (r.quote.voucherError != null) _voucher = null;
       });
       if (r.quote.voucherError != null) PsToast.error(context, r.quote.voucherError!);
+      if (r.vouchers.error != null) PsToast.error(context, r.vouchers.error!);
+    } on ApiException catch (e) {
+      // The chosen address was removed (here or on the website): back to the default.
+      if (_addressId != null && e.fieldError('address_id') != null) {
+        _addressId = null;
+        if (mounted) PsToast.error(context, 'That address is no longer saved. Shipping to your default address.');
+        return _requote();
+      }
+      if (mounted) setState(() => _error = e);
     } catch (e) {
       if (mounted) setState(() => _error = e);
     } finally {
@@ -57,8 +83,25 @@ class _CheckoutPageState extends State<CheckoutPage> {
     }
   }
 
+  /// Choose another address (or add one) for this order.
+  Future<void> _changeAddress() async {
+    final choice = await Navigator.of(context).push<AddressChoice>(
+      MaterialPageRoute(builder: (_) => AddressBookPage(picking: true, selectedId: _addressId)),
+    );
+    if (!mounted) return;
+    if (choice != null) _addressId = choice.id;
+    _requote();
+  }
+
+  /// Fix the address this order ships to: the default lives in the profile,
+  /// a saved one in the address book.
   Future<void> _editAddress() async {
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EditProfilePage(focusAddress: true)));
+    if (_addressId == null) {
+      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EditProfilePage(focusAddress: true)));
+    } else {
+      await _changeAddress();
+      return;
+    }
     if (mounted) _requote();
   }
 
@@ -73,18 +116,39 @@ class _CheckoutPageState extends State<CheckoutPage> {
     _requote();
   }
 
+  /// Store and PickSell vouchers (or a typed code), as on the website's checkout.
+  Future<void> _pickVouchers() async {
+    final q = _quote;
+    if (q == null) return;
+    final result = await PsBottomSheet.show<VoucherSheetResult>(
+      context,
+      title: 'Vouchers',
+      builder: (_) => VoucherPickerSheet(
+        vouchers: _vouchers,
+        picks: _picks,
+        sellerNames: {for (final g in q.groups) if (g.seller != null) g.seller!.id: g.seller!.name},
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() => _picks = result.picks);
+    await _requote(code: result.code);
+    if (mounted && result.code != null && _vouchers.error == null) PsToast.success(context, '${result.code!.toUpperCase()} applied');
+  }
+
   Future<void> _place() async {
     if (_address?.complete != true) {
       await PsDialog.error(context,
           title: 'Add your delivery address',
-          message: 'We deliver to the address in your profile. Add your province, city and barangay first.',
+          message: _addressId == null
+              ? 'We deliver to the address in your profile. Add your province, city and barangay first.'
+              : 'This address is missing its province, city or barangay. Finish it or pick another one.',
           actionLabel: 'Edit address');
       if (mounted) _editAddress();
       return;
     }
     setState(() => _placing = true);
     try {
-      final placed = await _checkout.place(lineIds: widget.lineIds, voucherCode: _voucher);
+      final placed = await _checkout.place(lineIds: widget.lineIds, voucherCode: _voucher, addressId: _addressId, vouchers: _picks);
       CartStore.instance.reset();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => OrderPlacedPage(result: placed)));
@@ -97,6 +161,17 @@ class _CheckoutPageState extends State<CheckoutPage> {
       } else if (e.fieldError('address') != null) {
         await PsDialog.error(context, title: 'Add your delivery address', message: e.fieldError('address')!, actionLabel: 'Edit address');
         if (mounted) _editAddress();
+      } else if (e.fieldError('vouchers') != null) {
+        // Used up or no longer applies since the quote: show why and re-price without it.
+        await PsDialog.error(context, title: 'A voucher can’t be used', message: e.fieldError('vouchers')!, actionLabel: 'Review vouchers');
+        if (!mounted) return;
+        setState(() => _picks = const VoucherPicks());
+        await _requote();
+        if (mounted) _pickVouchers();
+      } else if (e.fieldError('address_id') != null) {
+        _addressId = null;
+        await PsDialog.error(context, title: 'Address no longer saved', message: 'That address was removed. Pick where to deliver this order.', actionLabel: 'Choose address');
+        if (mounted) _changeAddress();
       } else {
         await PsDialog.error(
           context,
@@ -114,7 +189,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       topBar: const PsTopBar(title: 'Order Summary'),
       footer: q == null
           ? null
-          : _PlaceBar(total: q.totals.total, busy: _placing || _quoting, onPlace: q.hasIssues ? null : _place),
+          : _PlaceBar(total: _payable, saving: _vouchers.total, busy: _placing || _quoting, onPlace: q.hasIssues ? null : _place),
       body: _body(q),
     );
   }
@@ -136,11 +211,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
           PsCard(
             title: 'Delivery Address',
             onTap: _editAddress,
+            trailing: InkWell(onTap: _changeAddress, child: Text('Change', style: PsText.link)),
             child: Row(
               children: [
                 const Icon(Icons.add_location_alt_outlined, color: PsColors.primaryStrong),
                 const SizedBox(width: PsSpace.sm),
-                Expanded(child: Text('Add your delivery address', style: PsText.link)),
+                Expanded(child: Text(address == null || address.isDefault ? 'Add your delivery address' : 'Finish this address', style: PsText.link)),
                 const Icon(Icons.chevron_right_rounded),
               ],
             ),
@@ -151,7 +227,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
             name: address.recipientName,
             phone: address.displayPhone,
             address: address.fullAddress,
-            onEdit: _editAddress,
+            label: address.isDefault ? null : address.label,
+            isDefault: address.isDefault,
+            landmark: address.pin == null ? null : 'Pinned on the map',
+            onTap: _changeAddress,
+            trailing: Padding(
+              padding: const EdgeInsets.only(left: PsSpace.xs),
+              child: InkWell(onTap: _changeAddress, child: Text('Change', style: PsText.link)),
+            ),
           ),
         const SizedBox(height: PsSpace.sm),
         if (q.hasIssues)
@@ -192,20 +275,27 @@ class _CheckoutPageState extends State<CheckoutPage> {
           ),
         ),
         const SizedBox(height: PsSpace.sm),
+        _VoucherRow(vouchers: _vouchers, onTap: _quoting ? null : _pickVouchers),
+        const SizedBox(height: PsSpace.sm),
         PsCard(
           onTap: _enterVoucher,
           child: Row(
             children: [
-              const Icon(Icons.confirmation_number_outlined, color: PsColors.primaryStrong),
+              const Icon(Icons.sell_outlined, color: PsColors.primaryStrong),
               const SizedBox(width: PsSpace.sm),
-              Expanded(child: Text('Voucher', style: PsText.bodyStrong)),
+              Expanded(child: Text('Product voucher', style: PsText.bodyStrong)),
               if (q.voucher != null) PsTag('${q.voucher!.code} · -${formatPeso(q.voucher!.discount)}') else Text('Enter code', style: PsText.caption),
               const Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
             ],
           ),
         ),
         const SizedBox(height: PsSpace.sm),
-        PsCostBreakdown(totals: q.totals, voucherCode: q.voucher?.code),
+        PsCostBreakdown(
+          totals: q.totals,
+          voucherCode: q.voucher?.code,
+          storeVoucherDiscount: _vouchers.storeSaving,
+          pickSellVoucherDiscount: _vouchers.platformSaving,
+        ),
         const SizedBox(height: PsSpace.sm),
         PsCard(
           color: PsColors.primarySoft,
@@ -215,7 +305,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
               const Icon(Icons.payments_outlined, size: 18, color: PsColors.primaryStrong),
               const SizedBox(width: PsSpace.xs),
               Expanded(
-                child: Text('Prepare ${formatPesoFixed(q.totals.total)} in cash for the rider.',
+                child: Text('Prepare ${formatPesoFixed(_payable)} in cash for the rider.',
                     style: PsText.caption.copyWith(color: PsColors.primaryStrong)),
               ),
             ],
@@ -265,10 +355,50 @@ class VoucherCodeSheetState extends State<VoucherCodeSheet> {
   }
 }
 
+/// "Store & PickSell Vouchers" row: what's picked and saved, or how many are on offer.
+class _VoucherRow extends StatelessWidget {
+  const _VoucherRow({required this.vouchers, required this.onTap});
+
+  final CheckoutVouchers vouchers;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final v = vouchers;
+    final usable = [...v.platform, for (final s in v.stores) ...s.options].where((o) => o.usable).length;
+    return PsCard(
+      onTap: onTap,
+      child: Row(
+        children: [
+          const Icon(Icons.confirmation_number_outlined, color: PsColors.primaryStrong),
+          const SizedBox(width: PsSpace.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Store & PickSell Vouchers', style: PsText.bodyStrong),
+                if (v.pickedCount > 0)
+                  Text(v.pickedCodes.join(' · '), style: PsText.caption)
+                else
+                  Text(usable > 0 ? '$usable available for this order' : 'Enter a voucher code', style: PsText.caption),
+              ],
+            ),
+          ),
+          if (v.total > 0) PsTag('-${formatPesoFixed(v.total)}') else if (usable > 0) const PsTag('SELECT'),
+          const Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
+        ],
+      ),
+    );
+  }
+}
+
 class _PlaceBar extends StatelessWidget {
-  const _PlaceBar({required this.total, required this.busy, required this.onPlace});
+  const _PlaceBar({required this.total, required this.busy, required this.onPlace, this.saving = 0});
 
   final double total;
+
+  /// Saved with store and PickSell vouchers.
+  final double saving;
   final bool busy;
   final VoidCallback? onPlace;
 
@@ -289,6 +419,7 @@ class _PlaceBar extends StatelessWidget {
                   children: [
                     Text('Total Amount', style: PsText.caption),
                     Text(formatPesoFixed(total), style: PsText.price.copyWith(fontSize: 20)),
+                    if (saving > 0) Text('You save ${formatPesoFixed(saving)}', style: PsText.caption.copyWith(color: PsColors.primaryStrong)),
                   ],
                 ),
               ),

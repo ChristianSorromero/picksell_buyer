@@ -49,6 +49,7 @@ class CatalogService {
       summary: RatingSummary.fromJson(mapOrNull(j['summary'])),
       reviews: listOf(j['reviews'], Review.fromJson),
       meta: PageMeta.fromJson(mapOrNull(j['meta'])),
+      reportReasons: j['report_reasons'] is List ? listOf(j['report_reasons'], ReportReason.fromJson) : ReportReason.defaults,
     );
   }
 

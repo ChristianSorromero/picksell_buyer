@@ -8,7 +8,8 @@ enum OrderTab {
   all('all', 'All'),
   toShip('to_ship', 'To Ship'),
   inTransit('in_transit', 'In Transit'),
-  outForDelivery('out_for_delivery', 'Out for Delivery'),
+  // Out for delivery, and delivered parcels waiting for "Order Received".
+  outForDelivery('out_for_delivery', 'To Receive'),
   toRate('to_rate', 'To Rate'),
   completed('completed', 'Completed'),
   cancelled('cancelled', 'Cancelled');
@@ -240,6 +241,7 @@ class ReturnRequest {
 /// BUY-C14 — which actions the backend allows right now.
 class OrderActions {
   const OrderActions({
+    this.canConfirmReceived = false,
     this.canCancel = false,
     this.canRate = false,
     this.canReturn = false,
@@ -248,6 +250,8 @@ class OrderActions {
     this.canTrack = false,
   });
 
+  /// Pickrush delivered it: the buyer taps "Order Received", which completes it and opens rating.
+  final bool canConfirmReceived;
   final bool canCancel;
   final bool canRate;
   final bool canReturn;
@@ -258,6 +262,7 @@ class OrderActions {
   factory OrderActions.fromJson(Json? j) => j == null
       ? const OrderActions()
       : OrderActions(
+          canConfirmReceived: j['can_confirm_received'] == true,
           canCancel: j['can_cancel'] == true,
           canRate: j['can_rate'] == true,
           canReturn: j['can_return'] == true,
@@ -292,9 +297,46 @@ class OrderDetail {
     this.deliveredAt,
     this.returnRequest,
     this.actions = const OrderActions(),
+    this.hasProofOfDelivery = false,
+    this.autoConfirmAt,
+    this.storeDiscount = 0,
+    this.platformDiscount = 0,
+    this.parcelItems = 0,
+    this.parcelSubtotal = 0,
+    this.parcelTotal = 0,
   });
 
   final OrderSummaryItem summary;
+
+  /// The website's order-page breakdown. [storeDiscount] is this item's share
+  /// of a store voucher (already out of [subtotal]); [platformDiscount] is the
+  /// PickSell voucher on the whole parcel. A parcel can carry the seller's other
+  /// items from the same checkout: [parcelItems] of them, [parcelSubtotal] in
+  /// items and [parcelTotal] to pay the rider. [parcelItems] is 0 on servers
+  /// that don't send the breakdown.
+  final double storeDiscount;
+  final double platformDiscount;
+  final int parcelItems;
+  final double parcelSubtotal;
+  final double parcelTotal;
+
+  bool get hasBreakdown => parcelItems > 0;
+
+  /// The rider took a photo at the door (GET /buyer/orders/{id}/proof-of-delivery).
+  final bool hasProofOfDelivery;
+
+  /// Delivered and not yet "Order Received": PickSell confirms it for the buyer at this time (5 days after delivery).
+  final DateTime? autoConfirmAt;
+
+  /// "Paid" / "To pay on delivery" / "Refunded" for the order's cash on delivery.
+  String? get paymentStatusLabel => switch (paymentStatus) {
+        'paid' => 'Paid',
+        'unpaid' => 'To pay on delivery',
+        'refunded' => 'Refunded',
+        null => null,
+        final other => other,
+      };
+  bool get sharesParcel => parcelItems > 1;
   final double subtotal;
   final double discount;
   final String? voucherCode;
@@ -357,6 +399,13 @@ class OrderDetail {
       deliveredAt: toDate(j['delivered_at']),
       returnRequest: mapOrNull(j['return_request']) == null ? null : ReturnRequest.fromJson(mapOrNull(j['return_request'])!),
       actions: OrderActions.fromJson(mapOrNull(j['actions'])),
+      hasProofOfDelivery: j['has_proof_of_delivery'] == true,
+      autoConfirmAt: toDate(j['auto_confirm_at']),
+      storeDiscount: toDouble(j['store_discount']),
+      platformDiscount: toDouble(j['platform_discount']),
+      parcelItems: toInt(j['parcel_items']),
+      parcelSubtotal: toDouble(j['parcel_subtotal']),
+      parcelTotal: toDouble(j['parcel_total']),
     );
   }
 }

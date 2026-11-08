@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/ps_colors.dart';
 import '../../core/theme/ps_tokens.dart';
 import '../../core/theme/ps_typography.dart';
+import '../../format_utils.dart';
 import '../../models/order.dart';
 import '../shared/ps_buttons.dart';
 import '../shared/ps_card.dart';
@@ -70,6 +71,7 @@ class PsOrderActionGroup extends StatelessWidget {
     super.key,
     required this.order,
     this.onRate,
+    this.onReceived,
     this.onBuyAgain,
     this.onTrack,
     this.onCancel,
@@ -80,6 +82,9 @@ class PsOrderActionGroup extends StatelessWidget {
 
   final OrderDetail order;
   final VoidCallback? onRate;
+
+  /// "Order Received" while the parcel is delivered and not yet confirmed.
+  final VoidCallback? onReceived;
   final VoidCallback? onBuyAgain;
   final VoidCallback? onTrack;
   final VoidCallback? onCancel;
@@ -91,14 +96,16 @@ class PsOrderActionGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     final a = order.actions;
     final buttons = <Widget>[
+      if (a.canConfirmReceived && onReceived != null)
+        PsPrimaryButton(label: 'Order Received', icon: Icons.inventory_2_outlined, uppercase: false, onPressed: onReceived),
       if (a.canRate && onRate != null) PsPrimaryButton(label: 'Rate Product', icon: Icons.star_rounded, uppercase: false, onPressed: onRate),
-      if (a.canTrack && onTrack != null && !a.canRate)
+      if (a.canTrack && onTrack != null && !a.canRate && !a.canConfirmReceived)
         PsPrimaryButton(label: 'Track Order', icon: Icons.local_shipping_outlined, uppercase: false, onPressed: onTrack),
       if (a.canReorder && onBuyAgain != null)
         PsSecondaryButton.outlined(label: 'Buy Again', icon: Icons.refresh_rounded, expand: true, onPressed: onBuyAgain),
     ];
     final rows = <Widget>[
-      if (a.canTrack && onTrack != null && a.canRate) PsMenuTile(icon: Icons.local_shipping_outlined, label: 'Shipment history', onTap: onTrack),
+      if (a.canTrack && onTrack != null && (a.canRate || a.canConfirmReceived)) PsMenuTile(icon: Icons.local_shipping_outlined, label: 'Shipment history', onTap: onTrack),
       if (order.returnRequest != null && onRefundStatus != null)
         PsMenuTile(icon: Icons.currency_exchange_rounded, label: 'Return / Refund status', onTap: onRefundStatus)
       else if (a.canReturn && onReturn != null)
@@ -114,6 +121,15 @@ class PsOrderActionGroup extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (var i = 0; i < buttons.length; i++) ...[if (i > 0) const SizedBox(height: PsSpace.xs), buttons[i]],
+          if (a.canConfirmReceived && order.autoConfirmAt != null)
+            Padding(
+              padding: const EdgeInsets.only(top: PsSpace.xs),
+              child: Text(
+                'Got your parcel? Confirm it, then rate it. We’ll confirm it for you on ${formatDate(order.autoConfirmAt!)}.',
+                style: PsText.caption,
+                textAlign: TextAlign.center,
+              ),
+            ),
           if (buttons.isNotEmpty && rows.isNotEmpty) const SizedBox(height: PsSpace.sm),
           for (var i = 0; i < rows.length; i++) ...[if (i > 0) const Divider(), rows[i]],
         ],

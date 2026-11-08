@@ -85,6 +85,11 @@ class AuthService {
     return _api.send('POST', '/login', body: {'email': email, 'password': password});
   }
 
+  /// A rejected sign-up sent back for review with a new ID photo, using the
+  /// single-use `resubmit_token` from the login refusal (valid 30 minutes).
+  Future<ApiResult> resubmit({required String token, required String idPhoto}) =>
+      _api.multipart('/register/resubmit', fields: {'resubmit_token': token}, singleFiles: {'id_upload': idPhoto});
+
   /// Emails a six-digit reset code. The answer is the same whether or not
   /// the email has an account.
   Future<ApiResult> forgotPassword({required String email}) =>

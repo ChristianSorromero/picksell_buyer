@@ -31,8 +31,32 @@ Future<void> buyAgain(BuildContext context, int orderId) async {
   }
 }
 
+/// "Order Received" (website: My Orders): the buyer confirms the delivered parcel reached them,
+/// which completes the order, then goes straight on to rating it. Resolves with the updated
+/// order (rated or not), or null when they backed out.
+Future<OrderDetail?> confirmReceived(BuildContext context, int orderId, String productName) async {
+  final ok = await PsDialog.confirm(
+    context,
+    title: 'Got your order?',
+    message: 'Confirm only once the parcel is in your hands and you’ve checked it. The seller then gets paid, and you can rate your order.',
+    confirmLabel: 'Yes, I received it',
+    cancelLabel: 'Not yet',
+    icon: Icons.inventory_2_outlined,
+  );
+  if (!ok || !context.mounted) return null;
+  try {
+    final done = await OrderService().confirmReceived(orderId);
+    if (!context.mounted) return done;
+    PsToast.success(context, 'Thanks for confirming! Rate your order now.');
+    return await rateOrder(context, orderId, productName) ?? done;
+  } on ApiException catch (e) {
+    if (context.mounted) PsDialog.error(context, title: 'Couldn’t confirm', message: e.message);
+    return null;
+  }
+}
+
 /// The website's rating: product, seller and delivery stars, an optional comment and up to
-/// 3 photos. Resolves with the updated order.
+/// 3 photos, after "Order Received". Resolves with the updated order.
 Future<OrderDetail?> rateOrder(BuildContext context, int orderId, String productName) {
   return PsBottomSheet.show<OrderDetail>(
     context,

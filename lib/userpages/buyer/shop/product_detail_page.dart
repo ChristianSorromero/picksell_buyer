@@ -6,6 +6,7 @@ import '../../../models/catalog.dart';
 import '../../../models/chat.dart';
 import '../../../services/cart_service.dart';
 import '../../../services/catalog_service.dart';
+import 'review_feedback.dart';
 import '../../../services/wishlist_service.dart';
 import '../../chats_page.dart';
 import '../nav.dart';
@@ -338,7 +339,7 @@ class _Reviews extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     PsCard(child: PsRatingSummary(summary: s)),
-                    for (final r in detail.topReviews) ...[const SizedBox(height: PsSpace.xs), PsReviewCard(review: r)],
+                    for (final r in detail.topReviews) ...[const SizedBox(height: PsSpace.xs), ReviewWithFeedback(key: ValueKey(r.id), review: r)],
                   ],
                 ),
         ),

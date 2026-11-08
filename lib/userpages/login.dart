@@ -11,6 +11,7 @@ import '../services/auth_service.dart';
 import 'buyer/buyer_shell.dart';
 import 'forgot_password_page.dart';
 import 'register.dart';
+import 'resubmit_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -91,6 +92,27 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _handleLoginError(ApiResult result) async {
     final data = result.data ?? const {};
+
+    // Turned down, with a way to fix it: replace the ID and resubmit the same account.
+    if (result.statusCode == 403 && data['status'] == 'disapproved' && data['resubmit_token'] != null) {
+      final fix = await PsDialog.confirm(
+        context,
+        title: 'Sign-up not approved',
+        message: data['reason'] is String && (data['reason'] as String).isNotEmpty
+            ? 'Reason: ${data['reason']}\n\nYou can fix it and resubmit it for review.'
+            : 'You can fix your sign-up and resubmit it for review.',
+        confirmLabel: 'Fix and resubmit',
+        cancelLabel: 'Later',
+        icon: Icons.assignment_late_outlined,
+      );
+      if (fix && mounted) {
+        final sent = await Navigator.of(context).push<bool>(
+          MaterialPageRoute(builder: (_) => ResubmitPage.fromRefusal(_emailController.text.trim(), data)),
+        );
+        if (sent == true && mounted) PsToast.success(context, 'Resubmitted. We’ll email you after the review.');
+      }
+      return;
+    }
 
     // Signed up but not approved yet (or refused): the website's account statuses.
     if (result.statusCode == 403 && data['status'] != null) {

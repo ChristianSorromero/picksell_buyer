@@ -6,6 +6,7 @@ import '../../core/theme/ps_typography.dart';
 import '../../format_utils.dart';
 import '../../models/catalog.dart';
 import '../shared/ps_card.dart';
+import 'ps_product_image.dart';
 
 /// Row of five stars; supports halves for averages. With [onChanged] it
 /// becomes a 44pt-per-star input (rate order).
@@ -152,11 +153,31 @@ class PsRatingSummary extends StatelessWidget {
   }
 }
 
-/// One buyer review.
+/// One buyer review: stars, comment, photos and the store's reply. [footer]
+/// holds the Helpful / Report actions when the screen offers them.
 class PsReviewCard extends StatelessWidget {
-  const PsReviewCard({super.key, required this.review});
+  const PsReviewCard({super.key, required this.review, this.footer});
 
   final Review review;
+  final Widget? footer;
+
+  void _openPhoto(BuildContext context, String url) => showDialog<void>(
+        context: context,
+        builder: (ctx) => Dialog(
+          insetPadding: const EdgeInsets.all(PsSpace.md),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            children: [
+              InteractiveViewer(child: PsProductImage(url: url, fit: BoxFit.contain)),
+              Positioned(
+                right: 4,
+                top: 4,
+                child: IconButton.filledTonal(tooltip: 'Close', onPressed: () => Navigator.of(ctx).pop(), icon: const Icon(Icons.close_rounded)),
+              ),
+            ],
+          ),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -194,6 +215,41 @@ class PsReviewCard extends StatelessWidget {
             const SizedBox(height: PsSpace.sm),
             Text(review.comment!, style: PsText.body.copyWith(height: 1.55)),
           ],
+          if (review.photos.isNotEmpty) ...[
+            const SizedBox(height: PsSpace.sm),
+            SizedBox(
+              height: 72,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: review.photos.length,
+                separatorBuilder: (_, __) => const SizedBox(width: PsSpace.xs),
+                itemBuilder: (context, i) => GestureDetector(
+                  onTap: () => _openPhoto(context, review.photos[i]),
+                  child: SizedBox.square(
+                    dimension: 72,
+                    child: PsProductImage(url: review.photos[i], borderRadius: BorderRadius.circular(8), semanticLabel: 'Review photo ${i + 1}'),
+                  ),
+                ),
+              ),
+            ),
+          ],
+          if (review.sellerReply != null && review.sellerReply!.trim().isNotEmpty) ...[
+            const SizedBox(height: PsSpace.sm),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(PsSpace.sm),
+              decoration: BoxDecoration(color: PsColors.surfaceMuted, borderRadius: BorderRadius.circular(8)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Seller’s reply', style: PsText.caption.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(review.sellerReply!, style: PsText.body),
+                ],
+              ),
+            ),
+          ],
+          if (footer != null) ...[const SizedBox(height: PsSpace.xs), footer!],
         ],
       ),
     );

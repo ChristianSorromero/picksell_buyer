@@ -20,20 +20,27 @@ class PsVerifiedBadge extends StatelessWidget {
 
 /// Seller avatar from the store initials.
 class PsSellerAvatar extends StatelessWidget {
-  const PsSellerAvatar({super.key, required this.name, this.size = 48});
+  const PsSellerAvatar({super.key, required this.name, this.size = 48, this.logo});
 
   final String name;
   final double size;
 
+  /// The store's logo; the initials show until it loads or when there is none.
+  final String? logo;
+
   @override
   Widget build(BuildContext context) {
     final letters = name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).take(2).map((w) => w[0].toUpperCase()).join();
+    final initials = Text(letters.isEmpty ? '?' : letters, style: PsText.bodyStrong.copyWith(fontSize: size * 0.34));
     return Container(
       width: size,
       height: size,
       alignment: Alignment.center,
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(color: PsColors.surfaceMuted, borderRadius: BorderRadius.circular(size * 0.25)),
-      child: Text(letters.isEmpty ? '?' : letters, style: PsText.bodyStrong.copyWith(fontSize: size * 0.34)),
+      child: logo == null || logo!.isEmpty
+          ? initials
+          : Image.network(logo!, width: size, height: size, fit: BoxFit.cover, errorBuilder: (_, __, ___) => initials),
     );
   }
 }

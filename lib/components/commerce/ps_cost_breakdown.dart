@@ -10,11 +10,23 @@ import '../shared/ps_card.dart';
 /// COM-C17 Order Cost Breakdown — subtotal + shipping − discounts + fees
 /// = total, exactly as priced by the server.
 class PsCostBreakdown extends StatelessWidget {
-  const PsCostBreakdown({super.key, required this.totals, this.voucherCode, this.title = 'Payment Details'});
+  const PsCostBreakdown({
+    super.key,
+    required this.totals,
+    this.voucherCode,
+    this.title = 'Payment Details',
+    this.storeVoucherDiscount = 0,
+    this.pickSellVoucherDiscount = 0,
+  });
 
   final CostTotals totals;
   final String? voucherCode;
   final String? title;
+
+  /// Checkout vouchers on top of the server totals (the quote's `vouchers`):
+  /// a store's own voucher and PickSell's. The total shown takes them off.
+  final double storeVoucherDiscount;
+  final double pickSellVoucherDiscount;
 
   @override
   Widget build(BuildContext context) {
@@ -50,12 +62,17 @@ class PsCostBreakdown extends StatelessWidget {
               color: PsColors.primaryStrong,
               tag: voucherCode == null ? null : PsTag(voucherCode!, icon: Icons.done_all_rounded),
             ),
+          if (storeVoucherDiscount > 0) row('Store Voucher', '-${formatPesoFixed(storeVoucherDiscount)}', color: PsColors.primaryStrong),
+          if (pickSellVoucherDiscount > 0) row('PickSell Voucher', '-${formatPesoFixed(pickSellVoucherDiscount)}', color: PsColors.primaryStrong),
           if (totals.serviceFee > 0) row('Service Fee', formatPesoFixed(totals.serviceFee)),
           const Divider(height: PsSpace.lg),
           Row(
             children: [
               Expanded(child: Text('Total Payment', style: PsText.heading.copyWith(fontSize: 17))),
-              Text(formatPesoFixed(totals.total), style: PsText.price.copyWith(fontSize: 19, color: PsColors.primary)),
+              Text(
+                formatPesoFixed((totals.total - storeVoucherDiscount - pickSellVoucherDiscount).clamp(0, double.infinity).toDouble()),
+                style: PsText.price.copyWith(fontSize: 19, color: PsColors.primary),
+              ),
             ],
           ),
         ],

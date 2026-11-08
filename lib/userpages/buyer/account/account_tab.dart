@@ -10,8 +10,10 @@ import '../../../services/wishlist_service.dart';
 import '../../landing_page1.dart';
 import '../nav.dart';
 import '../orders/reorder_page.dart';
+import 'address_book_page.dart';
 import 'change_password_page.dart';
 import 'edit_profile_page.dart';
+import 'following_page.dart';
 import 'help_support_page.dart';
 import 'my_picks_page.dart';
 import 'notifications_page.dart';
@@ -108,6 +110,8 @@ class _AccountTabState extends State<AccountTab> {
                 children: [
                   PsMenuTile(icon: Icons.favorite_border_rounded, label: 'My Picks', subtitle: '${a.wishlistCount} saved', onTap: () => _push(const MyPicksPage())),
                   const Divider(),
+                  PsMenuTile(icon: Icons.storefront_outlined, label: 'Following', subtitle: 'Stores you follow', onTap: () => _push(const FollowingPage())),
+                  const Divider(),
                   PsMenuTile(icon: Icons.history_rounded, label: 'Recently Viewed', onTap: () => _push(const RecentlyViewedPage())),
                   const Divider(),
                   PsMenuTile(icon: Icons.replay_rounded, label: 'Buy Again', subtitle: 'Reorder past purchases', onTap: () => _push(const ReorderPage())),
@@ -121,9 +125,9 @@ class _AccountTabState extends State<AccountTab> {
                 children: [
                   PsMenuTile(
                     icon: Icons.location_on_outlined,
-                    label: 'Delivery Address',
+                    label: 'My Addresses',
                     subtitle: a.deliveryAddress?.complete == true ? a.deliveryAddress!.fullAddress : 'Add your delivery address',
-                    onTap: () => _push(EditProfilePage(profile: a.profile, focusAddress: true)),
+                    onTap: () => _push(const AddressBookPage()),
                   ),
                   const Divider(),
                   PsMenuTile(

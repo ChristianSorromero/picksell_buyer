@@ -5,12 +5,13 @@ import '../../../format_utils.dart';
 import '../../../models/catalog.dart';
 import '../../../models/chat.dart';
 import '../../../services/catalog_service.dart';
+import '../../../services/follow_service.dart';
 import '../../../services/wishlist_service.dart';
 import '../../chats_page.dart';
 import '../nav.dart';
 
-/// COM-C04 Seller store: profile, trust signals, chat and the seller's
-/// products filtered by category.
+/// COM-C04 Seller store: profile, trust signals, follow, chat and the
+/// seller's products filtered by category.
 class StorePage extends StatefulWidget {
   const StorePage({super.key, required this.sellerId});
 
@@ -71,15 +72,22 @@ class _StorePageState extends State<StorePage> {
                           ],
                         ),
                         const SizedBox(height: PsSpace.md),
-                        PsSecondaryButton.outlined(
-                          label: 'Chat with seller',
-                          icon: Icons.chat_bubble_outline_rounded,
-                          expand: true,
-                          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                            builder: (_) => ChatConversationPage(
-                              contact: ChatContact(id: s.id, name: s.name, initials: s.name.isEmpty ? '?' : s.name[0], lastMessage: ''),
+                        Row(
+                          children: [
+                            Expanded(child: _FollowButton(sellerId: s.id, storeName: s.name, following: s.isFollowing, followers: s.followers)),
+                            const SizedBox(width: PsSpace.sm),
+                            Expanded(
+                              child: PsSecondaryButton.outlined(
+                                label: 'Chat',
+                                icon: Icons.chat_bubble_outline_rounded,
+                                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                                  builder: (_) => ChatConversationPage(
+                                    contact: ChatContact(id: s.id, name: s.name, initials: s.name.isEmpty ? '?' : s.name[0], lastMessage: ''),
+                                  ),
+                                )),
+                              ),
                             ),
-                          )),
+                          ],
                         ),
                       ],
                     ),
@@ -108,5 +116,62 @@ class _StorePageState extends State<StorePage> {
         },
       ),
     );
+  }
+}
+
+/// Follow / Following, with the follower count. Flips at once and puts it
+/// back if the server refuses; the server's count wins.
+class _FollowButton extends StatefulWidget {
+  const _FollowButton({required this.sellerId, required this.storeName, required this.following, required this.followers});
+
+  final int sellerId;
+  final String storeName;
+  final bool following;
+  final int followers;
+
+  @override
+  State<_FollowButton> createState() => _FollowButtonState();
+}
+
+class _FollowButtonState extends State<_FollowButton> {
+  final _service = FollowService();
+  late bool _following = widget.following;
+  late int _followers = widget.followers;
+  bool _busy = false;
+
+  Future<void> _toggle() async {
+    final want = !_following;
+    setState(() {
+      _busy = true;
+      _following = want;
+      _followers += want ? 1 : -1;
+    });
+    try {
+      final r = await _service.set(widget.sellerId, follow: want);
+      if (!mounted) return;
+      setState(() {
+        _following = r.following;
+        _followers = r.followers;
+      });
+      PsToast.show(context, want ? 'You are now following ${widget.storeName}.' : 'You unfollowed ${widget.storeName}.');
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _following = !want;
+        _followers += want ? -1 : 1;
+      });
+      PsToast.error(context, e.isNetworkError ? 'You’re offline. Try again.' : e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = _followers.clamp(0, 1 << 30);
+    final label = '${_following ? 'Following' : 'Follow'}${count > 0 ? ' · $count' : ''}';
+    return _following
+        ? PsSecondaryButton.outlined(label: label, icon: Icons.check_rounded, onPressed: _busy ? null : _toggle)
+        : PsPrimaryButton(label: label, icon: Icons.add_rounded, uppercase: false, onPressed: _busy ? null : _toggle);
   }
 }

@@ -18,6 +18,7 @@ class PsOrderCard extends StatelessWidget {
     required this.onTap,
     this.onTrack,
     this.onRate,
+    this.onReceived,
     this.onBuyAgain,
   });
 
@@ -25,11 +26,12 @@ class PsOrderCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onTrack;
   final VoidCallback? onRate;
+  final VoidCallback? onReceived;
   final VoidCallback? onBuyAgain;
 
   List<Widget> _actions() {
-    // The API puts an order in "To Rate" exactly when it can still be rated (delivered or
-    // completed, no rating yet — the same rule as the rate endpoint), so the card follows it.
+    // The API puts an order in "To Rate" exactly when it can still be rated (completed after
+    // "Order Received", no rating yet — the same rule as the rate endpoint), so the card follows it.
     final canRate = order.tab == OrderTab.toRate;
     final ended = switch (order.status) {
       OrderStatus.completed ||
@@ -40,6 +42,8 @@ class PsOrderCard extends StatelessWidget {
     final inProgress = !ended && order.status != OrderStatus.delivered;
 
     return [
+      if (order.status == OrderStatus.delivered && onReceived != null)
+        PsPrimaryButton(label: 'Order Received', uppercase: false, expand: false, height: 44, onPressed: onReceived),
       if (canRate && onRate != null)
         PsSecondaryButton.outlined(label: 'Rate Order', onPressed: onRate),
       if (ended && onBuyAgain != null)

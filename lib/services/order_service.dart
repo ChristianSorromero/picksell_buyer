@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../core/network/api_client.dart';
 import '../models/json.dart';
 import '../models/order.dart';
@@ -7,6 +9,9 @@ class OrderService {
   OrderService({ApiClient? client}) : _api = client ?? ApiClient.instance;
 
   final ApiClient _api;
+
+  /// The rider's photo at the door, when [OrderDetail.hasProofOfDelivery]. Private: downloaded with the buyer's login.
+  Future<Uint8List> proofOfDelivery(int orderId) => _api.getBytes('/buyer/orders/$orderId/proof-of-delivery');
 
   Future<OrderList> list({OrderTab tab = OrderTab.all}) async {
     final j = await _api.getJson('/buyer/orders', query: {'tab': tab.apiValue});
@@ -19,12 +24,15 @@ class OrderService {
 
   Future<OrderOptions> options() async => OrderOptions.fromJson(await _api.getJson('/buyer/orders/options'));
 
+  /// "Order Received": the delivered parcel reached the buyer. Completes the order; then it can be rated.
+  Future<OrderDetail> confirmReceived(int id) async => _detail(await _api.postJson('/buyer/orders/$id/received'));
+
   Future<OrderDetail> cancel(int id, String reason) async =>
       _detail(await _api.postJson('/buyer/orders/$id/cancel', {'reason': reason}));
 
   /// The website's order rating: the product, the seller's service and the delivery (all 1–5),
-  /// an optional comment and up to 3 photos. Once the order is completed the product stars are
-  /// also the product review.
+  /// an optional comment and up to 3 photos, once the buyer confirmed receipt. The product stars
+  /// are published as the product review straight away.
   Future<OrderDetail> rate(
     int id, {
     required int rating,

@@ -33,6 +33,8 @@ class SellerSummary extends SellerBrief {
     this.positiveRate,
     this.productCount = 0,
     this.joinedAt,
+    this.followers = 0,
+    this.isFollowing = false,
   });
 
   final double? rating;
@@ -40,6 +42,10 @@ class SellerSummary extends SellerBrief {
   final int? positiveRate;
   final int productCount;
   final DateTime? joinedAt;
+
+  /// Buyers following this store, and whether the signed-in buyer is one of them.
+  final int followers;
+  final bool isFollowing;
 
   factory SellerSummary.fromJson(Json j) => SellerSummary(
         id: toInt(j['id']),
@@ -52,6 +58,8 @@ class SellerSummary extends SellerBrief {
         positiveRate: j['positive_rate'] == null ? null : toInt(j['positive_rate']),
         productCount: toInt(j['product_count']),
         joinedAt: toDate(j['joined_at']),
+        followers: toInt(j['followers']),
+        isFollowing: j['is_following'] == true,
       );
 }
 
@@ -175,6 +183,12 @@ class Review {
     this.comment,
     this.variationLabel,
     this.createdAt,
+    this.photos = const [],
+    this.helpfulCount = 0,
+    this.sellerReply,
+    this.isHelpful = false,
+    this.isMine = false,
+    this.reported = false,
   });
 
   final int id;
@@ -184,6 +198,37 @@ class Review {
   final String? variationLabel;
   final DateTime? createdAt;
 
+  /// Photos the buyer added with their rating.
+  final List<String> photos;
+
+  /// Buyers who marked it helpful, and whether the signed-in buyer did.
+  final int helpfulCount;
+  final bool isHelpful;
+
+  /// The store's public answer.
+  final String? sellerReply;
+
+  /// The signed-in buyer wrote it (they can't vote on or report it).
+  final bool isMine;
+
+  /// The signed-in buyer has already reported it.
+  final bool reported;
+
+  Review copyWith({int? helpfulCount, bool? isHelpful, bool? reported}) => Review(
+        id: id,
+        reviewer: reviewer,
+        rating: rating,
+        comment: comment,
+        variationLabel: variationLabel,
+        createdAt: createdAt,
+        photos: photos,
+        sellerReply: sellerReply,
+        isMine: isMine,
+        helpfulCount: helpfulCount ?? this.helpfulCount,
+        isHelpful: isHelpful ?? this.isHelpful,
+        reported: reported ?? this.reported,
+      );
+
   factory Review.fromJson(Json j) => Review(
         id: toInt(j['id']),
         reviewer: j['reviewer'] as String? ?? 'Picksell buyer',
@@ -191,7 +236,32 @@ class Review {
         comment: toStr(j['comment']),
         variationLabel: toStr(j['variation_label']),
         createdAt: toDate(j['created_at']),
+        photos: (j['photos'] as List?)?.whereType<String>().toList() ?? const [],
+        helpfulCount: toInt(j['helpful_count']),
+        sellerReply: toStr(j['seller_reply']),
+        isHelpful: j['is_helpful'] == true,
+        isMine: j['is_mine'] == true,
+        reported: j['reported'] == true,
       );
+}
+
+/// Why a review can be reported (website: ProductReviewReport::REASONS).
+class ReportReason {
+  const ReportReason(this.code, this.label);
+
+  final String code;
+  final String label;
+
+  /// The website's list, for screens that don't load it (the product page's top reviews).
+  static const defaults = [
+    ReportReason('fake', 'Fake or not from a real purchase'),
+    ReportReason('offensive', 'Offensive or abusive language'),
+    ReportReason('spam', 'Spam or advertising'),
+    ReportReason('personal_info', 'Shares personal information'),
+    ReportReason('irrelevant', 'Not about this product'),
+  ];
+
+  factory ReportReason.fromJson(Json j) => ReportReason(j['code'] as String? ?? '', j['label'] as String? ?? '');
 }
 
 /// COM-C14 voucher offered on a product page, in the cart sheet or wallet.
@@ -393,11 +463,12 @@ class ProductPage {
 }
 
 class ReviewPage {
-  const ReviewPage({required this.summary, required this.reviews, required this.meta});
+  const ReviewPage({required this.summary, required this.reviews, required this.meta, this.reportReasons = ReportReason.defaults});
 
   final RatingSummary summary;
   final List<Review> reviews;
   final PageMeta meta;
+  final List<ReportReason> reportReasons;
 }
 
 class SellerStore {

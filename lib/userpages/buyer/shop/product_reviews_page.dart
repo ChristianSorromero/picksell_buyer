@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../components/components.dart';
 import '../../../models/catalog.dart';
 import '../../../services/catalog_service.dart';
+import 'review_feedback.dart';
 
 enum _ReviewFilter { all, five, four, low, comments }
 
@@ -77,7 +78,7 @@ class _ProductReviewsPageState extends State<ProductReviewsPage> {
                   padding: const EdgeInsets.all(PsSpace.xl),
                   child: Text('No reviews match this filter.', textAlign: TextAlign.center, style: PsText.bodyMuted),
                 ),
-              for (final r in reviews) ...[PsReviewCard(review: r), const SizedBox(height: PsSpace.sm)],
+              for (final r in reviews) ...[ReviewWithFeedback(key: ValueKey(r.id), review: r, reasons: page.reportReasons), const SizedBox(height: PsSpace.sm)],
             ],
           );
         },
