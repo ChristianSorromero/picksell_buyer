@@ -98,16 +98,24 @@ class TrackingEvent {
 }
 
 class CourierInfo {
-  const CourierInfo({required this.name, this.vehicle, this.phone});
+  const CourierInfo({required this.name, this.vehicle, this.vehicleType, this.phone});
 
   final String name;
   final String? vehicle;
+
+  /// motorcycle, tricycle or four_wheel; picks the vehicle icon. Older servers leave it out.
+  final String? vehicleType;
 
   /// Only present while the rider is actively assigned to this order.
   final String? phone;
 
   factory CourierInfo.fromJson(Json j) =>
-      CourierInfo(name: j['name'] as String? ?? '', vehicle: toStr(j['vehicle']), phone: toStr(j['phone']));
+      CourierInfo(
+        name: j['name'] as String? ?? '',
+        vehicle: toStr(j['vehicle']),
+        vehicleType: toStr(j['vehicle_type']),
+        phone: toStr(j['phone']),
+      );
 }
 
 /// Where the parcel goes: the buyer's profile address (the website delivers there).

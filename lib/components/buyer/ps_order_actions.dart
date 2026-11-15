@@ -95,9 +95,20 @@ class PsOrderActionGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final a = order.actions;
+    // Return / Refund sits next to "Order Received" while the return window is open.
+    final returnButton = a.canReturn && order.returnRequest == null && onReturn != null
+        ? PsSecondaryButton.outlined(label: 'Return / Refund', icon: Icons.assignment_return_outlined, expand: true, onPressed: onReturn)
+        : null;
+    final received = a.canConfirmReceived && onReceived != null
+        ? PsPrimaryButton(label: 'Order Received', icon: Icons.inventory_2_outlined, uppercase: false, onPressed: onReceived)
+        : null;
     final buttons = <Widget>[
-      if (a.canConfirmReceived && onReceived != null)
-        PsPrimaryButton(label: 'Order Received', icon: Icons.inventory_2_outlined, uppercase: false, onPressed: onReceived),
+      if (received != null && returnButton != null)
+        Row(children: [Expanded(child: received), const SizedBox(width: PsSpace.xs), Expanded(child: returnButton)])
+      else if (received != null)
+        received
+      else if (returnButton != null)
+        returnButton,
       if (a.canRate && onRate != null) PsPrimaryButton(label: 'Rate Product', icon: Icons.star_rounded, uppercase: false, onPressed: onRate),
       if (a.canTrack && onTrack != null && !a.canRate && !a.canConfirmReceived)
         PsPrimaryButton(label: 'Track Order', icon: Icons.local_shipping_outlined, uppercase: false, onPressed: onTrack),
@@ -107,9 +118,7 @@ class PsOrderActionGroup extends StatelessWidget {
     final rows = <Widget>[
       if (a.canTrack && onTrack != null && (a.canRate || a.canConfirmReceived)) PsMenuTile(icon: Icons.local_shipping_outlined, label: 'Shipment history', onTap: onTrack),
       if (order.returnRequest != null && onRefundStatus != null)
-        PsMenuTile(icon: Icons.currency_exchange_rounded, label: 'Return / Refund status', onTap: onRefundStatus)
-      else if (a.canReturn && onReturn != null)
-        PsMenuTile(icon: Icons.inventory_2_outlined, label: 'Return / Refund', onTap: onReturn),
+        PsMenuTile(icon: Icons.currency_exchange_rounded, label: 'Return / Refund status', onTap: onRefundStatus),
       if (a.canReport && onReport != null) PsMenuTile(icon: Icons.report_problem_outlined, label: 'Report a Problem', onTap: onReport),
       if (a.canCancel && onCancel != null) PsMenuTile(icon: Icons.cancel_outlined, label: 'Cancel Order', destructive: true, onTap: onCancel),
     ];

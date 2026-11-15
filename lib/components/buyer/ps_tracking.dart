@@ -274,7 +274,15 @@ class PsCourierCard extends StatelessWidget {
             const SizedBox(height: PsSpace.sm),
             Row(
               children: [
-                const Icon(Icons.motorcycle_rounded, size: 18, color: PsColors.textMuted),
+                Icon(
+                  switch (courier.vehicleType) {
+                    'tricycle' => Icons.electric_rickshaw_rounded,
+                    'four_wheel' => Icons.directions_car_rounded,
+                    _ => Icons.motorcycle_rounded,
+                  },
+                  size: 18,
+                  color: PsColors.textMuted,
+                ),
                 const SizedBox(width: 6),
                 Text(courier.vehicle!, style: PsText.bodyMuted),
               ],
