@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 
-/// Simple fade transition used for all page changes.
+import 'components/shared/ps_motion.dart';
+import 'core/theme/ps_tokens.dart';
+
+/// Fade for flow changes that replace the screen (splash → welcome, sign
+/// in/out, registration steps): no sideways slide, since there's no "back".
 Route<T> fadeRoute<T>(Widget page) {
   return PageRouteBuilder<T>(
     pageBuilder: (_, __, ___) => page,
-    transitionDuration: const Duration(milliseconds: 350),
-    reverseTransitionDuration: const Duration(milliseconds: 250),
-    transitionsBuilder: (_, animation, __, child) =>
-        FadeTransition(opacity: animation, child: child),
+    transitionDuration: PsMotion.page,
+    reverseTransitionDuration: PsMotion.pageBack,
+    transitionsBuilder: (context, animation, secondary, child) =>
+        psPageTransition(context, animation, secondary, child, slide: false),
   );
 }

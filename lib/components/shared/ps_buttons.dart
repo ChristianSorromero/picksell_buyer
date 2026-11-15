@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/ps_colors.dart';
 import '../../core/theme/ps_tokens.dart';
 import '../../core/theme/ps_typography.dart';
+import 'ps_motion.dart';
 
 /// SYS-C06 Primary Action Button — the one main action on a screen.
 ///
@@ -38,13 +39,15 @@ class PsPrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = PsText.button;
-    final content = loading
+    final body = loading
         ? SizedBox(
+            key: const ValueKey('loading'),
             width: 22,
             height: 22,
             child: CircularProgressIndicator(strokeWidth: 2.4, color: PsColors.onPrimary),
           )
         : Row(
+            key: const ValueKey('label'),
             mainAxisSize: MainAxisSize.min,
             children: [
               if (icon != null) ...[Icon(icon, size: 20), const SizedBox(width: 8)],
@@ -58,41 +61,48 @@ class PsPrimaryButton extends StatelessWidget {
               if (trailingIcon != null) ...[const SizedBox(width: 8), Icon(trailingIcon, size: 18)],
             ],
           );
+    final content = AnimatedSwitcher(
+      duration: PsMotion.duration(context, PsMotion.icon),
+      switchInCurve: PsMotion.enter,
+      switchOutCurve: PsMotion.exit,
+      transitionBuilder: (child, a) => FadeTransition(
+        opacity: a,
+        child: ScaleTransition(scale: Tween(begin: 0.85, end: 1.0).animate(a), child: child),
+      ),
+      child: body,
+    );
 
     return Semantics(
       button: true,
       enabled: _enabled,
       label: label,
       excludeSemantics: true,
-      child: AnimatedContainer(
-        duration: PsMotion.fast,
-        height: height,
-        width: expand ? double.infinity : null,
-        decoration: BoxDecoration(
-          borderRadius: PsRadius.button,
-          boxShadow: _enabled
-              ? [
-                  BoxShadow(
-                    color: PsColors.primary.withAlpha(70),
-                    blurRadius: 14,
-                    offset: const Offset(0, 6),
-                  ),
-                ]
-              : null,
-        ),
-        child: ElevatedButton(
-          onPressed: _enabled ? onPressed : (loading ? () {} : null),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: PsColors.primary,
-            foregroundColor: PsColors.onPrimary,
-            disabledBackgroundColor: PsColors.primary.withAlpha(110),
-            disabledForegroundColor: PsColors.onPrimary.withAlpha(140),
-            elevation: 0,
-            minimumSize: const Size(PsSize.minTap, PsSize.minTap),
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            shape: RoundedRectangleBorder(borderRadius: PsRadius.button),
+      child: PsPressable(
+        enabled: _enabled,
+        child: AnimatedContainer(
+          duration: PsMotion.fast,
+          height: height,
+          width: expand ? double.infinity : null,
+          decoration: BoxDecoration(
+            borderRadius: PsRadius.button,
+            boxShadow: _enabled
+                ? [BoxShadow(color: PsColors.primary.withAlpha(70), blurRadius: 14, offset: const Offset(0, 6))]
+                : null,
           ),
-          child: content,
+          child: ElevatedButton(
+            onPressed: _enabled ? onPressed : (loading ? () {} : null),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: PsColors.primary,
+              foregroundColor: PsColors.onPrimary,
+              disabledBackgroundColor: PsColors.primary.withAlpha(110),
+              disabledForegroundColor: PsColors.onPrimary.withAlpha(140),
+              elevation: 0,
+              minimumSize: const Size(PsSize.minTap, PsSize.minTap),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              shape: RoundedRectangleBorder(borderRadius: PsRadius.button),
+            ),
+            child: content,
+          ),
         ),
       ),
     );
@@ -167,7 +177,8 @@ class PsSecondaryButton extends StatelessWidget {
             child: child,
           );
 
-    return expand ? SizedBox(width: double.infinity, child: button) : button;
+    final pressable = PsPressable(enabled: onPressed != null, child: button);
+    return expand ? SizedBox(width: double.infinity, child: pressable) : pressable;
   }
 }
 
@@ -202,7 +213,9 @@ class PsIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final count = badgeCount ?? 0;
-    Widget glyph = Icon(icon, size: size, color: color ?? PsColors.textPrimary);
+    Widget glyph = PsIconSwap(
+      icon: Icon(icon, size: size, color: color ?? PsColors.textPrimary),
+    );
 
     if (count > 0 || showDot) {
       glyph = Badge(
@@ -217,16 +230,20 @@ class PsIconButton extends StatelessWidget {
 
     return Tooltip(
       message: tooltip,
-      child: Material(
-        type: filled ? MaterialType.circle : MaterialType.transparency,
-        color: filled ? PsColors.surface.withAlpha(235) : null,
-        elevation: 0,
-        child: InkResponse(
-          onTap: onPressed,
-          radius: PsSize.minTap / 2 + 2,
-          child: SizedBox.square(
-            dimension: PsSize.minTap,
-            child: Center(child: glyph),
+      child: PsPressable(
+        enabled: onPressed != null,
+        scale: 0.9,
+        child: Material(
+          type: filled ? MaterialType.circle : MaterialType.transparency,
+          color: filled ? PsColors.surface.withAlpha(235) : null,
+          elevation: 0,
+          child: InkResponse(
+            onTap: onPressed,
+            radius: PsSize.minTap / 2 + 2,
+            child: SizedBox.square(
+              dimension: PsSize.minTap,
+              child: Center(child: glyph),
+            ),
           ),
         ),
       ),

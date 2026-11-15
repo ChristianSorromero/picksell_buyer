@@ -23,6 +23,15 @@ class FakeBuyerApi {
   String? placeError; // 'stock' → 422 item_ids
   Map<String, dynamic>? orderDetail;
 
+  /// Delivery-problem reports sent (multipart, so the raw requests).
+  final List<http.Request> deliveryProblems = [];
+
+  /// Off-platform reports' details, in order.
+  final List<String> offPlatformReports = [];
+
+  /// The website refuses the same report while it's still open.
+  bool deliveryProblemOpen = false;
+
   /// The address book (website: BuyerAddressBook) and the default address's pin.
   late List<Map<String, dynamic>> addresses;
   int nextAddressId = 40;
@@ -31,6 +40,9 @@ class FakeBuyerApi {
   /// Checkout vouchers: Island Threads' SAVE50 (₱50 off ₱500+) and PickSell's PICK20 (₱20 off).
   /// Set [usedUp] to make placing an order with SAVE50 fail, like a voucher used up since the quote.
   bool usedUp = false;
+
+  /// The product list comes back empty (an empty category or filter).
+  bool catalogEmpty = false;
 
   /// Seller ids the buyer follows (website: seller_follows), and other buyers' follows of Island Threads.
   final Set<int> following = {};
@@ -102,7 +114,11 @@ class FakeBuyerApi {
     nextAddressId = 40;
     defaultPin = null;
     usedUp = false;
+    catalogEmpty = false;
     following.clear();
+    deliveryProblems.clear();
+    deliveryProblemOpen = false;
+    offPlatformReports.clear();
     otherFollowers = 4;
     votedHelpful = false;
     lastReport = null;
@@ -288,6 +304,35 @@ class FakeBuyerApi {
         final ids = (body['item_ids'] as List).cast<int>();
         cart.removeWhere((l) => ids.contains(l['id']));
         return _json({'cart': _quote(cart)});
+      // Website rule: refused while an order is open (password 'busy' stands in for that).
+      case ('DELETE', '/buyer/account'):
+        if (body['password'] == 'wrong') {
+          return _json({'message': 'The password is incorrect.', 'errors': {'password': ['The password is incorrect.']}}, 422);
+        }
+        if (body['password'] == 'busy') {
+          const m = 'You still have 1 order in progress. Finish or cancel it before deleting your account.';
+          return _json({'message': m, 'errors': {'password': [m]}}, 422);
+        }
+        return _json({'message': 'Your account has been deleted.'});
+      // Browse: the website's filters; stores only for a search.
+      case ('GET', '/products'):
+        final q = r.url.queryParameters;
+        final search = q['search'] ?? '';
+        return _json({
+          'products': catalogEmpty ? [] : [shirt, mug],
+          'meta': {'current_page': 1, 'last_page': 1, 'total': catalogEmpty ? 0 : 2},
+          'stores': search.isEmpty ? [] : [{...(shirt['seller'] as Map), 'product_count': 2}],
+          'provinces': ['Cebu', 'Laguna'],
+        });
+      case ('GET', '/search-suggestions'):
+        final q = (r.url.queryParameters['q'] ?? '').toLowerCase();
+        return _json({
+          'products': [],
+          'categories': [],
+          'stores': 'island threads'.contains(q) ? [{...(shirt['seller'] as Map), 'logo': null}] : [],
+        });
+      case ('GET', '/categories'):
+        return _json({'categories': []});
       case ('GET', '/buyer/addresses'):
         return _json(book);
       case ('POST', '/buyer/addresses'):
@@ -361,7 +406,8 @@ class FakeBuyerApi {
       case ('GET', '/sellers/3'):
         return _json({
           'seller': {...(shirt['seller'] as Map), 'rating': 4.8, 'review_count': 12, 'positive_rate': 98, 'product_count': 2, 'joined_at': '2025-01-10',
-              'followers': otherFollowers + (following.contains(3) ? 1 : 0), 'is_following': following.contains(3)},
+              'followers': otherFollowers + (following.contains(3) ? 1 : 0), 'is_following': following.contains(3),
+              'logo': 'https://example.test/logo.png', 'banner': 'https://example.test/banner.jpg', 'description': 'Island-made tees and homeware.'},
           'categories': ['Fashion', 'Home'],
           'products': [shirt, mug],
         });
@@ -373,6 +419,11 @@ class FakeBuyerApi {
         return _json({
           'cancel_reasons': ['Ordered by mistake'],
           'report_categories': [],
+          'delivery_problem_types': [
+            {'value': 'not_received', 'label': 'Marked delivered but not received'},
+            {'value': 'late', 'label': 'Delivery very late'},
+            {'value': 'rider_conduct', 'label': 'Rider conduct'},
+          ],
           'return_reasons': ['Damaged item', 'Wrong item received', 'Wrong size', 'Not as described', 'Other'],
           'refund_methods': [],
         });
@@ -433,6 +484,21 @@ class FakeBuyerApi {
       if (orderDetail?['has_proof_of_delivery'] != true) return _json({'message': 'No delivery photo for this order yet.'}, 404);
       return http.Response.bytes(base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), 200,
           headers: {'content-type': 'image/png'});
+    }
+
+    if (r.method == 'POST' && RegExp(r'^/buyer/orders/\d+/report-off-platform$').hasMatch(path)) {
+      offPlatformReports.add('${body['details']}');
+      if (offPlatformReports.length > 1) return _json({'message': 'You already reported this. PickSell is looking into it.'}, 422);
+      return _json({'message': 'Thank you. PickSell will review this seller.'}, 201);
+    }
+
+    if (r.method == 'POST' && RegExp(r'^/buyer/orders/\d+/delivery-problem$').hasMatch(path)) {
+      deliveryProblems.add(r);
+      if (deliveryProblemOpen) {
+        return _json({'message': 'You already reported this problem. PickSell is looking into it.'}, 422);
+      }
+      deliveryProblemOpen = true;
+      return _json({'message': 'Thanks, PickSell received your report and will follow it up with the logistics company.'}, 201);
     }
 
     final follow = RegExp(r'^/buyer/sellers/(\d+)/follow$').firstMatch(path);

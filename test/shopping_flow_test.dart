@@ -214,6 +214,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(jsonDecode(api.calls('POST', '/buyer/orders/501/cancel').single.body), {'reason': 'Ordered by mistake'});
+    // The status header is at the top; the page was scrolled down to the actions.
+    await tester.scrollUntilVisible(find.text('Cancelled'), -200);
     expect(find.text('Cancelled'), findsOneWidget);
   });
 

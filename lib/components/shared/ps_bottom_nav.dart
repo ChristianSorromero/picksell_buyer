@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/ps_colors.dart';
 import '../../core/theme/ps_tokens.dart';
 import '../../core/theme/ps_typography.dart';
+import 'ps_motion.dart';
 
 /// Primary sections of the Buyer app, in bottom-bar order.
 enum BuyerTab {
@@ -102,7 +103,7 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = selected ? _on : _off;
-    Widget icon = Icon(selected ? tab.activeIcon : tab.icon, color: color, size: 23);
+    Widget icon = PsIconSwap(icon: Icon(selected ? tab.activeIcon : tab.icon, color: color, size: 23));
     if (badge > 0 || dot) {
       icon = Badge(
         backgroundColor: PsColors.primary,
@@ -118,30 +119,37 @@ class _NavItem extends StatelessWidget {
       button: true,
       label: badge > 0 ? '${tab.label}, $badge items' : tab.label,
       excludeSemantics: true,
-      child: InkResponse(
-        onTap: onTap,
-        radius: 30,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            icon,
-            const SizedBox(height: 3),
-            Text(
-              tab.label,
-              maxLines: 1,
-              overflow: TextOverflow.fade,
-              softWrap: false,
-              style: PsText.ui.copyWith(fontSize: 11, color: color, fontWeight: selected ? FontWeight.w800 : FontWeight.w600),
-            ),
-            const SizedBox(height: 3),
-            AnimatedContainer(
-              duration: PsMotion.normal,
-              curve: PsMotion.curve,
-              height: 3,
-              width: selected ? 16 : 0,
-              decoration: BoxDecoration(color: PsColors.primary, borderRadius: BorderRadius.circular(2)),
-            ),
-          ],
+      child: PsPressable(
+        scale: 0.92,
+        child: InkResponse(
+          onTap: onTap,
+          radius: 30,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              icon,
+              const SizedBox(height: 3),
+              Text(
+                tab.label,
+                maxLines: 1,
+                overflow: TextOverflow.fade,
+                softWrap: false,
+                style: PsText.ui.copyWith(
+                  fontSize: 11,
+                  color: color,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 3),
+              AnimatedContainer(
+                duration: PsMotion.duration(context, PsMotion.normal),
+                curve: PsMotion.curve,
+                height: 3,
+                width: selected ? 16 : 0,
+                decoration: BoxDecoration(color: PsColors.primary, borderRadius: BorderRadius.circular(2)),
+              ),
+            ],
+          ),
         ),
       ),
     );

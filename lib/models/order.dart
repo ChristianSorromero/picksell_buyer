@@ -246,6 +246,7 @@ class OrderActions {
     this.canRate = false,
     this.canReturn = false,
     this.canReport = false,
+    this.canReportDelivery = false,
     this.canReorder = false,
     this.canTrack = false,
   });
@@ -256,6 +257,10 @@ class OrderActions {
   final bool canRate;
   final bool canReturn;
   final bool canReport;
+
+  /// The parcel is (or was) with the logistics company: problems with the
+  /// courier go to it, not to the seller.
+  final bool canReportDelivery;
   final bool canReorder;
   final bool canTrack;
 
@@ -267,6 +272,7 @@ class OrderActions {
           canRate: j['can_rate'] == true,
           canReturn: j['can_return'] == true,
           canReport: j['can_report'] == true,
+          canReportDelivery: j['can_report_delivery'] == true,
           canReorder: j['can_reorder'] == true,
           canTrack: j['can_track'] == true,
         );
@@ -427,6 +433,7 @@ class OrderOptions {
   const OrderOptions({
     this.cancelReasons = const [],
     this.reportCategories = const [],
+    this.deliveryProblemTypes = const [],
     this.returnReasons = const [],
     this.refundMethods = const [],
     this.returnWindowDays = 7,
@@ -434,6 +441,9 @@ class OrderOptions {
 
   final List<String> cancelReasons;
   final List<String> reportCategories;
+
+  /// (value, label), e.g. ('late', 'Delivery very late').
+  final List<(String, String)> deliveryProblemTypes;
   final List<String> returnReasons;
 
   /// (code, name)
@@ -443,6 +453,7 @@ class OrderOptions {
   factory OrderOptions.fromJson(Json j) => OrderOptions(
         cancelReasons: (j['cancel_reasons'] as List?)?.map((e) => '$e').toList() ?? const [],
         reportCategories: (j['report_categories'] as List?)?.map((e) => '$e').toList() ?? const [],
+        deliveryProblemTypes: listOf(j['delivery_problem_types'], (t) => ('${t['value']}', '${t['label']}')),
         returnReasons: (j['return_reasons'] as List?)?.map((e) => '$e').toList() ?? const [],
         refundMethods: listOf(j['refund_methods'], (m) => ('${m['code']}', '${m['name']}')),
         returnWindowDays: toInt(j['return_window_days'], 7),

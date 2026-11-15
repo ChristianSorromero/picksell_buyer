@@ -13,6 +13,7 @@ import '../nav.dart';
 import '../orders/reorder_page.dart';
 import 'address_book_page.dart';
 import 'change_password_page.dart';
+import 'delete_account_page.dart';
 import 'edit_profile_page.dart';
 import 'following_page.dart';
 import 'help_support_page.dart';
@@ -140,6 +141,8 @@ class _AccountTabState extends State<AccountTab> {
                   ),
                   const Divider(),
                   PsMenuTile(icon: Icons.lock_outline_rounded, label: 'Change Password', onTap: () => _push(const ChangePasswordPage())),
+                  const Divider(),
+                  PsMenuTile(icon: Icons.person_remove_outlined, label: 'Delete Account', onTap: () => _push(const DeleteAccountPage())),
                   const Divider(),
                   ValueListenableBuilder<ThemeMode>(
                     valueListenable: ThemePrefs.mode,

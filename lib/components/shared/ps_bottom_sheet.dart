@@ -36,6 +36,9 @@ class PsBottomSheet {
       context: context,
       isScrollControlled: scrollControlled,
       useSafeArea: true,
+      sheetAnimationStyle: PsMotion.reduced(context)
+          ? AnimationStyle.noAnimation
+          : const AnimationStyle(duration: PsMotion.sheet, reverseDuration: PsMotion.sheetBack),
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
         child: _SheetFrame(title: title, child: builder(ctx)),
@@ -64,14 +67,9 @@ class PsBottomSheet {
               leading: o.icon == null
                   ? null
                   : Icon(o.icon, color: o.destructive ? PsColors.error : PsColors.textPrimary),
-              title: Text(
-                o.label,
-                style: PsText.bodyStrong.copyWith(color: o.destructive ? PsColors.error : null),
-              ),
+              title: Text(o.label, style: PsText.bodyStrong.copyWith(color: o.destructive ? PsColors.error : null)),
               subtitle: o.description == null ? null : Text(o.description!, style: PsText.caption),
-              trailing: o.value == selected
-                  ? Icon(Icons.check_rounded, color: PsColors.primaryStrong)
-                  : null,
+              trailing: o.value == selected ? Icon(Icons.check_rounded, color: PsColors.primaryStrong) : null,
               onTap: () => Navigator.of(ctx).pop(o.value),
             ),
         ],
@@ -99,10 +97,7 @@ class _SheetFrame extends StatelessWidget {
             child: Container(
               width: 40,
               height: 4,
-              decoration: BoxDecoration(
-                color: PsColors.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
+              decoration: BoxDecoration(color: PsColors.border, borderRadius: BorderRadius.circular(2)),
             ),
           ),
           if (title != null)

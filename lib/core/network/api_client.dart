@@ -242,8 +242,9 @@ class ApiClient {
     String path, {
     required Map<String, String> fields,
     Map<String, List<String>> files = const {},
+    Map<String, String> singleFiles = const {},
   }) =>
-      _unwrap(multipart(path, fields: fields, files: files));
+      _unwrap(multipart(path, fields: fields, files: files, singleFiles: singleFiles));
 
   /// A private file the signed-in buyer may see (the rider's delivery photo).
   /// Throws [ApiException] (404 when there is none, offline, 401...).

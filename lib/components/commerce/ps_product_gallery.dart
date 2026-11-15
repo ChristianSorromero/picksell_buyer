@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/ps_colors.dart';
 import '../../core/theme/ps_tokens.dart';
 import '../../core/theme/ps_typography.dart';
+import '../shared/ps_motion.dart';
 import 'ps_product_image.dart';
 
 /// COM-C02 Product Image Gallery — swipeable images with a "1/6" counter
@@ -50,8 +51,44 @@ class _PsProductGalleryState extends State<PsProductGallery> {
                   bottom: PsSpace.md,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(PsRadius.pill)),
-                    child: Text('${_index + 1}/${images.length}', style: PsText.caption.copyWith(color: Colors.white)),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(PsRadius.pill),
+                    ),
+                    child: PsValueSwap(
+                      value: _index,
+                      child: Text(
+                        '${_index + 1}/${images.length}',
+                        style: PsText.caption.copyWith(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+              // Position dots: the active one stretches into a short bar.
+              if (images.length > 1 && images.length <= 8)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: PsSpace.md + 6,
+                  child: ExcludeSemantics(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        for (var i = 0; i < images.length; i++)
+                          AnimatedContainer(
+                            duration: PsMotion.duration(context, PsMotion.small),
+                            curve: PsMotion.change,
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            width: i == _index ? 18 : 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: i == _index ? Colors.white : Colors.white.withAlpha(140),
+                              borderRadius: BorderRadius.circular(3),
+                              boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 3)],
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ...widget.overlay,
@@ -67,12 +104,18 @@ class _PsProductGalleryState extends State<PsProductGallery> {
               itemCount: images.length,
               separatorBuilder: (_, __) => const SizedBox(width: PsSpace.xs),
               itemBuilder: (_, i) => GestureDetector(
-                onTap: () => _controller.animateToPage(i, duration: PsMotion.normal, curve: PsMotion.curve),
-                child: Container(
+                onTap: () => PsMotion.reduced(context)
+                    ? _controller.jumpToPage(i)
+                    : _controller.animateToPage(i, duration: PsMotion.content, curve: PsMotion.change),
+                child: AnimatedContainer(
+                  duration: PsMotion.duration(context, PsMotion.small),
                   width: 60,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: i == _index ? PsColors.primary : PsColors.border, width: i == _index ? 2 : 1),
+                    border: Border.all(
+                      color: i == _index ? PsColors.primary : PsColors.border,
+                      width: i == _index ? 2 : 1,
+                    ),
                   ),
                   child: PsProductImage(url: images[i], borderRadius: BorderRadius.circular(6), iconSize: 18),
                 ),

@@ -6,6 +6,7 @@ import '../../../services/catalog_service.dart';
 import '../../../services/wishlist_service.dart';
 import '../nav.dart';
 import '../shop_header.dart';
+import 'product_filters_sheet.dart';
 
 /// Product Listing (and the Discover tab): live search, category chips,
 /// sort, on-sale filter, grid/list toggle and infinite scroll.
@@ -40,7 +41,13 @@ class _ProductListPageState extends State<ProductListPage> {
   late String _category = widget.initialCategory ?? '';
   late bool _onSale = widget.onSale;
   ProductSort _sort = ProductSort.newest;
+  ProductFilters _filters = const ProductFilters();
   bool _list = false;
+
+  /// From the latest first page: stores matching the search, and the
+  /// provinces the location filter offers.
+  List<SellerSummary> _stores = const [];
+  List<String> _provinces = const [];
 
   final List<Product> _products = [];
   PageMeta _meta = const PageMeta();
@@ -55,9 +62,12 @@ class _ProductListPageState extends State<ProductListPage> {
     _scroll.addListener(() {
       if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 600) _loadMore();
     });
-    _catalog.categories().then((c) {
-      if (mounted) setState(() => _categories = c);
-    }).catchError((_) {});
+    _catalog
+        .categories()
+        .then((c) {
+          if (mounted) setState(() => _categories = c);
+        })
+        .catchError((_) {});
     _reload();
   }
 
@@ -69,12 +79,23 @@ class _ProductListPageState extends State<ProductListPage> {
   }
 
   Future<ProductPage> _fetch(int page) => _catalog.products(
-        search: _search.text.trim(),
-        category: _category,
-        sort: _sort,
-        onSale: _onSale,
-        page: page,
-      );
+    search: _search.text.trim(),
+    category: _category,
+    sort: _sort,
+    onSale: _onSale,
+    minPrice: _filters.minPrice,
+    maxPrice: _filters.maxPrice,
+    minRating: _filters.minRating,
+    location: _filters.location,
+    page: page,
+  );
+
+  Future<void> _openFilters() async {
+    final picked = await showProductFilters(context, current: _filters, provinces: _provinces);
+    if (picked == null || !mounted) return;
+    setState(() => _filters = picked);
+    _reload();
+  }
 
   Future<void> _reload() async {
     final id = ++_requestId;
@@ -91,6 +112,8 @@ class _ProductListPageState extends State<ProductListPage> {
           ..clear()
           ..addAll(page.products);
         _meta = page.meta;
+        _stores = page.stores;
+        if (page.provinces.isNotEmpty) _provinces = page.provinces;
         _loading = false;
       });
     } catch (e) {
@@ -158,6 +181,12 @@ class _ProductListPageState extends State<ProductListPage> {
                 ),
               ),
               const Spacer(),
+              PsIconButton(
+                icon: Icons.tune_rounded,
+                tooltip: _filters.isEmpty ? 'Filters' : 'Filters, ${_filters.count} on',
+                badgeCount: _filters.count,
+                onPressed: _openFilters,
+              ),
               PsSortButton<ProductSort>(
                 selected: _sort,
                 options: [for (final s in ProductSort.values) PsFilterOption(s, s.label)],
@@ -178,6 +207,76 @@ class _ProductListPageState extends State<ProductListPage> {
     );
   }
 
+  /// Stores matching the search, above the products (website: browse page).
+  Widget _storeRow() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: PsSpace.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(PsSpace.gutter, PsSpace.xs, PsSpace.gutter, PsSpace.xs),
+            child: Text('Stores', style: PsText.bodyStrong),
+          ),
+          SizedBox(
+            height: 64,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: PsSpace.gutter),
+              itemCount: _stores.length,
+              separatorBuilder: (_, __) => const SizedBox(width: PsSpace.xs),
+              itemBuilder: (_, i) {
+                final s = _stores[i];
+                return PsPressable(
+                  scale: 0.98,
+                  child: Material(
+                    color: PsColors.surface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: PsRadius.card,
+                      side: BorderSide(color: PsColors.border),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: () => openStore(context, s.id),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: PsSpace.sm),
+                        child: Row(
+                          children: [
+                            PsSellerAvatar(name: s.name, logo: s.logo, size: 36),
+                            const SizedBox(width: PsSpace.xs),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 160),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(s.name, style: PsText.bodyStrong, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  Text(
+                                    [
+                                      if (s.location.isNotEmpty) s.location,
+                                      if (s.productCount > 0) '${s.productCount} products',
+                                    ].join(' · '),
+                                    style: PsText.caption,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _results() {
     if (_loading && _products.isEmpty) {
       return const SliverToBoxAdapter(child: PsProductGridSkeleton(count: 6));
@@ -185,14 +284,20 @@ class _ProductListPageState extends State<ProductListPage> {
     final e = _error;
     if (e != null && _products.isEmpty) {
       return SliverFillRemaining(
-        hasScrollBody: false,
-        child: e is ApiException && e.isNetworkError ? PsOfflineState(onRetry: _reload) : PsErrorState(message: errorMessage(e), onRetry: _reload),
+        // The state scrolls itself, so it takes the remaining height as given
+        // (measuring it would throw and blank the screen).
+        hasScrollBody: true,
+        child: e is ApiException && e.isNetworkError
+            ? PsOfflineState(onRetry: _reload)
+            : PsErrorState(message: errorMessage(e), onRetry: _reload),
       );
     }
     if (_products.isEmpty) {
-      final filtered = _search.text.isNotEmpty || _category.isNotEmpty || _onSale;
+      final filtered = _search.text.isNotEmpty || _category.isNotEmpty || _onSale || !_filters.isEmpty;
       return SliverFillRemaining(
-        hasScrollBody: false,
+        // The state scrolls itself, so it takes the remaining height as given
+        // (measuring it would throw and blank the screen).
+        hasScrollBody: true,
         child: PsEmptyState(
           icon: Icons.search_off_rounded,
           title: filtered ? 'No matches found' : 'Nothing here yet',
@@ -204,6 +309,7 @@ class _ProductListPageState extends State<ProductListPage> {
                   setState(() {
                     _category = '';
                     _onSale = false;
+                    _filters = const ProductFilters();
                   });
                   _reload();
                 }
@@ -229,6 +335,7 @@ class _ProductListPageState extends State<ProductListPage> {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverToBoxAdapter(child: _controls()),
+            if (_stores.isNotEmpty) SliverToBoxAdapter(child: _storeRow()),
             if (!_loading && _products.isNotEmpty)
               SliverToBoxAdapter(
                 child: Padding(

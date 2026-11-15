@@ -81,6 +81,8 @@ class PsOrderActionGroup extends StatelessWidget {
     this.onReturn,
     this.onRefundStatus,
     this.onReport,
+    this.onReportDelivery,
+    this.onReportOffPlatform,
   });
 
   final OrderDetail order;
@@ -94,6 +96,12 @@ class PsOrderActionGroup extends StatelessWidget {
   final VoidCallback? onReturn;
   final VoidCallback? onRefundStatus;
   final VoidCallback? onReport;
+
+  /// Problem with the courier (sent to the logistics company).
+  final VoidCallback? onReportDelivery;
+
+  /// The seller asked to pay or ship outside PickSell (any order, as on the website).
+  final VoidCallback? onReportOffPlatform;
 
   @override
   Widget build(BuildContext context) {
@@ -113,7 +121,11 @@ class PsOrderActionGroup extends StatelessWidget {
         PsMenuTile(icon: Icons.currency_exchange_rounded, label: 'Return / Refund status', onTap: onRefundStatus)
       else if (a.canReturn && onReturn != null)
         PsMenuTile(icon: Icons.inventory_2_outlined, label: 'Return / Refund', onTap: onReturn),
-      if (a.canReport && onReport != null) PsMenuTile(icon: Icons.report_problem_outlined, label: 'Report a Problem', onTap: onReport),
+      if (a.canReportDelivery && onReportDelivery != null)
+        PsMenuTile(icon: Icons.local_shipping_outlined, label: 'Problem with the delivery?', subtitle: 'Late, not received, damaged or rider conduct', onTap: onReportDelivery),
+      if (a.canReport && onReport != null) PsMenuTile(icon: Icons.report_problem_outlined, label: 'Report a Problem', subtitle: 'With the item or the seller', onTap: onReport),
+      if (onReportOffPlatform != null)
+        PsMenuTile(icon: Icons.gpp_maybe_outlined, label: 'Seller asked to pay outside PickSell?', onTap: onReportOffPlatform),
     ];
     final cancel = a.canCancel && onCancel != null;
     if (buttons.isEmpty && rows.isEmpty && !cancel) return const SizedBox.shrink();

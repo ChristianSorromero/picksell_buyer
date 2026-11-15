@@ -5,6 +5,7 @@ import '../../core/theme/ps_colors.dart';
 import '../../core/theme/ps_tokens.dart';
 import '../../core/theme/ps_typography.dart';
 import '../../models/catalog.dart';
+import '../shared/ps_motion.dart';
 import '../shared/states/ps_loading_state.dart';
 import 'ps_price.dart';
 import 'ps_product_image.dart';
@@ -60,32 +61,20 @@ class PsProductCard extends StatelessWidget {
             ),
           ),
         ),
-        if (p.onSale)
-          Positioned(
-            top: 10,
-            left: 6,
-            child: PsSaleSticker(percent: p.discountPercent!),
-          ),
-        Positioned(
-          top: 2,
-          right: 2,
-          child: PsWishlistButton(productId: p.id, size: 17, compact: true),
-        ),
+        if (p.onSale) Positioned(top: 10, left: 6, child: PsSaleSticker(percent: p.discountPercent!)),
+        Positioned(top: 2, right: 2, child: PsWishlistButton(productId: p.id, size: 17, compact: true)),
         if (!p.inStock)
           Positioned.fill(
             child: Container(
-              decoration: BoxDecoration(color: PsColors.surface.withAlpha(150), borderRadius: BorderRadius.circular(16)),
+              decoration: BoxDecoration(
+                color: PsColors.surface.withAlpha(150),
+                borderRadius: BorderRadius.circular(16),
+              ),
               alignment: Alignment.center,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: PsColors.textPrimary,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  p.unavailableLabel!.toUpperCase(),
-                  style: PsText.badge.copyWith(color: PsColors.surface),
-                ),
+                decoration: BoxDecoration(color: PsColors.textPrimary, borderRadius: BorderRadius.circular(8)),
+                child: Text(p.unavailableLabel!.toUpperCase(), style: PsText.badge.copyWith(color: PsColors.surface)),
               ),
             ),
           ),
@@ -106,11 +95,7 @@ class PsProductCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        PsPriceDisplay(
-          price: p.price,
-          originalPrice: p.originalPrice,
-          size: PsPriceSize.small,
-        ),
+        PsPriceDisplay(price: p.price, originalPrice: p.originalPrice, size: PsPriceSize.small),
         _SocialProof(product: p, showReviewCount: list),
         if (p.lowStock) ...[
           const SizedBox(height: 4),
@@ -150,7 +135,9 @@ class PsProductCard extends StatelessWidget {
         if (p.soldCount > 0) '${p.soldCount} sold',
         if (p.unavailableLabel != null) p.unavailableLabel!.toLowerCase(),
       ].join(', '),
-      child: Material(
+      child: PsPressable(
+        scale: 0.98,
+        child: Material(
           color: PsColors.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(22),
@@ -162,39 +149,31 @@ class PsProductCard extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(8),
               child: list
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(width: 104, height: 104, child: image),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(PsSpace.sm, 2, 4, 2),
-                          child: details,
-                        ),
-                      ),
-                    ],
-                  )
-                : Column(
-                    mainAxisSize: uniform ? MainAxisSize.max : MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      AspectRatio(aspectRatio: imageAspectRatio, child: image),
-                      if (uniform)
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(width: 104, height: 104, child: image),
                         Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(4, 10, 4, 4),
-                            child: details,
-                          ),
-                        )
-                      else
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(4, 10, 4, 4),
-                          child: details,
+                          child: Padding(padding: const EdgeInsets.fromLTRB(PsSpace.sm, 2, 4, 2), child: details),
                         ),
-                    ],
-                  ),
+                      ],
+                    )
+                  : Column(
+                      mainAxisSize: uniform ? MainAxisSize.max : MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        AspectRatio(aspectRatio: imageAspectRatio, child: image),
+                        if (uniform)
+                          Expanded(
+                            child: Padding(padding: const EdgeInsets.fromLTRB(4, 10, 4, 4), child: details),
+                          )
+                        else
+                          Padding(padding: const EdgeInsets.fromLTRB(4, 10, 4, 4), child: details),
+                      ],
+                    ),
             ),
           ),
+        ),
       ),
     );
   }
@@ -217,7 +196,10 @@ class PsSaleSticker extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(color: PsColors.primary, borderRadius: BorderRadius.circular(8)),
-        child: Text('-$percent%', style: PsText.badge.copyWith(color: PsColors.onPrimary, fontSize: fontSize)),
+        child: Text(
+          '-$percent%',
+          style: PsText.badge.copyWith(color: PsColors.onPrimary, fontSize: fontSize),
+        ),
       ),
     );
   }
@@ -250,9 +232,14 @@ class _SocialProof extends StatelessWidget {
             ),
           ],
           if (p.rating != null && p.soldCount > 0)
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 5), child: Text('·', style: style)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              child: Text('·', style: style),
+            ),
           if (p.soldCount > 0)
-            Flexible(child: Text('${formatSold(p.soldCount)} sold', style: style, overflow: TextOverflow.ellipsis)),
+            Flexible(
+              child: Text('${formatSold(p.soldCount)} sold', style: style, overflow: TextOverflow.ellipsis),
+            ),
         ],
       ),
     );
@@ -344,11 +331,7 @@ class PsProductGridSkeleton extends StatelessWidget {
             for (var i = 0; i < count; i++)
               LayoutBuilder(
                 builder: (context, c) {
-                  final w =
-                      (MediaQuery.sizeOf(context).width -
-                          PsSpace.gutter * 2 -
-                          PsSpace.sm) /
-                      2;
+                  final w = (MediaQuery.sizeOf(context).width - PsSpace.gutter * 2 - PsSpace.sm) / 2;
                   return SizedBox(
                     width: w,
                     child: Column(

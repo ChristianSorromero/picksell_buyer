@@ -83,7 +83,19 @@ class _PsProductConfigSheetState extends State<PsProductConfigSheet> {
 
   ProductDetail get d => widget.detail;
 
-  int get _available => d.product.stock;
+  /// The chosen option's own stock once one is picked; the product's total
+  /// before that.
+  int get _available {
+    final chosen = _selected.entries.firstOrNull;
+    if (chosen == null) return d.product.stock;
+    for (final g in d.variationGroups) {
+      if (g.name != chosen.key) continue;
+      for (final o in g.options) {
+        if (o.id == chosen.value) return o.stock;
+      }
+    }
+    return d.product.stock;
+  }
 
   int get _max => _available < d.maxQuantity ? _available : d.maxQuantity;
 

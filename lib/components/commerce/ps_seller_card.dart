@@ -64,7 +64,7 @@ class PsSellerCard extends StatelessWidget {
     return PsCard(
       child: Row(
         children: [
-          PsSellerAvatar(name: seller.name),
+          PsSellerAvatar(name: seller.name, logo: seller.logo),
           const SizedBox(width: PsSpace.sm),
           Expanded(
             child: Column(

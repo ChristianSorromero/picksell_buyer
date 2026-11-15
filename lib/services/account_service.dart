@@ -53,6 +53,10 @@ class AccountService {
 
   // ── BUY-A12 Notifications ────────────────────────────────────────────────
 
+  /// Deletes the account (website rules: refused while orders or returns are
+  /// open). The server revokes every token; the caller clears the session.
+  Future<void> deleteAccount({required String password}) => _api.deleteJson('/buyer/account', {'password': password});
+
   Future<List<AppNotification>> notifications() async {
     final j = await _api.getJson('/buyer/notifications');
     NotificationBadge.instance.value = toInt(j['unread_count']);

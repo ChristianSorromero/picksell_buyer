@@ -53,6 +53,24 @@ class OrderService {
       ));
 
   /// Returns the ticket reference, e.g. TKT-000012.
+  /// A problem with the courier (late, not received, damaged, rider conduct):
+  /// goes to the logistics company carrying the parcel. One photo, as on the website.
+  Future<String> reportDeliveryProblem(int id, {required String type, required String description, String? photo}) async {
+    final j = await _api.multipartJson(
+      '/buyer/orders/$id/delivery-problem',
+      fields: {'type': type, 'description': description},
+      singleFiles: {'evidence': ?photo},
+    );
+    return '${j['message'] ?? ''}';
+  }
+
+  /// The seller asked to pay, chat or ship outside PickSell: PickSell reviews
+  /// the seller (who isn't told who reported). Returns the server's thank-you.
+  Future<String> reportOffPlatform(int id, {required String details}) async {
+    final j = await _api.postJson('/buyer/orders/$id/report-off-platform', {'details': details});
+    return '${j['message'] ?? ''}';
+  }
+
   Future<String> report(int id, {required String category, required String details, List<String> photos = const []}) async {
     final j = await _api.multipartJson(
       '/buyer/orders/$id/report',

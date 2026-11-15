@@ -88,7 +88,9 @@ class _MyPicksPageState extends State<MyPicksPage> {
                 ),
                 if (list.isEmpty)
                   const SliverFillRemaining(
-                    hasScrollBody: false,
+                    // The state scrolls itself, so it takes the remaining height as given
+                    // (measuring it would throw and blank the screen).
+                    hasScrollBody: true,
                     child: PsEmptyState(icon: Icons.filter_alt_off_outlined, title: 'Nothing matches this filter'),
                   )
                 else

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/theme/ps_tokens.dart';
 import 'ps_refreshable.dart';
 import 'states/ps_error_state.dart';
 import 'states/ps_loading_state.dart';
@@ -76,26 +77,42 @@ class PsAsyncViewState<T> extends State<PsAsyncView<T>> {
 
   @override
   Widget build(BuildContext context) {
+    final (state, child) = _build(context);
+    // Cross-fade between loading, error, empty and content. Only a change of
+    // state animates; new data in the same state rebuilds in place.
+    return AnimatedSwitcher(
+      duration: PsMotion.duration(context, PsMotion.content),
+      switchInCurve: PsMotion.enter,
+      switchOutCurve: PsMotion.exit,
+      layoutBuilder: (current, previous) => Stack(fit: StackFit.passthrough, children: [...previous, ?current]),
+      child: KeyedSubtree(key: ValueKey(state), child: child),
+    );
+  }
+
+  (String, Widget) _build(BuildContext context) {
     final data = _data;
-    if (_loading && data == null) return widget.loading ?? const PsSkeletonList();
+    if (_loading && data == null) return ('loading', widget.loading ?? const PsSkeletonList());
 
     if (data == null) {
       final e = _error;
-      if (e is ApiException && e.isNetworkError) return PsOfflineState(onRetry: reload);
-      return PsErrorState(
-        title: widget.errorTitle,
-        message: e is ApiException ? e.message : 'Please try again in a moment.',
-        onRetry: reload,
+      if (e is ApiException && e.isNetworkError) return ('offline', PsOfflineState(onRetry: reload));
+      return (
+        'error',
+        PsErrorState(
+          title: widget.errorTitle,
+          message: e is ApiException ? e.message : 'Please try again in a moment.',
+          onRetry: reload,
+        ),
       );
     }
 
     if (widget.isEmpty?.call(data) ?? false) {
       final empty = widget.empty ?? const SizedBox.shrink();
-      return widget.refreshable ? PsRefreshable(onRefresh: reload, child: empty) : empty;
+      return ('empty', widget.refreshable ? PsRefreshable(onRefresh: reload, child: empty) : empty);
     }
 
     final content = widget.builder(context, data, reload);
-    return widget.refreshable ? PsRefreshable(onRefresh: reload, child: content) : content;
+    return ('content', widget.refreshable ? PsRefreshable(onRefresh: reload, child: content) : content);
   }
 }
 

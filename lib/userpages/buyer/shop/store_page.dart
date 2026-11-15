@@ -51,9 +51,28 @@ class _StorePageState extends State<StorePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // The storefront banner the seller uploaded (website: store page header).
+                        if (s.banner != null) ...[
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(PsRadius.md),
+                            child: AspectRatio(
+                              aspectRatio: 3,
+                              child: ColoredBox(
+                                color: PsColors.surfaceMuted,
+                                child: Image.network(
+                                  s.banner!,
+                                  fit: BoxFit.cover,
+                                  semanticLabel: '${s.name} banner',
+                                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: PsSpace.md),
+                        ],
                         Row(
                           children: [
-                            PsSellerAvatar(name: s.name, size: 72),
+                            PsSellerAvatar(name: s.name, logo: s.logo, size: 72),
                             const SizedBox(width: PsSpace.md),
                             Expanded(
                               child: Column(
@@ -71,6 +90,10 @@ class _StorePageState extends State<StorePage> {
                             ),
                           ],
                         ),
+                        if (s.description != null) ...[
+                          const SizedBox(height: PsSpace.sm),
+                          Text(s.description!, style: PsText.body),
+                        ],
                         const SizedBox(height: PsSpace.md),
                         Row(
                           children: [
@@ -105,7 +128,9 @@ class _StorePageState extends State<StorePage> {
               const SliverToBoxAdapter(child: SizedBox(height: PsSpace.sm)),
               if (products.isEmpty)
                 const SliverFillRemaining(
-                  hasScrollBody: false,
+                  // The state scrolls itself, so it takes the remaining height as given
+                  // (measuring it would throw and blank the screen).
+                  hasScrollBody: true,
                   child: PsEmptyState(icon: Icons.inventory_2_outlined, title: 'No products listed', message: 'This store has nothing for sale right now.'),
                 )
               else

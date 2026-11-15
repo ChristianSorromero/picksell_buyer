@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../components/components.dart';
 import '../../../services/catalog_service.dart';
+import '../../../models/catalog.dart';
+import '../nav.dart';
 import 'product_list_page.dart';
 
 /// SYS-C17 Search — typeahead suggestions from the catalog plus recent
@@ -22,7 +24,9 @@ class _SearchPageState extends State<SearchPage> {
   final _catalog = CatalogService();
   final _query = TextEditingController();
   List<String> _history = [];
-  ({List<String> products, List<String> categories}) _suggestions = (products: [], categories: []);
+  ({List<String> products, List<String> categories, List<SellerSummary> stores}) _suggestions = _none;
+
+  static const _none = (products: <String>[], categories: <String>[], stores: <SellerSummary>[]);
   int _requestId = 0;
 
   @override
@@ -42,7 +46,7 @@ class _SearchPageState extends State<SearchPage> {
   Future<void> _suggest(String q) async {
     final id = ++_requestId;
     if (q.length < 2) {
-      setState(() => _suggestions = (products: [], categories: []));
+      setState(() => _suggestions = _none);
       return;
     }
     try {
@@ -91,7 +95,7 @@ class _SearchPageState extends State<SearchPage> {
           child: PsSearchBar(
             controller: _query,
             autofocus: true,
-            hint: 'Search products or categories',
+            hint: 'Search products, stores or categories',
             debounce: const Duration(milliseconds: 250),
             onChanged: _suggest,
             onSubmitted: (q) {
@@ -104,6 +108,15 @@ class _SearchPageState extends State<SearchPage> {
         padding: const EdgeInsets.symmetric(vertical: PsSpace.sm),
         children: [
           if (typing) ...[
+            // Store profiles first: searching a seller's name should find the seller.
+            for (final s in _suggestions.stores)
+              ListTile(
+                leading: PsSellerAvatar(name: s.name, logo: s.logo, size: 40),
+                title: Text(s.name, style: PsText.bodyStrong),
+                subtitle: Text(s.location.isEmpty ? 'Store' : 'Store · ${s.location}', style: PsText.caption),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => openStore(context, s.id),
+              ),
             for (final c in _suggestions.categories)
               ListTile(
                 leading: const Icon(Icons.category_outlined),

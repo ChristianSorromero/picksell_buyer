@@ -6,6 +6,7 @@ import '../../core/theme/ps_colors.dart';
 import '../../core/theme/ps_tokens.dart';
 import '../../core/theme/ps_typography.dart';
 import '../../format_utils.dart';
+import '../shared/ps_motion.dart';
 import '../../models/order.dart';
 import '../shared/ps_card.dart';
 import '../shared/ps_status_badge.dart';
@@ -27,7 +28,12 @@ class PsOrderStatusHeader extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: Text(order.status.buyerLabel, style: PsText.display.copyWith(fontSize: 26, color: order.status.isException ? color : null))),
+            Expanded(
+              child: Text(
+                order.status.buyerLabel,
+                style: PsText.display.copyWith(fontSize: 26, color: order.status.isException ? color : null),
+              ),
+            ),
             PsStatusBadge.order(order.status, pill: true),
           ],
         ),
@@ -70,27 +76,53 @@ class PsOrderProgressBar extends StatelessWidget {
           for (var i = 0; i < _steps.length; i++) ...[
             Column(
               children: [
-                Container(
+                AnimatedContainer(
+                  duration: PsMotion.duration(context, PsMotion.content),
+                  curve: PsMotion.change,
                   width: 22,
                   height: 22,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: i <= reached ? PsColors.primary : PsColors.border,
                     border: Border.all(color: Colors.white, width: 3),
-                    boxShadow: [BoxShadow(color: (i <= reached ? PsColors.primary : PsColors.border).withAlpha(90), blurRadius: 4)],
+                    boxShadow: [
+                      BoxShadow(
+                        color: (i <= reached ? PsColors.primary : PsColors.border).withAlpha(90),
+                        blurRadius: 4,
+                      ),
+                    ],
                   ),
-                  child: i == reached && i == _steps.length - 1 ? const Icon(Icons.check_rounded, size: 12, color: Colors.white) : null,
+                  child: i == reached && i == _steps.length - 1
+                      ? const Icon(Icons.check_rounded, size: 12, color: Colors.white)
+                      : null,
                 ),
                 const SizedBox(height: 6),
-                Text(_steps[i].$1, style: PsText.badge.copyWith(fontSize: 10, color: i <= reached ? PsColors.textPrimary : PsColors.textHint)),
+                Text(
+                  _steps[i].$1,
+                  style: PsText.badge.copyWith(
+                    fontSize: 10,
+                    color: i <= reached ? PsColors.textPrimary : PsColors.textHint,
+                  ),
+                ),
               ],
             ),
             if (i < _steps.length - 1)
               Expanded(
+                // Each reached segment fills left to right, one after another.
                 child: Container(
                   height: 2,
                   margin: const EdgeInsets.only(bottom: 18),
-                  color: i < reached ? PsColors.primary : PsColors.border,
+                  color: PsColors.border,
+                  alignment: Alignment.centerLeft,
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: i < reached ? 1 : 0),
+                    duration: PsMotion.duration(context, PsMotion.content + Duration(milliseconds: 120 * i)),
+                    curve: PsMotion.change,
+                    builder: (_, t, __) => FractionallySizedBox(
+                      widthFactor: t,
+                      child: ColoredBox(color: PsColors.primary, child: const SizedBox(height: 2)),
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -112,56 +144,61 @@ class PsTrackingEventList extends StatelessWidget {
     return Column(
       children: [
         for (var i = 0; i < rows.length; i++)
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  width: 24,
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 4),
-                      Container(
-                        width: i == 0 ? 16 : 11,
-                        height: i == 0 ? 16 : 11,
-                        decoration: BoxDecoration(
-                          color: PsColors.primary,
-                          shape: BoxShape.circle,
-                          border: i == 0 ? Border.all(color: PsColors.primarySoft, width: 4) : null,
-                        ),
-                      ),
-                      if (i < rows.length - 1) Expanded(child: Container(width: 2, color: PsColors.primary.withAlpha(110))),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: PsSpace.sm),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: PsSpace.lg),
+          // The newest event eases in; older ones are already history.
+          PsFadeIn(
+            duration: i == 0 ? PsMotion.content : Duration.zero,
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    width: 24,
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(rows[i].title, style: PsText.bodyStrong.copyWith(fontSize: 15)),
-                        if (rows[i].description != null) ...[
-                          const SizedBox(height: 2),
-                          Text(rows[i].description!, style: PsText.caption.copyWith(fontSize: 13)),
-                        ],
                         const SizedBox(height: 4),
-                        Text(
-                          [
-                            if (rows[i].occurredAt != null) formatDateTime(rows[i].occurredAt!),
-                            if (rows[i].location != null) rows[i].location!,
-                          ].join('  ·  '),
-                          style: PsText.caption.copyWith(
-                            color: i == 0 ? PsColors.textPrimary : PsColors.textMuted,
-                            fontWeight: i == 0 ? FontWeight.w600 : FontWeight.w400,
+                        Container(
+                          width: i == 0 ? 16 : 11,
+                          height: i == 0 ? 16 : 11,
+                          decoration: BoxDecoration(
+                            color: PsColors.primary,
+                            shape: BoxShape.circle,
+                            border: i == 0 ? Border.all(color: PsColors.primarySoft, width: 4) : null,
                           ),
                         ),
+                        if (i < rows.length - 1)
+                          Expanded(child: Container(width: 2, color: PsColors.primary.withAlpha(110))),
                       ],
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: PsSpace.sm),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: PsSpace.lg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(rows[i].title, style: PsText.bodyStrong.copyWith(fontSize: 15)),
+                          if (rows[i].description != null) ...[
+                            const SizedBox(height: 2),
+                            Text(rows[i].description!, style: PsText.caption.copyWith(fontSize: 13)),
+                          ],
+                          const SizedBox(height: 4),
+                          Text(
+                            [
+                              if (rows[i].occurredAt != null) formatDateTime(rows[i].occurredAt!),
+                              if (rows[i].location != null) rows[i].location!,
+                            ].join('  ·  '),
+                            style: PsText.caption.copyWith(
+                              color: i == 0 ? PsColors.textPrimary : PsColors.textMuted,
+                              fontWeight: i == 0 ? FontWeight.w600 : FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
       ],
@@ -324,7 +361,9 @@ class PsDeliveryMapFallback extends StatelessWidget {
                 Text('Live map isn’t available for this delivery', style: PsText.bodyStrong.copyWith(fontSize: 13.5)),
                 const SizedBox(height: 2),
                 Text(
-                  lastLocation == null ? 'Delivering to $destination' : 'Last update: $lastLocation · Delivering to $destination',
+                  lastLocation == null
+                      ? 'Delivering to $destination'
+                      : 'Last update: $lastLocation · Delivering to $destination',
                   style: PsText.caption,
                 ),
               ],
@@ -372,7 +411,10 @@ class PsParcelCard extends StatelessWidget {
                 ] else
                   Padding(
                     padding: const EdgeInsets.only(top: PsSpace.xs),
-                    child: Text('A tracking number appears once the seller hands your parcel to the courier.', style: PsText.caption),
+                    child: Text(
+                      'A tracking number appears once the seller hands your parcel to the courier.',
+                      style: PsText.caption,
+                    ),
                   ),
               ],
             ),
@@ -402,10 +444,7 @@ class PsDeliveryExceptionCard extends StatelessWidget {
           const SizedBox(height: PsSpace.sm),
           Text('Delivery attempt failed', style: PsText.heading),
           const SizedBox(height: 4),
-          Text(
-            failed?.description ?? 'Our rider couldn’t complete the delivery.',
-            style: PsText.body,
-          ),
+          Text(failed?.description ?? 'Our rider couldn’t complete the delivery.', style: PsText.body),
           if (failed?.occurredAt != null) Text(formatDateTime(failed!.occurredAt!), style: PsText.caption),
           const SizedBox(height: PsSpace.sm),
           Container(
@@ -448,7 +487,11 @@ class PsRefundTimeline extends StatelessWidget {
       if (r.stage == RefundStage.rejected)
         ('Rejected', r.rejectedAt, true)
       else ...[
-        ('Processing', r.processingAt, r.stage.index >= RefundStage.processing.index && r.stage != RefundStage.rejected),
+        (
+          'Processing',
+          r.processingAt,
+          r.stage.index >= RefundStage.processing.index && r.stage != RefundStage.rejected,
+        ),
         ('Refunded', r.refundedAt, r.stage == RefundStage.refunded),
       ],
     ];
@@ -470,17 +513,27 @@ class PsRefundTimeline extends StatelessWidget {
                         height: 24,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: stages[i].$3 ? (i == currentIndex ? PsColors.surface : PsColors.primary) : PsColors.surface,
+                          color: stages[i].$3
+                              ? (i == currentIndex ? PsColors.surface : PsColors.primary)
+                              : PsColors.surface,
                           border: Border.all(color: stages[i].$3 ? PsColors.primary : PsColors.border, width: 2),
                         ),
                         child: stages[i].$3 && i != currentIndex
                             ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
                             : (i == currentIndex
-                                ? Center(child: Container(width: 10, height: 10, decoration: BoxDecoration(color: PsColors.primary, shape: BoxShape.circle)))
-                                : null),
+                                  ? Center(
+                                      child: Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: BoxDecoration(color: PsColors.primary, shape: BoxShape.circle),
+                                      ),
+                                    )
+                                  : null),
                       ),
                       if (i < stages.length - 1)
-                        Expanded(child: Container(width: 2, color: stages[i + 1].$3 ? PsColors.primary : PsColors.border)),
+                        Expanded(
+                          child: Container(width: 2, color: stages[i + 1].$3 ? PsColors.primary : PsColors.border),
+                        ),
                     ],
                   ),
                 ),
@@ -491,7 +544,10 @@ class PsRefundTimeline extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(stages[i].$1, style: PsText.heading.copyWith(fontSize: 16, color: stages[i].$3 ? null : PsColors.textHint)),
+                        Text(
+                          stages[i].$1,
+                          style: PsText.heading.copyWith(fontSize: 16, color: stages[i].$3 ? null : PsColors.textHint),
+                        ),
                         Text(
                           stages[i].$2 != null ? formatDateTime(stages[i].$2!) : (stages[i].$3 ? '' : 'Pending'),
                           style: PsText.caption,

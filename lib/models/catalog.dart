@@ -35,6 +35,9 @@ class SellerSummary extends SellerBrief {
     this.joinedAt,
     this.followers = 0,
     this.isFollowing = false,
+    this.logo,
+    this.banner,
+    this.description,
   });
 
   final double? rating;
@@ -46,6 +49,11 @@ class SellerSummary extends SellerBrief {
   /// Buyers following this store, and whether the signed-in buyer is one of them.
   final int followers;
   final bool isFollowing;
+
+  /// The storefront's logo and banner images (URLs), and its "about" text.
+  final String? logo;
+  final String? banner;
+  final String? description;
 
   factory SellerSummary.fromJson(Json j) => SellerSummary(
         id: toInt(j['id']),
@@ -60,7 +68,12 @@ class SellerSummary extends SellerBrief {
         joinedAt: toDate(j['joined_at']),
         followers: toInt(j['followers']),
         isFollowing: j['is_following'] == true,
+        logo: _nonEmpty(j['logo']),
+        banner: _nonEmpty(j['banner']),
+        description: _nonEmpty(j['description']),
       );
+
+  static String? _nonEmpty(Object? v) => v is String && v.trim().isNotEmpty ? v : null;
 }
 
 /// Card-sized product (COM-C01).
@@ -467,10 +480,37 @@ class PageMeta {
 }
 
 class ProductPage {
-  const ProductPage({required this.products, required this.meta});
+  const ProductPage({required this.products, required this.meta, this.stores = const [], this.provinces = const []});
 
   final List<Product> products;
   final PageMeta meta;
+
+  /// Stores whose name matches the search (first page only), as the website lists them.
+  final List<SellerSummary> stores;
+
+  /// Provinces with stores selling something: the location filter's choices.
+  final List<String> provinces;
+}
+
+/// The website's browse filters beyond category, sale and sort.
+class ProductFilters {
+  const ProductFilters({this.minPrice, this.maxPrice, this.minRating, this.location});
+
+  final double? minPrice;
+  final double? maxPrice;
+
+  /// 3 or 4 (stars and up).
+  final int? minRating;
+
+  /// A province, or [near] for the buyer's own province.
+  final String? location;
+
+  static const near = 'near';
+
+  /// How many filters are set (badge on the Filters button).
+  int get count => [minPrice != null || maxPrice != null, minRating != null, location != null].where((v) => v).length;
+
+  bool get isEmpty => count == 0;
 }
 
 class ReviewPage {

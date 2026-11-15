@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../components/shared/ps_motion.dart';
 import 'ps_colors.dart';
 import 'ps_tokens.dart';
 
@@ -44,22 +45,27 @@ class PsTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
       ),
-      textTheme: GoogleFonts.montserratTextTheme(base.textTheme).apply(
-        bodyColor: PsColors.textPrimary,
-        displayColor: PsColors.textPrimary,
-      ),
+      textTheme: GoogleFonts.montserratTextTheme(
+        base.textTheme,
+      ).apply(bodyColor: PsColors.textPrimary, displayColor: PsColors.textPrimary),
       splashFactory: InkSparkle.splashFactory,
-      dividerTheme: DividerThemeData(
-        color: PsColors.divider,
-        thickness: 1,
-        space: 1,
+      // Every MaterialPageRoute: Picksell slide-fade on Android, the native
+      // swipe-back transition on iOS.
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: PsPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: PsPageTransitionsBuilder(),
+          TargetPlatform.linux: PsPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: PsPageTransitionsBuilder(),
+        },
       ),
+      dividerTheme: DividerThemeData(color: PsColors.divider, thickness: 1, space: 1),
       dialogTheme: DialogThemeData(
         backgroundColor: PsColors.surface,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PsRadius.lg),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PsRadius.lg)),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: PsColors.surface,
@@ -70,10 +76,7 @@ class PsTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: PsColors.surface,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: PsSpace.md,
-          vertical: PsSpace.sm,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: PsSpace.md, vertical: PsSpace.sm),
         border: OutlineInputBorder(
           borderRadius: PsRadius.field,
           borderSide: BorderSide(color: PsColors.border),
@@ -122,21 +125,11 @@ class PsTheme {
         side: BorderSide(color: PsColors.border),
         shape: const StadiumBorder(),
         showCheckmark: false,
-        labelStyle: GoogleFonts.montserrat(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: PsColors.textPrimary,
-        ),
-        secondaryLabelStyle: GoogleFonts.montserrat(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: PsColors.surface,
-        ),
+        labelStyle: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w600, color: PsColors.textPrimary),
+        secondaryLabelStyle: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w600, color: PsColors.surface),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       ),
-      progressIndicatorTheme: ProgressIndicatorThemeData(
-        color: PsColors.primary,
-      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: PsColors.primary),
       textSelectionTheme: TextSelectionThemeData(
         cursorColor: PsColors.primaryStrong,
         selectionColor: PsColors.primarySoft,

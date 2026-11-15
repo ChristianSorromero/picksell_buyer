@@ -5,6 +5,7 @@ import '../../../components/components.dart';
 import '../../../format_utils.dart';
 import '../../../models/order.dart';
 import '../../../services/order_service.dart';
+import 'delivery_problem_page.dart';
 import 'report_problem_page.dart';
 
 /// Track Order (BUY-C01…C08): status header, Pick Thread with real
@@ -67,23 +68,48 @@ class TrackOrderPage extends StatelessWidget {
               const SizedBox(height: PsSpace.sm),
               PsOrderSummary(
                 sellerName: s.seller?.name ?? 'Seller',
-                lines: [PsOrderLineRow(name: s.productName, image: s.image, quantity: s.quantity, unitPrice: s.unitPrice, variationLabel: s.variationLabel)],
+                lines: [
+                  PsOrderLineRow(
+                    name: s.productName,
+                    image: s.image,
+                    quantity: s.quantity,
+                    unitPrice: s.unitPrice,
+                    variationLabel: s.variationLabel,
+                  ),
+                ],
               ),
               const SizedBox(height: PsSpace.lg),
               if (o.tracking != null && o.tracking!.events.isNotEmpty) ...[
                 Text('Pickrush Tracking · ${o.tracking!.trackingNo}', style: PsText.heading),
                 const SizedBox(height: PsSpace.sm),
-                PsTrackingEventList(events: [
-                  // Oldest first, as the list expects; the API sends newest first.
-                  for (final scan in o.tracking!.events.reversed)
-                    TrackingEvent(status: 'scan', title: scan.headline, location: scan.location, occurredAt: scan.at),
-                ]),
+                PsTrackingEventList(
+                  events: [
+                    // Oldest first, as the list expects; the API sends newest first.
+                    for (final scan in o.tracking!.events.reversed)
+                      TrackingEvent(status: 'scan', title: scan.headline, location: scan.location, occurredAt: scan.at),
+                  ],
+                ),
                 const SizedBox(height: PsSpace.md),
               ],
               Text('Order History', style: PsText.heading),
               const SizedBox(height: PsSpace.sm),
               PsTrackingEventList(events: o.events),
-              PsPrimaryButton(label: 'Contact Support', icon: Icons.support_agent_rounded, uppercase: false, onPressed: support),
+              if (o.actions.canReportDelivery) ...[
+                PsSecondaryButton.outlined(
+                  label: 'Problem with the delivery?',
+                  icon: Icons.local_shipping_outlined,
+                  expand: true,
+                  onPressed: () =>
+                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => DeliveryProblemPage(order: o))),
+                ),
+                const SizedBox(height: PsSpace.xs),
+              ],
+              PsPrimaryButton(
+                label: 'Contact Support',
+                icon: Icons.support_agent_rounded,
+                uppercase: false,
+                onPressed: support,
+              ),
               const SizedBox(height: PsSpace.lg),
             ],
           );

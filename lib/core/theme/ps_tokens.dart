@@ -34,8 +34,7 @@ class PsRadius {
   static final BorderRadius card = BorderRadius.circular(lg);
   static final BorderRadius field = BorderRadius.circular(14);
   static final BorderRadius button = BorderRadius.circular(14);
-  static final BorderRadius sheet =
-      const BorderRadius.vertical(top: Radius.circular(28));
+  static final BorderRadius sheet = const BorderRadius.vertical(top: Radius.circular(28));
 }
 
 class PsSize {
@@ -51,6 +50,9 @@ class PsSize {
   static const double icon = 22;
 }
 
+/// Motion rules: the duration follows what moves (a press is quicker than a
+/// page), entering uses ease-out, leaving ease-in. Every animation goes
+/// through [duration] so the phone's "remove animations" setting turns it off.
 class PsMotion {
   PsMotion._();
 
@@ -58,4 +60,35 @@ class PsMotion {
   static const Duration normal = Duration(milliseconds: 250);
   static const Duration slow = Duration(milliseconds: 400);
   static const Curve curve = Curves.easeOutCubic;
+
+  /// Button and card press feedback.
+  static const Duration press = Duration(milliseconds: 120);
+
+  /// Icon swaps (heart, nav icons, spinner ↔ label).
+  static const Duration icon = Duration(milliseconds: 200);
+
+  /// Small state changes: numbers, badges, selection.
+  static const Duration small = Duration(milliseconds: 220);
+
+  /// Cards and content replacing a loading state.
+  static const Duration content = Duration(milliseconds: 280);
+
+  /// Page pushes; back is a little quicker.
+  static const Duration page = Duration(milliseconds: 300);
+  static const Duration pageBack = Duration(milliseconds: 250);
+
+  /// Bottom sheets and dialogs.
+  static const Duration sheet = Duration(milliseconds: 300);
+  static const Duration sheetBack = Duration(milliseconds: 220);
+
+  static const Curve enter = Curves.easeOutCubic;
+  static const Curve exit = Curves.easeInCubic;
+  static const Curve change = Curves.easeInOutCubic;
+
+  /// The phone asked for reduced motion (Android "Remove animations",
+  /// iOS "Reduce Motion").
+  static bool reduced(BuildContext context) => MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+  /// [d], or zero under reduced motion.
+  static Duration duration(BuildContext context, Duration d) => reduced(context) ? Duration.zero : d;
 }

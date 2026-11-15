@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/ps_colors.dart';
 import '../../core/theme/ps_tokens.dart';
 import '../../core/theme/ps_typography.dart';
+import '../shared/ps_motion.dart';
 
 /// COM-C08 Quantity Stepper — never below [min] or above [max] (stock).
 /// [compact] is the small cart-line variant; the default is the full-width
@@ -32,20 +33,24 @@ class PsQuantityStepper extends StatelessWidget {
     final h = compact ? 32.0 : 52.0;
 
     Widget button(IconData icon, bool active, VoidCallback onTap, String label) => Semantics(
-          button: true,
-          enabled: active,
-          label: label,
-          child: InkWell(
-            onTap: active ? onTap : null,
-            child: Container(
-              width: compact ? 32 : 64,
-              height: h,
-              color: PsColors.surfaceMuted,
-              alignment: Alignment.center,
-              child: Icon(icon, size: compact ? 16 : 20, color: active ? PsColors.textPrimary : PsColors.textDisabled),
-            ),
+      button: true,
+      enabled: active,
+      label: label,
+      child: PsPressable(
+        enabled: active,
+        scale: 0.9,
+        child: InkWell(
+          onTap: active ? onTap : null,
+          child: Container(
+            width: compact ? 32 : 64,
+            height: h,
+            color: PsColors.surfaceMuted,
+            alignment: Alignment.center,
+            child: Icon(icon, size: compact ? 16 : 20, color: active ? PsColors.textPrimary : PsColors.textDisabled),
           ),
-        );
+        ),
+      ),
+    );
 
     return Container(
       height: h,
@@ -60,12 +65,27 @@ class PsQuantityStepper extends StatelessWidget {
         children: [
           button(Icons.remove_rounded, canDec, () => onChanged(value - 1), 'Decrease quantity'),
           if (compact)
-            SizedBox(width: 36, child: Center(child: Text('$value', style: PsText.bodyStrong)))
+            SizedBox(
+              width: 36,
+              child: Center(
+                child: PsValueSwap(
+                  value: value,
+                  alignment: Alignment.center,
+                  child: Text('$value', style: PsText.bodyStrong),
+                ),
+              ),
+            )
           else
             Expanded(
               child: Semantics(
                 label: 'Quantity $value',
-                child: Center(child: Text('$value', style: PsText.heading.copyWith(fontSize: 17))),
+                child: Center(
+                  child: PsValueSwap(
+                    value: value,
+                    alignment: Alignment.center,
+                    child: Text('$value', style: PsText.heading.copyWith(fontSize: 17)),
+                  ),
+                ),
               ),
             ),
           button(Icons.add_rounded, canInc, () => onChanged(value + 1), 'Increase quantity'),

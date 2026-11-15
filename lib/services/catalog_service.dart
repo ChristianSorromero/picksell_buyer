@@ -21,6 +21,8 @@ class CatalogService {
     double? minPrice,
     double? maxPrice,
     int? sellerId,
+    int? minRating,
+    String? location,
     int page = 1,
   }) async {
     final j = await _api.getJson('/products', query: {
@@ -31,9 +33,16 @@ class CatalogService {
       'min_price': minPrice,
       'max_price': maxPrice,
       'seller_id': sellerId,
+      'rating': minRating,
+      'location': location,
       'page': page,
     });
-    return ProductPage(products: listOf(j['products'], Product.fromJson), meta: PageMeta.fromJson(mapOrNull(j['meta'])));
+    return ProductPage(
+      products: listOf(j['products'], Product.fromJson),
+      meta: PageMeta.fromJson(mapOrNull(j['meta'])),
+      stores: listOf(j['stores'], SellerSummary.fromJson),
+      provinces: (j['provinces'] as List?)?.map((e) => '$e').toList() ?? const [],
+    );
   }
 
   Future<ProductDetail> product(int id) async =>
@@ -63,11 +72,13 @@ class CatalogService {
   }
 
   /// Typeahead from GET /search-suggestions.
-  Future<({List<String> products, List<String> categories})> suggestions(String query) async {
+  /// Stores whose name matches come back too, to open their profile directly.
+  Future<({List<String> products, List<String> categories, List<SellerSummary> stores})> suggestions(String query) async {
     final j = await _api.getJson('/search-suggestions', query: {'q': query});
     return (
       products: listOf(j['products'], (p) => '${p['name']}'),
       categories: (j['categories'] as List?)?.map((e) => '$e').toList() ?? const <String>[],
+      stores: listOf(j['stores'], SellerSummary.fromJson),
     );
   }
 }

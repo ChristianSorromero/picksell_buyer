@@ -40,6 +40,7 @@ export 'shared/ps_refreshable.dart'; //          SYS-C20
 export 'shared/states/ps_state_layout.dart';
 export 'shared/ps_async_view.dart';
 export 'shared/ps_card.dart';
+export 'shared/ps_motion.dart';
 
 // 02 Commerce (COM-C01…C20)
 export 'commerce/ps_address_card.dart'; //         COM-C18

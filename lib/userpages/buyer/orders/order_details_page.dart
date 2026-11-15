@@ -9,6 +9,8 @@ import 'delivery_proof_card.dart';
 import '../nav.dart';
 import 'order_actions.dart';
 import 'refund_status_page.dart';
+import 'delivery_problem_page.dart';
+import 'off_platform_report_page.dart';
 import 'report_problem_page.dart';
 import 'return_request_page.dart';
 
@@ -100,7 +102,12 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                       children: [
                         Icon(Icons.circle, size: 10, color: o.status.tone.foreground),
                         const SizedBox(width: 8),
-                        Expanded(child: Text(o.status.buyerLabel, style: PsText.heading.copyWith(fontSize: 22, color: o.status.tone.foreground))),
+                        Expanded(
+                          child: Text(
+                            o.status.buyerLabel,
+                            style: PsText.heading.copyWith(fontSize: 22, color: o.status.tone.foreground),
+                          ),
+                        ),
                       ],
                     ),
                     if (o.status.isException && o.cancelReason != null) ...[
@@ -116,7 +123,10 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               ),
               if (o.status == OrderStatus.deliveryFailed) ...[
                 const SizedBox(height: PsSpace.sm),
-                PsDeliveryExceptionCard(order: o, onContactSupport: () => _push(ReportProblemPage(order: o))),
+                PsDeliveryExceptionCard(
+                  order: o,
+                  onContactSupport: () => _push(ReportProblemPage(order: o)),
+                ),
               ],
               const SizedBox(height: PsSpace.sm),
               if (o.shipTo != null)
@@ -162,11 +172,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               if (o.hasBreakdown)
                 _OrderBreakdown(order: o)
               else
-                PsCostBreakdown(
-                  title: 'Payment Details',
-                  voucherCode: o.voucherCode,
-                  totals: _totals(o),
-                ),
+                PsCostBreakdown(title: 'Payment Details', voucherCode: o.voucherCode, totals: _totals(o)),
               const SizedBox(height: PsSpace.sm),
               PsCard(
                 title: 'Order Information',
@@ -176,7 +182,11 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                     if (s.createdAt != null) PsInfoRow(label: 'Order Time', value: formatDateTime(s.createdAt!)),
                     PsInfoRow(label: 'Payment Method', value: o.paymentMethod ?? 'Cash on Delivery'),
                     if (o.paymentStatusLabel != null) PsInfoRow(label: 'Payment', value: o.paymentStatusLabel!),
-                    if (o.courier != null) PsInfoRow(label: 'Rider', value: [o.courier!.name, if (o.courier!.vehicle != null) o.courier!.vehicle!].join(' · ')),
+                    if (o.courier != null)
+                      PsInfoRow(
+                        label: 'Rider',
+                        value: [o.courier!.name, if (o.courier!.vehicle != null) o.courier!.vehicle!].join(' · '),
+                      ),
                     if (o.shippingOption != null) PsInfoRow(label: 'Shipping', value: o.shippingOption!),
                     if (o.waybillNumber != null) PsInfoRow(label: 'Tracking No.', value: o.waybillNumber!),
                     if (o.deliveredAt != null) PsInfoRow(label: 'Delivered', value: formatDateTime(o.deliveredAt!)),
@@ -200,6 +210,8 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                 onReturn: () => _push(ReturnRequestPage(order: o)),
                 onRefundStatus: () => _push(RefundStatusPage(order: o)),
                 onReport: () => _push(ReportProblemPage(order: o)),
+                onReportDelivery: () => _push(DeliveryProblemPage(order: o)),
+                onReportOffPlatform: () => _push(OffPlatformReportPage(order: o)),
               ),
               const SizedBox(height: PsSpace.lg),
             ],
@@ -211,12 +223,12 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
 }
 
 CostTotals _totals(OrderDetail o) => CostTotals(
-      merchandiseSubtotal: o.subtotal,
-      shippingTotal: o.shippingFee,
-      discountTotal: o.discount,
-      serviceFee: o.serviceFee,
-      total: o.summary.total,
-    );
+  merchandiseSubtotal: o.subtotal,
+  shippingTotal: o.shippingFee,
+  discountTotal: o.discount,
+  serviceFee: o.serviceFee,
+  total: o.summary.total,
+);
 
 /// The website's order-page breakdown: item price × quantity, the store
 /// voucher (already in the subtotal), the parcel's shipping fee and PickSell
@@ -231,24 +243,27 @@ class _OrderBreakdown extends StatelessWidget {
     final o = order;
     final s = o.summary;
     Widget row(String label, String value, {String? note, Color? color}) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 5),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(label, style: PsText.bodyMuted),
-                    if (note != null) Text(note, style: PsText.caption),
-                  ],
-                ),
-              ),
-              const SizedBox(width: PsSpace.xs),
-              Text(value, style: PsText.body.copyWith(fontWeight: FontWeight.w600, color: color)),
-            ],
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: PsText.bodyMuted),
+                if (note != null) Text(note, style: PsText.caption),
+              ],
+            ),
           ),
-        );
+          const SizedBox(width: PsSpace.xs),
+          Text(
+            value,
+            style: PsText.body.copyWith(fontWeight: FontWeight.w600, color: color),
+          ),
+        ],
+      ),
+    );
     final itemTotal = (o.subtotal + o.shippingFee - o.platformDiscount).clamp(0, double.infinity).toDouble();
 
     return PsCard(
@@ -258,29 +273,53 @@ class _OrderBreakdown extends StatelessWidget {
           Text('Payment Details', style: PsText.heading.copyWith(fontSize: 16)),
           const SizedBox(height: PsSpace.xs),
           row('Item price', '${formatPesoFixed(s.unitPrice)} × ${s.quantity}'),
-          if (o.storeDiscount > 0) row('Store voucher', '-${formatPesoFixed(o.storeDiscount)}', note: 'Already taken off the subtotal', color: PsColors.primaryStrong),
+          if (o.storeDiscount > 0)
+            row(
+              'Store voucher',
+              '-${formatPesoFixed(o.storeDiscount)}',
+              note: 'Already taken off the subtotal',
+              color: PsColors.primaryStrong,
+            ),
           row('Subtotal', formatPesoFixed(o.subtotal)),
-          row('Shipping fee', formatPesoFixed(o.shippingFee), note: o.sharesParcel ? 'For this parcel of ${o.parcelItems} items' : null),
+          row(
+            'Shipping fee',
+            formatPesoFixed(o.shippingFee),
+            note: o.sharesParcel ? 'For this parcel of ${o.parcelItems} items' : null,
+          ),
           if (o.platformDiscount > 0)
-            row('PickSell voucher', '-${formatPesoFixed(o.platformDiscount)}', note: o.sharesParcel ? 'On this parcel' : null, color: PsColors.primaryStrong),
+            row(
+              'PickSell voucher',
+              '-${formatPesoFixed(o.platformDiscount)}',
+              note: o.sharesParcel ? 'On this parcel' : null,
+              color: PsColors.primaryStrong,
+            ),
           const Divider(height: PsSpace.lg),
           if (o.sharesParcel) ...[
             row('Total (this item)', formatPesoFixed(o.subtotal)),
             Row(
               children: [
                 Expanded(child: Text('Parcel total (COD)', style: PsText.heading.copyWith(fontSize: 17))),
-                Text(formatPesoFixed(o.parcelTotal), style: PsText.price.copyWith(fontSize: 19, color: PsColors.textPrimary)),
+                Text(
+                  formatPesoFixed(o.parcelTotal),
+                  style: PsText.price.copyWith(fontSize: 19, color: PsColors.textPrimary),
+                ),
               ],
             ),
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text('One rider brings all ${o.parcelItems} items from this seller; pay this amount once.', style: PsText.caption),
+              child: Text(
+                'One rider brings all ${o.parcelItems} items from this seller; pay this amount once.',
+                style: PsText.caption,
+              ),
             ),
           ] else
             Row(
               children: [
                 Expanded(child: Text('Total Payment', style: PsText.heading.copyWith(fontSize: 17))),
-                Text(formatPesoFixed(itemTotal), style: PsText.price.copyWith(fontSize: 19, color: PsColors.textPrimary)),
+                Text(
+                  formatPesoFixed(itemTotal),
+                  style: PsText.price.copyWith(fontSize: 19, color: PsColors.textPrimary),
+                ),
               ],
             ),
         ],
