@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/ps_colors.dart';
-import '../../core/theme/ps_tokens.dart';
 import '../../core/theme/ps_typography.dart';
 
 /// SYS-C17 Search Component.
@@ -64,11 +63,11 @@ class _PsSearchBarState extends State<PsSearchBar> {
   @override
   Widget build(BuildContext context) {
     final border = OutlineInputBorder(
-      borderRadius: PsRadius.field,
-      borderSide: const BorderSide(color: PsColors.border),
+      borderRadius: BorderRadius.circular(16),
+      borderSide: BorderSide(color: PsColors.border),
     );
     return SizedBox(
-      height: PsSize.minTap,
+      height: 48,
       child: TextField(
         controller: _controller,
         readOnly: widget.readOnly,
@@ -83,12 +82,12 @@ class _PsSearchBarState extends State<PsSearchBar> {
           filled: true,
           fillColor: PsColors.surface,
           contentPadding: EdgeInsets.zero,
-          prefixIcon: const Icon(Icons.search_rounded, color: PsColors.textHint, size: 22),
+          prefixIcon: Icon(Icons.search_rounded, color: PsColors.textHint, size: 22),
           suffixIcon: _controller.text.isEmpty || widget.readOnly
               ? null
               : IconButton(
                   tooltip: 'Clear search',
-                  icon: const Icon(Icons.close_rounded, size: 18, color: PsColors.textMuted),
+                  icon: Icon(Icons.close_rounded, size: 18, color: PsColors.textMuted),
                   onPressed: () {
                     _controller.clear();
                     widget.onSubmitted?.call('');
@@ -97,7 +96,7 @@ class _PsSearchBarState extends State<PsSearchBar> {
           border: border,
           enabledBorder: border,
           focusedBorder: border.copyWith(
-            borderSide: const BorderSide(color: PsColors.primary, width: 1.4),
+            borderSide: BorderSide(color: PsColors.primary, width: 1.4),
           ),
         ),
       ),

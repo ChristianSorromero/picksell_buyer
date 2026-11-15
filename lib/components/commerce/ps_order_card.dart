@@ -67,8 +67,8 @@ class PsOrderCard extends StatelessWidget {
       children: [
         Text(order.orderNumber, style: PsText.caption),
         const SizedBox(height: 2),
-        Text('TOTAL AMOUNT', style: PsText.overline.copyWith(fontSize: 11)),
-        Text(formatPesoFixed(order.total), style: PsText.price),
+        Text('Total', style: PsText.caption),
+        Text(formatPesoFixed(order.total), style: PsText.price.copyWith(fontSize: 18)),
       ],
     );
     return Semantics(

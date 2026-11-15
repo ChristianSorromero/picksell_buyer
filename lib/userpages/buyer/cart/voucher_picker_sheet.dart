@@ -64,14 +64,13 @@ class _VoucherPickerSheetState extends State<VoucherPickerSheet> {
             child: ListView(
               shrinkWrap: true,
               children: [
-                Text('Have a voucher code?', style: PsText.bodyStrong),
                 const SizedBox(height: PsSpace.xs),
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Expanded(
                       child: PsTextField(
-                        label: 'Voucher code',
+                        label: 'Have a voucher code?',
                         hint: 'e.g. SAVE50',
                         controller: _code,
                         textCapitalization: TextCapitalization.characters,
@@ -80,25 +79,22 @@ class _VoucherPickerSheetState extends State<VoucherPickerSheet> {
                         maxLength: 30,
                       ),
                     ),
-                    const SizedBox(width: PsSpace.xs),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 22),
-                      child: SizedBox(
-                        width: 96,
-                        child: PsPrimaryButton(label: 'Apply', uppercase: false, onPressed: _applyCode),
-                      ),
+                    const SizedBox(width: PsSpace.sm),
+                    SizedBox(
+                      width: 96,
+                      child: PsPrimaryButton(label: 'Apply', uppercase: false, onPressed: _applyCode),
                     ),
                   ],
                 ),
                 if (!v.hasAny)
                   Padding(
-                    padding: const EdgeInsets.only(top: PsSpace.md),
+                    padding: const EdgeInsets.only(top: PsSpace.lg),
                     child: Text('No store or PickSell vouchers for these items right now.', style: PsText.bodyMuted),
                   ),
                 for (final s in stores) ...[
-                  const SizedBox(height: PsSpace.md),
+                  const SizedBox(height: PsSpace.lg),
                   Text('${widget.sellerNames[s.sellerId] ?? 'Store'} vouchers'.toUpperCase(), style: PsText.overline),
-                  const SizedBox(height: PsSpace.xs),
+                  const SizedBox(height: PsSpace.sm),
                   for (final o in s.options)
                     _OptionTile(
                       option: o,
@@ -108,9 +104,9 @@ class _VoucherPickerSheetState extends State<VoucherPickerSheet> {
                     ),
                 ],
                 if (v.platform.isNotEmpty) ...[
-                  const SizedBox(height: PsSpace.md),
+                  const SizedBox(height: PsSpace.lg),
                   Text('PICKSELL VOUCHERS', style: PsText.overline),
-                  const SizedBox(height: PsSpace.xs),
+                  const SizedBox(height: PsSpace.sm),
                   for (final o in v.platform)
                     _OptionTile(
                       option: o,
@@ -119,11 +115,10 @@ class _VoucherPickerSheetState extends State<VoucherPickerSheet> {
                       onTap: () => setState(() => _platform = _platform == o.id ? null : o.id),
                     ),
                 ],
-                const SizedBox(height: PsSpace.sm),
               ],
             ),
           ),
-          const SizedBox(height: PsSpace.sm),
+          const SizedBox(height: PsSpace.md),
           PsPrimaryButton(label: 'Done', uppercase: false, onPressed: _done),
         ],
       ),
@@ -145,7 +140,7 @@ class _OptionTile extends StatelessWidget {
     final usable = o.usable;
     final accent = platform ? PsColors.primaryStrong : PsColors.primary;
     return Padding(
-      padding: const EdgeInsets.only(bottom: PsSpace.xs),
+      padding: const EdgeInsets.only(bottom: PsSpace.sm),
       child: Opacity(
         opacity: usable ? 1 : 0.55,
         child: PsCard(

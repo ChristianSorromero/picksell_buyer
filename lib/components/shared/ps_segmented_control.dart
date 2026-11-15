@@ -30,21 +30,18 @@ class PsSegmentedControl<T> extends StatelessWidget implements PreferredSizeWidg
   final ValueChanged<T> onChanged;
 
   @override
-  Size get preferredSize => const Size.fromHeight(48);
+  Size get preferredSize => const Size.fromHeight(56);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       height: preferredSize.height,
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: PsColors.border)),
-      ),
-      child: ListView(
+      child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: PsSpace.xs),
-        children: [
-          for (final s in segments) _SegmentTab(segment: s, selected: s.value == selected, onTap: () => onChanged(s.value)),
-        ],
+        padding: const EdgeInsets.fromLTRB(PsSpace.gutter, 4, PsSpace.gutter, 8),
+        itemCount: segments.length,
+        separatorBuilder: (_, __) => const SizedBox(width: PsSpace.xs),
+        itemBuilder: (_, i) => _SegmentTab(segment: segments[i], selected: segments[i].value == selected, onTap: () => onChanged(segments[i].value)),
       ),
     );
   }
@@ -60,6 +57,7 @@ class _SegmentTab<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = segment.count == null ? segment.label : '${segment.label} (${segment.count})';
+    final fg = selected ? PsColors.surface : PsColors.textPrimary;
     return Semantics(
       selected: selected,
       button: true,
@@ -67,29 +65,34 @@ class _SegmentTab<T> extends StatelessWidget {
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.end,
+        borderRadius: BorderRadius.circular(PsRadius.pill),
+        child: AnimatedContainer(
+          duration: PsMotion.fast,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: selected ? PsColors.textPrimary : PsColors.surface,
+            borderRadius: BorderRadius.circular(PsRadius.pill),
+            border: Border.all(color: selected ? PsColors.textPrimary : PsColors.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                label,
-                style: PsText.body.copyWith(
-                  color: selected ? PsColors.primary : PsColors.textMuted,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              if (selected) ...[
+                Container(width: 6, height: 6, decoration: BoxDecoration(color: PsColors.primary, shape: BoxShape.circle)),
+                const SizedBox(width: 8),
+              ],
+              Text(segment.label, style: PsText.ui.copyWith(color: fg)),
+              if (segment.count != null) ...[
+                const SizedBox(width: 6),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 20),
+                  height: 20,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(color: PsColors.primary, borderRadius: BorderRadius.circular(10)),
+                  child: Text('${segment.count}', style: PsText.badge.copyWith(color: PsColors.onPrimary)),
                 ),
-              ),
-              const SizedBox(height: 10),
-              AnimatedContainer(
-                duration: PsMotion.normal,
-                curve: PsMotion.curve,
-                height: 3,
-                width: selected ? 28 : 0,
-                decoration: BoxDecoration(
-                  color: PsColors.primary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+              ],
             ],
           ),
         ),

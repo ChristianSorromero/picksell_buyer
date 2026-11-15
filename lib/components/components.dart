@@ -46,6 +46,7 @@ export 'commerce/ps_address_card.dart'; //         COM-C18
 export 'commerce/ps_cart_item.dart'; //            COM-C12, C13
 export 'commerce/ps_checkout_tiles.dart'; //       COM-C15, C16
 export 'commerce/ps_cost_breakdown.dart'; //       COM-C17
+export 'commerce/ps_home_modern.dart';
 export 'commerce/ps_home_sections.dart';
 export 'commerce/ps_order_card.dart'; //           COM-C20
 export 'commerce/ps_order_summary.dart'; //        COM-C19

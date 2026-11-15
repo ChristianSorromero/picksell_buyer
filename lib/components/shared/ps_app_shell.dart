@@ -16,7 +16,7 @@ class PsAppShell extends StatelessWidget {
     this.footer,
     this.offline = false,
     this.onRetryConnection,
-    this.backgroundColor = PsColors.background,
+    this.backgroundColor,
     this.resizeToAvoidBottomInset = true,
   });
 
@@ -33,7 +33,7 @@ class PsAppShell extends StatelessWidget {
   /// Shows [PsOfflineBanner] under the top bar.
   final bool offline;
   final VoidCallback? onRetryConnection;
-  final Color backgroundColor;
+  final Color? backgroundColor;
   final bool resizeToAvoidBottomInset;
 
   @override
@@ -42,7 +42,7 @@ class PsAppShell extends StatelessWidget {
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       behavior: HitTestBehavior.translucent,
       child: Scaffold(
-        backgroundColor: backgroundColor,
+        backgroundColor: backgroundColor ?? PsColors.background,
         resizeToAvoidBottomInset: resizeToAvoidBottomInset,
         appBar: topBar,
         body: SafeArea(
@@ -87,7 +87,7 @@ class PsFooterActions extends StatelessWidget {
       decoration: BoxDecoration(
         color: PsColors.background,
         border: showDivider
-            ? const Border(top: BorderSide(color: PsColors.divider))
+            ? Border(top: BorderSide(color: PsColors.divider))
             : null,
       ),
       child: SafeArea(

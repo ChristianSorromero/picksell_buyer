@@ -84,7 +84,7 @@ class _DeliveryProofCardState extends State<DeliveryProofCard> {
                       child: Center(
                         child: _error == null
                             ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.refresh_rounded, color: PsColors.textMuted),
+                            : Icon(Icons.refresh_rounded, color: PsColors.textMuted),
                       ),
                     ),
             ),

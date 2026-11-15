@@ -88,7 +88,10 @@ class _CartTabState extends State<CartTab> {
   }
 
   List<CartLine> get _lines => _store.quote.lines;
-  List<int> get _checkoutIds => [for (final l in _lines) if (_selected.contains(l.id) && l.purchasable) l.id];
+  List<int> get _checkoutIds => [
+    for (final l in _lines)
+      if (_selected.contains(l.id) && l.purchasable) l.id,
+  ];
 
   /// Server price for the current selection + voucher.
   Future<void> _requote() async {
@@ -99,7 +102,10 @@ class _CartTabState extends State<CartTab> {
       return;
     }
     try {
-      final q = (await _checkout.quote(lineIds: ids, voucherCode: _voucherCode)).quote;
+      final q = (await _checkout.quote(
+        lineIds: ids,
+        voucherCode: _voucherCode,
+      )).quote;
       if (!mounted || id != _quoteRequest) return;
       setState(() => _selectionQuote = q);
       if (q.voucherError != null) {
@@ -107,11 +113,15 @@ class _CartTabState extends State<CartTab> {
         setState(() => _voucherCode = null);
       }
     } catch (_) {
-      if (mounted && id == _quoteRequest) setState(() => _selectionQuote = null);
+      if (mounted && id == _quoteRequest) {
+        setState(() => _selectionQuote = null);
+      }
     }
   }
 
-  double get _selectedSubtotal => _lines.where((l) => _checkoutIds.contains(l.id)).fold(0.0, (s, l) => s + l.lineTotal);
+  double get _selectedSubtotal => _lines
+      .where((l) => _checkoutIds.contains(l.id))
+      .fold(0.0, (s, l) => s + l.lineTotal);
   double get _discount => _selectionQuote?.voucher?.discount ?? 0;
 
   void _toggle(int id, bool v) {
@@ -122,7 +132,9 @@ class _CartTabState extends State<CartTab> {
   void _toggleAll(Iterable<CartLine> lines, bool v) {
     setState(() {
       for (final l in lines) {
-        if (_editing || l.purchasable) v ? _selected.add(l.id) : _selected.remove(l.id);
+        if (_editing || l.purchasable) {
+          v ? _selected.add(l.id) : _selected.remove(l.id);
+        }
       }
     });
     _requote();
@@ -157,8 +169,12 @@ class _CartTabState extends State<CartTab> {
       initialQuantity: line.quantity,
       onSubmit: (s) async {
         await _store.setVariations(line, s.variationIds);
-        final updated = _store.quote.lines.where((l) => l.id == line.id).firstOrNull;
-        if (updated != null && updated.quantity != s.quantity) await _store.setQuantity(updated, s.quantity);
+        final updated = _store.quote.lines
+            .where((l) => l.id == line.id)
+            .firstOrNull;
+        if (updated != null && updated.quantity != s.quantity) {
+          await _store.setQuantity(updated, s.quantity);
+        }
       },
     );
     _requote();
@@ -188,7 +204,8 @@ class _CartTabState extends State<CartTab> {
     final ok = await PsDialog.confirm(
       context,
       title: 'Remove ${ids.length} ${ids.length == 1 ? 'item' : 'items'}?',
-      message: 'They’ll be removed from your cart. You can add them again anytime.',
+      message:
+          'They’ll be removed from your cart. You can add them again anytime.',
       confirmLabel: 'Remove',
       cancelLabel: 'Keep',
       destructive: true,
@@ -201,14 +218,23 @@ class _CartTabState extends State<CartTab> {
       _toggleEditing();
       PsToast.success(context, 'Removed from cart');
     } catch (e) {
-      if (mounted) PsDialog.error(context, title: 'Couldn’t remove items', message: errorMessage(e));
+      if (mounted) {
+        PsDialog.error(
+          context,
+          title: 'Couldn’t remove items',
+          message: errorMessage(e),
+        );
+      }
     }
   }
 
   Future<void> _pickVoucher() async {
     final ids = _checkoutIds;
     if (ids.isEmpty) {
-      PsToast.show(context, 'Select items first, then enter their product voucher code.');
+      PsToast.show(
+        context,
+        'Select items first, then enter their product voucher code.',
+      );
       return;
     }
     final code = await PsBottomSheet.show<String>(
@@ -219,7 +245,9 @@ class _CartTabState extends State<CartTab> {
     if (code == null) return;
     setState(() => _voucherCode = code.isEmpty ? null : code);
     await _requote();
-    if (mounted && _selectionQuote?.voucher != null) PsToast.success(context, '${_selectionQuote!.voucher!.title} applied');
+    if (mounted && _selectionQuote?.voucher != null) {
+      PsToast.success(context, '${_selectionQuote!.voucher!.title} applied');
+    }
   }
 
   Future<void> _checkoutNow() async {
@@ -243,7 +271,10 @@ class _CartTabState extends State<CartTab> {
               if (!quote.isEmpty)
                 TextButton(
                   onPressed: _toggleEditing,
-                  child: Text(_editing ? 'Done' : 'Edit', style: PsText.link.copyWith(color: PsColors.textMuted)),
+                  child: Text(
+                    _editing ? 'Done' : 'Edit',
+                    style: PsText.link.copyWith(color: PsColors.textMuted),
+                  ),
                 ),
             ],
           ),
@@ -258,7 +289,9 @@ class _CartTabState extends State<CartTab> {
     if (_loading && quote.isEmpty) return const PsSkeletonList(itemCount: 3);
     final e = _error;
     if (e != null && quote.isEmpty) {
-      return e is ApiException && e.isNetworkError ? PsOfflineState(onRetry: _reload) : PsErrorState(message: errorMessage(e), onRetry: _reload);
+      return e is ApiException && e.isNetworkError
+          ? PsOfflineState(onRetry: _reload)
+          : PsErrorState(message: errorMessage(e), onRetry: _reload);
     }
     if (quote.isEmpty) {
       return PsRefreshable(
@@ -276,7 +309,12 @@ class _CartTabState extends State<CartTab> {
     return PsRefreshable(
       onRefresh: _reload,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(PsSpace.gutter, PsSpace.xs, PsSpace.gutter, PsSpace.lg),
+        padding: const EdgeInsets.fromLTRB(
+          PsSpace.gutter,
+          PsSpace.xs,
+          PsSpace.gutter,
+          PsSpace.lg,
+        ),
         children: [
           if (quote.hasIssues)
             Padding(
@@ -284,47 +322,118 @@ class _CartTabState extends State<CartTab> {
               child: PsCard(
                 color: PsColors.warningSoft,
                 borderColor: PsColors.warning.withAlpha(80),
-                child: Text('Some items changed since you added them. Adjust or remove them to check out.',
-                    style: PsText.caption.copyWith(color: PsColors.warning, fontWeight: FontWeight.w600)),
+                child: Text(
+                  'Some items changed since you added them. Adjust or remove them to check out.',
+                  style: PsText.caption.copyWith(
+                    color: PsColors.warning,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           for (final group in quote.groups) ...[
-            PsSellerGroupHeader(
-              name: group.seller?.name ?? 'Seller',
-              verified: group.seller?.verified ?? false,
-              allSelected: group.items.every((l) => _selected.contains(l.id)),
-              someSelected: group.items.any((l) => _selected.contains(l.id)),
-              onSelected: (v) => _toggleAll(group.items, v),
-              onTap: group.seller == null ? null : () => openStore(context, group.seller!.id),
-            ),
-            for (final line in group.items) ...[
-              PsCartItemTile(
-                line: line,
-                editing: _editing,
-                selected: _selected.contains(line.id),
-                busy: _busy.contains(line.id),
-                onSelected: (v) => _toggle(line.id, v),
-                onQuantity: (q) => _setQuantity(line, q),
-                onTap: () => openProduct(context, line.product.id),
-                onEditVariation: line.variationIds.isEmpty ? null : () => _editVariation(line),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: PsColors.surface,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: PsColors.border),
               ),
-              const SizedBox(height: PsSpace.xs),
-            ],
-            PsSellerGroupFooter(shippingFee: group.shippingFee, shippingName: quote.shippingOption?.name),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  PsSellerGroupHeader(
+                    name: group.seller?.name ?? 'Seller',
+                    verified: group.seller?.verified ?? false,
+                    allSelected: group.items.every(
+                      (l) => _selected.contains(l.id),
+                    ),
+                    someSelected: group.items.any(
+                      (l) => _selected.contains(l.id),
+                    ),
+                    onSelected: (v) => _toggleAll(group.items, v),
+                    onTap: group.seller == null
+                        ? null
+                        : () => openStore(context, group.seller!.id),
+                  ),
+                  if (group.shippingProblem != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        PsSpace.sm,
+                        0,
+                        PsSpace.sm,
+                        PsSpace.xs,
+                      ),
+                      child: PsCard(
+                        color: PsColors.errorSoft,
+                        borderColor: PsColors.error.withAlpha(80),
+                        child: Text(
+                          group.shippingProblem!,
+                          style: PsText.caption.copyWith(
+                            color: PsColors.errorStrong,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  for (final (i, line) in group.items.indexed) ...[
+                    if (i > 0)
+                      Divider(
+                        indent: 56,
+                        endIndent: PsSpace.md,
+                        color: PsColors.divider,
+                      ),
+                    PsCartItemTile(
+                      line: line,
+                      editing: _editing,
+                      selected: _selected.contains(line.id),
+                      busy: _busy.contains(line.id),
+                      onSelected: (v) => _toggle(line.id, v),
+                      onQuantity: (q) => _setQuantity(line, q),
+                      onTap: () => openProduct(context, line.product.id),
+                      onEditVariation: line.variationIds.isEmpty
+                          ? null
+                          : () => _editVariation(line),
+                    ),
+                  ],
+                  Divider(height: 1, color: PsColors.divider),
+                  PsSellerGroupFooter(
+                    shippingFee: group.shippingFee,
+                    shippingName: quote.shippingOption?.name,
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: PsSpace.md),
           ],
           PsCard(
             onTap: _pickVoucher,
             child: Row(
               children: [
-                const Icon(Icons.confirmation_number_outlined, color: PsColors.primaryStrong),
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: PsColors.primary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.confirmation_number_outlined,
+                    size: 20,
+                    color: PsColors.onPrimary,
+                  ),
+                ),
                 const SizedBox(width: PsSpace.sm),
-                Expanded(child: Text('Picksell Voucher', style: PsText.bodyStrong)),
+                Expanded(
+                  child: Text(
+                    'Product voucher',
+                    style: PsText.ui.copyWith(fontSize: 14),
+                  ),
+                ),
                 if (_selectionQuote?.voucher != null)
                   PsTag('-${formatPeso(_selectionQuote!.voucher!.discount)}')
                 else
-                  Text('Select or enter code', style: PsText.caption),
-                const Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
+                  Flexible(child: Text('Enter code', style: PsText.caption, overflow: TextOverflow.ellipsis)),
+                Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
               ],
             ),
           ),
@@ -334,32 +443,69 @@ class _CartTabState extends State<CartTab> {
   }
 
   Widget _footer(CartQuote quote) {
-    final selectableLines = _editing ? quote.lines : quote.lines.where((l) => l.purchasable).toList();
-    final allSelected = selectableLines.isNotEmpty && selectableLines.every((l) => _selected.contains(l.id));
-    final count = _lines.where((l) => _checkoutIds.contains(l.id)).fold<int>(0, (s, l) => s + l.quantity);
+    final selectableLines = _editing
+        ? quote.lines
+        : quote.lines.where((l) => l.purchasable).toList();
+    final allSelected =
+        selectableLines.isNotEmpty &&
+        selectableLines.every((l) => _selected.contains(l.id));
+    final count = _lines
+        .where((l) => _checkoutIds.contains(l.id))
+        .fold<int>(0, (s, l) => s + l.quantity);
     final total = _selectedSubtotal - _discount;
 
     return DecoratedBox(
-      decoration: const BoxDecoration(color: PsColors.surface, border: Border(top: BorderSide(color: PsColors.border))),
+      decoration: BoxDecoration(
+        color: PsColors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border(top: BorderSide(color: PsColors.border)),
+        boxShadow: PsColors.isDark
+            ? null
+            : const [
+                BoxShadow(
+                  color: Color(0x141B1B1B),
+                  blurRadius: 24,
+                  offset: Offset(0, -6),
+                ),
+              ],
+      ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, PsSpace.xs, PsSpace.gutter, PsSpace.sm),
+          padding: const EdgeInsets.fromLTRB(
+            4,
+            PsSpace.sm,
+            PsSpace.gutter,
+            PsSpace.sm,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Row(
                 children: [
-                  PsCheck(value: allSelected, label: 'Select all', onChanged: (v) => _toggleAll(selectableLines, v)),
+                  PsCheck(
+                    value: allSelected,
+                    label: 'Select all',
+                    onChanged: (v) => _toggleAll(selectableLines, v),
+                  ),
                   Text('Select All', style: PsText.bodyMuted),
                   const Spacer(),
                   if (!_editing)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text('Total Price', style: PsText.caption),
-                        Text(formatPesoFixed(total < 0 ? 0 : total), style: PsText.price.copyWith(fontSize: 20)),
-                        if (_discount > 0) Text('Saved ${formatPesoFixed(_discount)}', style: PsText.caption.copyWith(color: PsColors.primaryStrong)),
+                        Text('Total', style: PsText.caption),
+                        Text(
+                          formatPesoFixed(total < 0 ? 0 : total),
+                          style: PsText.price.copyWith(fontSize: 20),
+                        ),
+                        if (_discount > 0)
+                          Text(
+                            'Saved ${formatPesoFixed(_discount)}',
+                            style: PsText.caption.copyWith(
+                              color: PsColors.primaryStrong,
+                            ),
+                          ),
                       ],
                     ),
                 ],
@@ -372,9 +518,13 @@ class _CartTabState extends State<CartTab> {
                         onPressed: _selected.isEmpty ? null : _deleteSelected,
                         style: OutlinedButton.styleFrom(
                           foregroundColor: PsColors.error,
-                          side: const BorderSide(color: PsColors.error),
-                          minimumSize: const Size.fromHeight(PsSize.buttonHeight),
-                          shape: RoundedRectangleBorder(borderRadius: PsRadius.button),
+                          side: BorderSide(color: PsColors.error),
+                          minimumSize: const Size.fromHeight(
+                            PsSize.buttonHeight,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: PsRadius.button,
+                          ),
                         ),
                         child: Text('Delete (${_selected.length})'),
                       )

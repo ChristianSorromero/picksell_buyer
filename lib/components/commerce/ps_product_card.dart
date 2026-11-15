@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 import '../../core/theme/ps_colors.dart';
 import '../../core/theme/ps_tokens.dart';
@@ -7,12 +8,12 @@ import '../../models/catalog.dart';
 import '../shared/states/ps_loading_state.dart';
 import 'ps_price.dart';
 import 'ps_product_image.dart';
-import 'ps_rating.dart';
 import 'ps_wishlist_button.dart';
 
 /// COM-C01 Product Card — grid tile (default) or list row. Shows only what
-/// the product data supports: discount ribbon only with a real discount,
-/// rating only once reviewed, stock warnings from live stock.
+/// the product data supports: discount tag only with a real discount, stars
+/// only once reviewed, "sold" only once something sold, stock warnings from
+/// live stock.
 class PsProductCard extends StatelessWidget {
   const PsProductCard({
     super.key,
@@ -21,6 +22,8 @@ class PsProductCard extends StatelessWidget {
     this.list = false,
     this.showSeller = true,
     this.footer,
+    this.imageAspectRatio = 1,
+    this.uniform = false,
   });
 
   final Product product;
@@ -30,45 +33,58 @@ class PsProductCard extends StatelessWidget {
   final bool list;
   final bool showSeller;
 
-  /// Extra action under the price (e.g. "MOVE TO CART" on My Picks).
+  /// Extra action under the price (e.g. "Move to cart" on My Picks).
   final Widget? footer;
+
+  /// Width ÷ height of the photo in grid mode. Below 1 is a taller card; the
+  /// masonry grid varies it so the feed doesn't look like a spreadsheet.
+  final double imageAspectRatio;
+
+  /// Fill the height the parent gives (sideways rows): every card in the row
+  /// is the same size and the content arranges itself inside. The name always
+  /// keeps room for two lines and the store sits at the bottom.
+  final bool uniform;
 
   @override
   Widget build(BuildContext context) {
     final p = product;
+    // Photo in its own rounded, tinted tile inside the card (tint shows while loading).
     final image = Stack(
       children: [
         Positioned.fill(
-          child: PsProductImage(url: p.image, semanticLabel: p.name),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: ColoredBox(
+              color: tileTint(p.id),
+              child: PsProductImage(url: p.image, semanticLabel: p.name),
+            ),
+          ),
         ),
         if (p.onSale)
           Positioned(
-            top: 0,
-            left: 0,
-            child: PsDiscountTag(percent: p.discountPercent!),
+            top: 10,
+            left: 6,
+            child: PsSaleSticker(percent: p.discountPercent!),
           ),
         Positioned(
-          top: 4,
-          right: 4,
-          child: PsWishlistButton(productId: p.id, size: 18),
+          top: 2,
+          right: 2,
+          child: PsWishlistButton(productId: p.id, size: 17, compact: true),
         ),
         if (!p.inStock)
           Positioned.fill(
             child: Container(
-              color: Colors.white.withAlpha(150),
+              decoration: BoxDecoration(color: PsColors.surface.withAlpha(150), borderRadius: BorderRadius.circular(16)),
               alignment: Alignment.center,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: PsColors.textPrimary,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   p.unavailableLabel!.toUpperCase(),
-                  style: PsText.badge.copyWith(color: Colors.white),
+                  style: PsText.badge.copyWith(color: PsColors.surface),
                 ),
               ),
             ),
@@ -78,15 +94,16 @@ class PsProductCard extends StatelessWidget {
 
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: uniform ? MainAxisSize.max : MainAxisSize.min,
       children: [
-        PsRatingInline(rating: p.rating, count: list ? p.reviewCount : null),
-        if (p.rating != null) const SizedBox(height: 4),
-        Text(
-          p.name,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: PsText.bodyStrong.copyWith(fontSize: 14.5, height: 1.3),
+        SizedBox(
+          height: uniform ? 13.5 * 1.3 * 2 + 1 : null,
+          child: Text(
+            p.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: PsText.ui.copyWith(fontSize: 13.5, height: 1.3, fontWeight: FontWeight.w600),
+          ),
         ),
         const SizedBox(height: 6),
         PsPriceDisplay(
@@ -94,23 +111,30 @@ class PsProductCard extends StatelessWidget {
           originalPrice: p.originalPrice,
           size: PsPriceSize.small,
         ),
+        _SocialProof(product: p, showReviewCount: list),
         if (p.lowStock) ...[
           const SizedBox(height: 4),
           Text(
             'Only ${p.stock} left',
-            style: PsText.caption.copyWith(
-              color: PsColors.warning,
-              fontWeight: FontWeight.w600,
-            ),
+            style: PsText.caption.copyWith(fontSize: 11.5, color: PsColors.warning, fontWeight: FontWeight.w600),
           ),
         ],
+        if (uniform) const Spacer(),
         if (showSeller && p.sellerName.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
-            p.sellerName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: PsText.caption.copyWith(fontSize: 11.5),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(Icons.storefront_outlined, size: 13, color: PsColors.textHint),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  p.sellerName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: PsText.caption.copyWith(fontSize: 11.5),
+                ),
+              ),
+            ],
           ),
         ],
         if (footer != null) ...[const SizedBox(height: PsSpace.sm), footer!],
@@ -119,48 +143,132 @@ class PsProductCard extends StatelessWidget {
 
     return Semantics(
       button: true,
-      label:
-          '${p.name}, ${p.onSale ? '${p.discountPercent}% off, ' : ''}${p.unavailableLabel?.toLowerCase() ?? ''}',
+      label: [
+        p.name,
+        if (p.onSale) '${p.discountPercent}% off',
+        if (p.rating != null) '${p.rating!.toStringAsFixed(1)} stars',
+        if (p.soldCount > 0) '${p.soldCount} sold',
+        if (p.unavailableLabel != null) p.unavailableLabel!.toLowerCase(),
+      ].join(', '),
       child: Material(
-        color: PsColors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: PsRadius.card,
-          side: const BorderSide(color: PsColors.border),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: list
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(width: 116, height: 116, child: image),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.all(PsSpace.sm),
-                        child: details,
+          color: PsColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+            side: BorderSide(color: PsColors.border.withAlpha(160)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: list
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 104, height: 104, child: image),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(PsSpace.sm, 2, 4, 2),
+                          child: details,
+                        ),
                       ),
-                    ),
-                  ],
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    AspectRatio(aspectRatio: 1, child: image),
-                    Padding(
-                      padding: const EdgeInsets.all(PsSpace.sm),
-                      child: details,
-                    ),
-                  ],
-                ),
-        ),
+                    ],
+                  )
+                : Column(
+                    mainAxisSize: uniform ? MainAxisSize.max : MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AspectRatio(aspectRatio: imageAspectRatio, child: image),
+                      if (uniform)
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(4, 10, 4, 4),
+                            child: details,
+                          ),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(4, 10, 4, 4),
+                          child: details,
+                        ),
+                    ],
+                  ),
+            ),
+          ),
       ),
     );
   }
 }
 
-/// Two-column grid of [PsProductCard]s as a sliver. Card height follows
-/// content, rows align by the tallest card.
+/// Soft tint behind a product photo; alternates so a grid doesn't look flat.
+Color tileTint(int id) => id.isEven ? PsColors.primarySoft : PsColors.neutralSoft;
+
+/// "-30%" Coral sticker, slightly tilted, on a product photo.
+class PsSaleSticker extends StatelessWidget {
+  const PsSaleSticker({super.key, required this.percent, this.fontSize = 12});
+
+  final int percent;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.rotate(
+      angle: -0.1,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(color: PsColors.primary, borderRadius: BorderRadius.circular(8)),
+        child: Text('-$percent%', style: PsText.badge.copyWith(color: PsColors.onPrimary, fontSize: fontSize)),
+      ),
+    );
+  }
+}
+
+/// "★ 4.8 · 1.2k sold": only the parts the product actually has.
+class _SocialProof extends StatelessWidget {
+  const _SocialProof({required this.product, this.showReviewCount = false});
+
+  final Product product;
+  final bool showReviewCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = product;
+    if (p.rating == null && p.soldCount <= 0) return const SizedBox.shrink();
+    final style = PsText.caption.copyWith(fontSize: 11.5, color: PsColors.textMuted);
+    return Padding(
+      padding: const EdgeInsets.only(top: 5),
+      child: Row(
+        children: [
+          if (p.rating != null) ...[
+            Icon(Icons.star_rounded, size: 14, color: PsColors.star),
+            const SizedBox(width: 2),
+            Text(
+              showReviewCount && p.reviewCount > 0
+                  ? '${p.rating!.toStringAsFixed(1)} (${p.reviewCount})'
+                  : p.rating!.toStringAsFixed(1),
+              style: style.copyWith(color: PsColors.textSecondary, fontWeight: FontWeight.w600),
+            ),
+          ],
+          if (p.rating != null && p.soldCount > 0)
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 5), child: Text('·', style: style)),
+          if (p.soldCount > 0)
+            Flexible(child: Text('${formatSold(p.soldCount)} sold', style: style, overflow: TextOverflow.ellipsis)),
+        ],
+      ),
+    );
+  }
+}
+
+/// 950 → "950", 1200 → "1.2k", 15000 → "15k".
+String formatSold(int n) {
+  if (n < 1000) return '$n';
+  final k = n / 1000;
+  return k >= 10 ? '${k.round()}k' : '${k.toStringAsFixed(1).replaceAll('.0', '')}k';
+}
+
+/// Two-column product feed as a sliver. In grid mode the photos alternate
+/// between three heights and each column stacks independently (masonry), the
+/// way shopping apps keep the eye moving; list mode is one card per row.
 class PsProductGrid extends StatelessWidget {
   const PsProductGrid({
     super.key,
@@ -176,6 +284,11 @@ class PsProductGrid extends StatelessWidget {
   final bool list;
   final EdgeInsetsGeometry padding;
   final Widget? Function(Product product)? footerBuilder;
+
+  /// Photo shapes, repeated down the feed: tall, square, slightly tall.
+  static const aspectPattern = [0.8, 1.0, 0.9];
+
+  static double aspectFor(int index) => aspectPattern[index % aspectPattern.length];
 
   @override
   Widget build(BuildContext context) {
@@ -195,37 +308,19 @@ class PsProductGrid extends StatelessWidget {
       );
     }
 
-    final rows = <Widget>[];
-    for (var i = 0; i < products.length; i += 2) {
-      rows.add(
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var j = i; j < i + 2; j++) ...[
-                if (j > i) const SizedBox(width: PsSpace.sm),
-                Expanded(
-                  child: j < products.length
-                      ? PsProductCard(
-                          product: products[j],
-                          onTap: () => onTap(products[j]),
-                          footer: footerBuilder?.call(products[j]),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
-    }
-
     return SliverPadding(
       padding: padding,
-      sliver: SliverList.separated(
-        itemCount: rows.length,
-        separatorBuilder: (_, __) => const SizedBox(height: PsSpace.sm),
-        itemBuilder: (_, i) => rows[i],
+      sliver: SliverMasonryGrid.count(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childCount: products.length,
+        itemBuilder: (_, i) => PsProductCard(
+          product: products[i],
+          imageAspectRatio: aspectFor(i),
+          onTap: () => onTap(products[i]),
+          footer: footerBuilder?.call(products[i]),
+        ),
       ),
     );
   }
@@ -259,7 +354,7 @@ class PsProductGridSkeleton extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        PsSkeleton(width: w, height: w, radius: PsRadius.md),
+                        PsSkeleton(width: w, height: w, radius: PsRadius.lg),
                         const SizedBox(height: 10),
                         const PsSkeleton(height: 12, width: 60),
                         const SizedBox(height: 8),

@@ -48,7 +48,7 @@ class PsFilterChips<T> extends StatelessWidget {
                 borderRadius: BorderRadius.circular(PsRadius.pill),
                 child: AnimatedContainer(
                   duration: PsMotion.fast,
-                  height: 36,
+                  height: 38,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
@@ -56,13 +56,15 @@ class PsFilterChips<T> extends StatelessWidget {
                     borderRadius: BorderRadius.circular(PsRadius.pill),
                     border: Border.all(color: isSelected ? PsColors.textPrimary : PsColors.border),
                   ),
-                  child: Text(
-                    o.label,
-                    style: PsText.caption.copyWith(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected ? Colors.white : PsColors.textPrimary,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isSelected) ...[
+                        Container(width: 6, height: 6, decoration: BoxDecoration(color: PsColors.primary, shape: BoxShape.circle)),
+                        const SizedBox(width: 8),
+                      ],
+                      Text(o.label, style: PsText.ui.copyWith(color: isSelected ? PsColors.surface : PsColors.textPrimary)),
+                    ],
                   ),
                 ),
               ),
@@ -85,7 +87,7 @@ class PsToggleChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = selected ? Colors.white : PsColors.textPrimary;
+    final fg = selected ? PsColors.surface : PsColors.textPrimary;
     return Semantics(
       selected: selected,
       button: true,
@@ -106,7 +108,7 @@ class PsToggleChip extends StatelessWidget {
             children: [
               Icon(icon ?? (selected ? Icons.check_rounded : Icons.local_offer_outlined), size: 16, color: fg),
               const SizedBox(width: 6),
-              Text(label, style: PsText.caption.copyWith(fontSize: 13, fontWeight: FontWeight.w600, color: fg)),
+              Text(label, style: PsText.ui.copyWith(color: fg)),
             ],
           ),
         ),

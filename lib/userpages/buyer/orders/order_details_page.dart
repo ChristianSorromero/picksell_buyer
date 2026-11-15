@@ -141,24 +141,6 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                   ),
                 ],
               ),
-              const SizedBox(height: PsSpace.sm),
-              PsOrderActionGroup(
-                order: o,
-                onRate: () async {
-                  final updated = await rateOrder(context, o.id, s.productName);
-                  if (updated != null) _view.currentState?.replace(updated);
-                },
-                onReceived: () async {
-                  final updated = await confirmReceived(context, o.id, s.productName);
-                  if (updated != null) _view.currentState?.replace(updated);
-                },
-                onTrack: () => openTracking(context, o.id).then((_) => reload()),
-                onBuyAgain: () => buyAgain(context, o.id),
-                onCancel: () => _cancel(o),
-                onReturn: () => _push(ReturnRequestPage(order: o)),
-                onRefundStatus: () => _push(RefundStatusPage(order: o)),
-                onReport: () => _push(ReportProblemPage(order: o)),
-              ),
               if (o.feedback != null || s.rating != null) ...[
                 const SizedBox(height: PsSpace.sm),
                 PsCard(
@@ -200,6 +182,24 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                     if (o.deliveredAt != null) PsInfoRow(label: 'Delivered', value: formatDateTime(o.deliveredAt!)),
                   ],
                 ),
+              ),
+              const SizedBox(height: PsSpace.sm),
+              PsOrderActionGroup(
+                order: o,
+                onRate: () async {
+                  final updated = await rateOrder(context, o.id, s.productName);
+                  if (updated != null) _view.currentState?.replace(updated);
+                },
+                onReceived: () async {
+                  final updated = await confirmReceived(context, o.id, s.productName);
+                  if (updated != null) _view.currentState?.replace(updated);
+                },
+                onTrack: () => openTracking(context, o.id).then((_) => reload()),
+                onBuyAgain: () => buyAgain(context, o.id),
+                onCancel: () => _cancel(o),
+                onReturn: () => _push(ReturnRequestPage(order: o)),
+                onRefundStatus: () => _push(RefundStatusPage(order: o)),
+                onReport: () => _push(ReportProblemPage(order: o)),
               ),
               const SizedBox(height: PsSpace.lg),
             ],
@@ -269,7 +269,7 @@ class _OrderBreakdown extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: Text('Parcel total (COD)', style: PsText.heading.copyWith(fontSize: 17))),
-                Text(formatPesoFixed(o.parcelTotal), style: PsText.price.copyWith(fontSize: 19, color: PsColors.primary)),
+                Text(formatPesoFixed(o.parcelTotal), style: PsText.price.copyWith(fontSize: 19, color: PsColors.textPrimary)),
               ],
             ),
             Padding(
@@ -280,7 +280,7 @@ class _OrderBreakdown extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: Text('Total Payment', style: PsText.heading.copyWith(fontSize: 17))),
-                Text(formatPesoFixed(itemTotal), style: PsText.price.copyWith(fontSize: 19, color: PsColors.primary)),
+                Text(formatPesoFixed(itemTotal), style: PsText.price.copyWith(fontSize: 19, color: PsColors.textPrimary)),
               ],
             ),
         ],

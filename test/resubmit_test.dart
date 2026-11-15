@@ -57,7 +57,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField).at(0), 'rejected@example.com');
     await tester.enterText(find.byType(TextField).at(1), 'Password1!');
-    await tester.tap(find.text('LOG IN'));
+    await tester.tap(find.text('Log in'));
     await _settle(tester);
 
     expect(find.text('Sign-up not approved'), findsOneWidget);

@@ -1,3 +1,4 @@
+import '../../core/theme/theme_prefs.dart';
 import 'package:flutter/material.dart';
 
 import '../../components/components.dart';
@@ -32,6 +33,8 @@ class _BuyerDashboardPageState extends State<BuyerDashboardPage> {
   @override
   void initState() {
     super.initState();
+    // Signed in: the buyer's Appearance setting applies (signed-out pages stay light).
+    WidgetsBinding.instance.addPostFrameCallback((_) => ThemePrefs.signedOutLight.value = false);
     ShellNav.tab.value = widget.initialTab;
     _visited.add(widget.initialTab);
     ShellNav.tab.addListener(_onTab);
@@ -46,6 +49,8 @@ class _BuyerDashboardPageState extends State<BuyerDashboardPage> {
   void dispose() {
     ShellNav.tab.removeListener(_onTab);
     ApiClient.sessionExpired.removeListener(_onSessionExpired);
+    // Logged out: back to the always-light signed-out pages.
+    WidgetsBinding.instance.addPostFrameCallback((_) => ThemePrefs.signedOutLight.value = true);
     super.dispose();
   }
 

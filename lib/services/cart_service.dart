@@ -66,6 +66,17 @@ class CartStore extends ChangeNotifier {
     return _quote;
   }
 
+  /// Set a line's quantity by id (Buy Now keeps the rest of the cart as it was).
+  Future<CartQuote> setLineQuantity(int lineId, int quantity) async {
+    _apply(await _api.patchJson('/buyer/cart/$lineId', {'quantity': quantity}));
+    return _quote;
+  }
+
+  Future<CartQuote> removeLine(int lineId) async {
+    _apply(await _api.deleteJson('/buyer/cart/$lineId'));
+    return _quote;
+  }
+
   Future<CartQuote> remove(CartLine line) async {
     _apply(await _api.deleteJson('/buyer/cart/${line.id}'));
     return _quote;

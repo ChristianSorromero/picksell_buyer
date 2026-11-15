@@ -1,8 +1,18 @@
+import 'package:flutter/widgets.dart' show StringCharacters;
+
 import 'json.dart';
 
 /// Starts every message the server sends on a seller's behalf (thank-you and vacation away
 /// replies; Picksell's Message::AUTO_REPLY_PREFIX).
 const String autoReplyPrefix = '[Auto-reply]';
+
+/// The server's initials, or the first letter of the name when it sent none.
+String _initials(String? given, String? name) {
+  final g = given?.trim() ?? '';
+  if (g.isNotEmpty) return g;
+  final n = name?.trim() ?? '';
+  return n.isEmpty ? '?' : n.characters.first.toUpperCase();
+}
 
 bool _isAutoReply(String body) => body.startsWith(autoReplyPrefix);
 
@@ -43,12 +53,13 @@ class ChatContact {
   }
 
   factory ChatContact.fromJson(Map<String, dynamic> json) => ChatContact(
-        id: json['id'] as int,
-        name: json['name'] as String? ?? '',
-        initials: json['initials'] as String? ?? '?',
-        lastMessage: json['last_message'] as String? ?? '',
+        // Read loosely: one odd contact must never take the whole Messages page down.
+        id: toInt(json['id']),
+        name: toStr(json['name']) ?? '',
+        initials: _initials(toStr(json['initials']), toStr(json['name'])),
+        lastMessage: toStr(json['last_message']) ?? '',
         lastTime: toDate(json['last_time']),
-        unread: json['unread'] as int? ?? 0,
+        unread: toInt(json['unread']),
       );
 }
 
@@ -74,11 +85,11 @@ class ChatMessage {
   String get displayBody => isAutoReply ? _withoutPrefix(body) : body;
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
-        id: json['id'] as int,
-        body: json['body'] as String,
-        senderId: json['sender_id'] as int,
+        id: toInt(json['id']),
+        body: toStr(json['body']) ?? '',
+        senderId: toInt(json['sender_id']),
         createdAt: toDate(json['created_at']) ?? DateTime.now(),
-        isMine: json['is_mine'] as bool,
+        isMine: json['is_mine'] == true,
       );
 }
 

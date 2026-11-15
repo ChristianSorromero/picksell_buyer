@@ -158,8 +158,8 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
             child: Container(
               width: 96,
               height: 96,
-              decoration: const BoxDecoration(color: PsColors.primarySoft, shape: BoxShape.circle),
-              child: const Icon(Icons.mark_email_read_rounded, size: 44, color: PsColors.primary),
+              decoration: BoxDecoration(color: PsColors.primarySoft, shape: BoxShape.circle),
+              child: Icon(Icons.mark_email_read_rounded, size: 44, color: PsColors.primary),
             ),
           ),
           const SizedBox(height: PsSpace.lg),

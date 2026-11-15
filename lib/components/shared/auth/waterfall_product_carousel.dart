@@ -1,39 +1,67 @@
 import 'package:flutter/material.dart';
 
 import '../../../app_assets.dart';
+import '../../../core/theme/ps_colors.dart';
 import '../../../core/theme/ps_tokens.dart';
 
-/// A subtle, continuously scrolling product wall for the login backdrop.
-///
-/// Each lane renders two copies of the same sequence. Moving by exactly one
-/// sequence length means the animation can restart at zero without a visible
-/// jump.
-class WaterfallProductCarousel extends StatefulWidget {
-  const WaterfallProductCarousel({super.key});
+/// How each product in the waterfall is drawn.
+enum WaterfallTileStyle {
+  /// Bare product cut-outs: the faint backdrop behind the login form.
+  plain,
 
-  @override
-  State<WaterfallProductCarousel> createState() =>
-      _WaterfallProductCarouselState();
+  /// Products on white rounded cards with a soft shadow: the welcome page.
+  card,
 }
 
-class _WaterfallProductCarouselState extends State<WaterfallProductCarousel>
-    with SingleTickerProviderStateMixin {
+/// A continuously scrolling product wall.
+///
+/// Each lane renders two copies of the same sequence. Moving by exactly one
+/// sequence length means the animation restarts at zero without a visible
+/// jump, so the lanes flow forever. Neighbouring lanes move in opposite
+/// directions. Respects the system "reduce motion" setting.
+class WaterfallProductCarousel extends StatefulWidget {
+  const WaterfallProductCarousel({
+    super.key,
+    this.laneCount,
+    this.style = WaterfallTileStyle.plain,
+    this.duration = const Duration(seconds: 22),
+  });
+
+  /// Number of columns. Null keeps the login layout: four, or three on very
+  /// narrow phones.
+  final int? laneCount;
+  final WaterfallTileStyle style;
+
+  /// Time for one lane to travel its whole sequence once.
+  final Duration duration;
+
+  @override
+  State<WaterfallProductCarousel> createState() => _WaterfallProductCarouselState();
+}
+
+class _WaterfallProductCarouselState extends State<WaterfallProductCarousel> with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
-  static const _lanes = <List<int>>[
+  /// Login layout: four lanes.
+  static const _fourLanes = <List<int>>[
     [0, 3, 6, 1],
     [4, 7, 2, 9],
     [5, 1, 10, 3],
     [2, 8, 0, 11],
   ];
 
+  /// Welcome layout: three lanes. Leaves out the lotion photo (index 4),
+  /// whose baked-in checkerboard background shows on the white cards.
+  static const _threeLanes = <List<int>>[
+    [0, 3, 6, 9],
+    [7, 1, 10, 2],
+    [5, 11, 8, 3],
+  ];
+
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 22),
-    )..repeat();
+    _controller = AnimationController(vsync: this, duration: widget.duration)..repeat();
   }
 
   @override
@@ -45,16 +73,17 @@ class _WaterfallProductCarouselState extends State<WaterfallProductCarousel>
   @override
   Widget build(BuildContext context) {
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    final card = widget.style == WaterfallTileStyle.card;
 
     return IgnorePointer(
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 360;
-          final laneCount = compact ? 3 : _lanes.length;
-          final gap = compact ? PsSpace.xs : PsSpace.sm;
-          final cardWidth =
-              (constraints.maxWidth - gap * (laneCount - 1)) / laneCount;
-          final cardHeight = cardWidth * 1.18;
+          final laneCount = widget.laneCount ?? (compact ? 3 : 4);
+          final lanes = laneCount == 3 ? _threeLanes : _fourLanes;
+          final gap = card ? PsSpace.sm : (compact ? PsSpace.xs : PsSpace.sm);
+          final cardWidth = (constraints.maxWidth - gap * (laneCount - 1)) / laneCount;
+          final cardHeight = cardWidth * (card ? 1.22 : 1.18);
 
           return AnimatedBuilder(
             animation: _controller,
@@ -65,12 +94,14 @@ class _WaterfallProductCarouselState extends State<WaterfallProductCarousel>
                   if (lane > 0) SizedBox(width: gap),
                   Expanded(
                     child: _WaterfallLane(
-                      images: _lanes[lane],
+                      images: lanes[lane % lanes.length],
                       width: cardWidth,
                       height: cardHeight,
                       gap: gap,
-                      progress: reducedMotion ? 0 : _controller.value,
+                      // Stagger the lanes so the rows never line up.
+                      progress: reducedMotion ? 0 : (_controller.value + lane * 0.17) % 1,
                       reverse: lane.isOdd,
+                      card: card,
                     ),
                   ),
                 ],
@@ -91,6 +122,7 @@ class _WaterfallLane extends StatelessWidget {
     required this.gap,
     required this.progress,
     required this.reverse,
+    required this.card,
   });
 
   final List<int> images;
@@ -99,29 +131,33 @@ class _WaterfallLane extends StatelessWidget {
   final double gap;
   final double progress;
   final bool reverse;
+  final bool card;
 
   @override
   Widget build(BuildContext context) {
-    final sequenceHeight = images.length * height + (images.length - 1) * gap;
-    final offset = reverse
-        ? sequenceHeight * (progress - 1)
-        : sequenceHeight * -progress;
-    final tiles = [...images, ...images];
+    // One sequence = every tile plus the gap after it, so the second copy
+    // starts exactly where the first one began.
+    final sequenceHeight = images.length * (height + gap);
+    final offset = reverse ? sequenceHeight * (progress - 1) : sequenceHeight * -progress;
+    final tiles = [...images, ...images, ...images];
 
     return ClipRect(
-      child: Transform.translate(
-        offset: Offset(0, offset),
-        child: Column(
-          children: [
-            for (var i = 0; i < tiles.length; i++) ...[
-              _ProductTile(
-                assetPath: AppAssets.loginWaterfall[tiles[i]],
-                width: width,
-                height: height,
-              ),
-              if (i < tiles.length - 1) SizedBox(height: gap),
+      child: OverflowBox(
+        alignment: Alignment.topCenter,
+        maxHeight: double.infinity,
+        child: Transform.translate(
+          offset: Offset(0, offset),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final i in tiles) ...[
+                card
+                    ? _CardTile(assetPath: AppAssets.loginWaterfall[i], width: width, height: height)
+                    : _ProductTile(assetPath: AppAssets.loginWaterfall[i], width: width, height: height),
+                SizedBox(height: gap),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -129,11 +165,7 @@ class _WaterfallLane extends StatelessWidget {
 }
 
 class _ProductTile extends StatelessWidget {
-  const _ProductTile({
-    required this.assetPath,
-    required this.width,
-    required this.height,
-  });
+  const _ProductTile({required this.assetPath, required this.width, required this.height});
 
   final String assetPath;
   final double width;
@@ -141,12 +173,44 @@ class _ProductTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(PsSpace.xs),
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Padding(
+        padding: const EdgeInsets.all(PsSpace.xs),
+        child: Image.asset(
+          assetPath,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.medium,
+          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+        ),
+      ),
+    );
+  }
+}
+
+class _CardTile extends StatelessWidget {
+  const _CardTile({required this.assetPath, required this.width, required this.height});
+
+  final String assetPath;
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      padding: const EdgeInsets.all(PsSpace.md),
+      decoration: BoxDecoration(
+        color: PsColors.surface,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: const [
+          BoxShadow(color: Color(0x14000000), blurRadius: 18, offset: Offset(0, 6)),
+        ],
+      ),
       child: Image.asset(
         assetPath,
-        width: width,
-        height: height,
         fit: BoxFit.contain,
         filterQuality: FilterQuality.medium,
         errorBuilder: (_, __, ___) => const SizedBox.shrink(),

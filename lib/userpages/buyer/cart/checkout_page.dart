@@ -39,6 +39,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   /// Store and PickSell vouchers picked; the quote keeps only the ones that apply.
   VoucherPicks _picks = const VoucherPicks();
+
+  /// Logistics company per seller id ("Ship with"); empty = the recommended ones.
+  final Map<int, int> _carriers = {};
   CheckoutVouchers _vouchers = const CheckoutVouchers();
   double _payable = 0;
   Object? _error;
@@ -54,7 +57,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Future<void> _requote({String? code}) async {
     setState(() => _quoting = true);
     try {
-      final r = await _checkout.quote(lineIds: widget.lineIds, voucherCode: _voucher, addressId: _addressId, vouchers: _picks, code: code);
+      final r = await _checkout.quote(lineIds: widget.lineIds, voucherCode: _voucher, addressId: _addressId, vouchers: _picks, code: code, carriers: _carriers);
       if (!mounted) return;
       setState(() {
         _quote = r.quote;
@@ -63,6 +66,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
         _payable = r.payable;
         // The server drops picks that no longer apply (spend changed, used up...).
         _picks = VoucherPicks(stores: r.vouchers.pickedStores, platform: r.vouchers.pickedPlatform);
+        // Keep the server's choice per parcel so the order goes with what was shown.
+        for (final g in r.quote.groups) {
+          final sellerId = g.seller?.id;
+          if (sellerId != null && g.carrierId != null) _carriers[sellerId] = g.carrierId!;
+        }
         _error = null;
         if (r.quote.voucherError != null) _voucher = null;
       });
@@ -105,6 +113,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
     if (mounted) _requote();
   }
 
+  /// Voucher sheets: the page gutter on both sides and room above the home bar.
+  static const _sheetPadding = EdgeInsets.fromLTRB(PsSpace.gutter, PsSpace.xs, PsSpace.gutter, PsSpace.md);
+
   Future<void> _enterVoucher() async {
     final code = await PsBottomSheet.show<String>(
       context,
@@ -123,10 +134,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
     final result = await PsBottomSheet.show<VoucherSheetResult>(
       context,
       title: 'Vouchers',
-      builder: (_) => VoucherPickerSheet(
-        vouchers: _vouchers,
-        picks: _picks,
-        sellerNames: {for (final g in q.groups) if (g.seller != null) g.seller!.id: g.seller!.name},
+      builder: (_) => Padding(
+        padding: _sheetPadding,
+        child: VoucherPickerSheet(
+          vouchers: _vouchers,
+          picks: _picks,
+          sellerNames: {for (final g in q.groups) if (g.seller != null) g.seller!.id: g.seller!.name},
+        ),
       ),
     );
     if (result == null || !mounted) return;
@@ -148,7 +162,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     }
     setState(() => _placing = true);
     try {
-      final placed = await _checkout.place(lineIds: widget.lineIds, voucherCode: _voucher, addressId: _addressId, vouchers: _picks);
+      final placed = await _checkout.place(lineIds: widget.lineIds, voucherCode: _voucher, addressId: _addressId, vouchers: _picks, carriers: _carriers);
       CartStore.instance.reset();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => OrderPlacedPage(result: placed)));
@@ -194,6 +208,17 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
+  /// What blocks this order: the shipping check's own words, or the item problems.
+  static String _issueMessage(CartQuote q) {
+    final reasons = <String>[
+      for (final g in q.groups)
+        if (g.shippingProblem != null) g.shippingProblem!,
+      if (q.lines.any((l) => !l.purchasable))
+        'Some items are no longer available in the quantity you chose. Go back to your cart to adjust them.',
+    ];
+    return reasons.isEmpty ? 'This order can’t be placed right now. Go back to your cart and try again.' : reasons.join('\n\n');
+  }
+
   Widget _body(CartQuote? q) {
     if (q == null) {
       if (_quoting) return const PsSkeletonList(itemCount: 4, thumbnail: false);
@@ -214,7 +239,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
             trailing: InkWell(onTap: _changeAddress, child: Text('Change', style: PsText.link)),
             child: Row(
               children: [
-                const Icon(Icons.add_location_alt_outlined, color: PsColors.primaryStrong),
+                Icon(Icons.add_location_alt_outlined, color: PsColors.primaryStrong),
                 const SizedBox(width: PsSpace.sm),
                 Expanded(child: Text(address == null || address.isDefault ? 'Add your delivery address' : 'Finish this address', style: PsText.link)),
                 const Icon(Icons.chevron_right_rounded),
@@ -243,8 +268,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
             child: PsCard(
               color: PsColors.errorSoft,
               borderColor: PsColors.error.withAlpha(80),
-              child: Text('Some items are no longer available in the quantity you chose. Go back to your cart to adjust them.',
-                  style: PsText.caption.copyWith(color: PsColors.error, fontWeight: FontWeight.w600)),
+              child: Text(_issueMessage(q), style: PsText.caption.copyWith(color: PsColors.errorStrong, fontWeight: FontWeight.w600)),
             ),
           ),
         for (final g in q.groups) ...[
@@ -255,6 +279,26 @@ class _CheckoutPageState extends State<CheckoutPage> {
               for (final l in g.items)
                 PsOrderLineRow(name: l.product.name, image: l.product.image, quantity: l.quantity, unitPrice: l.unitPrice, variationLabel: l.variationLabel),
             ],
+            footer: g.carriers.length > 1
+                ? _CarrierPicker(
+                    options: g.carriers,
+                    busy: _quoting,
+                    onPick: (c) {
+                      final sellerId = g.seller?.id;
+                      if (sellerId == null || c.selected || !c.ok) return;
+                      setState(() => _carriers[sellerId] = c.id);
+                      _requote();
+                    },
+                  )
+                : (g.deliveryLabel == null
+                    ? null
+                    : Row(
+                        children: [
+                          Icon(Icons.local_shipping_outlined, size: 18, color: PsColors.textMuted),
+                          const SizedBox(width: PsSpace.xs),
+                          Expanded(child: Text('Arrives ${g.deliveryLabel}', style: PsText.caption)),
+                        ],
+                      )),
           ),
           const SizedBox(height: PsSpace.sm),
         ],
@@ -270,7 +314,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
               ),
               const SizedBox(width: PsSpace.sm),
               Expanded(child: Text('Cash on Delivery', style: PsText.bodyStrong)),
-              const Icon(Icons.done_all_rounded, color: PsColors.primary),
+              Icon(Icons.done_all_rounded, color: PsColors.primary),
             ],
           ),
         ),
@@ -281,11 +325,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
           onTap: _enterVoucher,
           child: Row(
             children: [
-              const Icon(Icons.sell_outlined, color: PsColors.primaryStrong),
+              Icon(Icons.sell_outlined, color: PsColors.primaryStrong),
               const SizedBox(width: PsSpace.sm),
               Expanded(child: Text('Product voucher', style: PsText.bodyStrong)),
               if (q.voucher != null) PsTag('${q.voucher!.code} · -${formatPeso(q.voucher!.discount)}') else Text('Enter code', style: PsText.caption),
-              const Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
+              Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
             ],
           ),
         ),
@@ -302,7 +346,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
           borderColor: PsColors.primarySoft,
           child: Row(
             children: [
-              const Icon(Icons.payments_outlined, size: 18, color: PsColors.primaryStrong),
+              Icon(Icons.payments_outlined, size: 18, color: PsColors.primaryStrong),
               const SizedBox(width: PsSpace.xs),
               Expanded(
                 child: Text('Prepare ${formatPesoFixed(_payable)} in cash for the rider.',
@@ -337,20 +381,30 @@ class VoucherCodeSheetState extends State<VoucherCodeSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('Enter the voucher code shown on the product page. Codes are case-sensitive.', style: PsText.caption),
-        const SizedBox(height: PsSpace.sm),
-        PsTextField(label: 'Voucher code', controller: _code, textInputAction: TextInputAction.done),
-        const SizedBox(height: PsSpace.md),
-        PsPrimaryButton(label: 'Apply', uppercase: false, onPressed: () => Navigator.of(context).pop(_code.text.trim())),
-        if (widget.initial != null) ...[
-          const SizedBox(height: PsSpace.xs),
-          PsSecondaryButton(label: 'Remove voucher', onPressed: () => Navigator.of(context).pop('')),
+    // Owns its margins, so it looks the same from the cart and from checkout.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(PsSpace.gutter, PsSpace.xs, PsSpace.gutter, PsSpace.lg),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Enter the voucher code shown on the product page. Codes are case-sensitive.', style: PsText.bodyMuted),
+          const SizedBox(height: PsSpace.lg),
+          PsTextField(
+            label: 'Voucher code',
+            hint: 'e.g. SAVE50',
+            controller: _code,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => Navigator.of(context).pop(_code.text.trim()),
+          ),
+          const SizedBox(height: PsSpace.md),
+          PsPrimaryButton(label: 'Apply', uppercase: false, onPressed: () => Navigator.of(context).pop(_code.text.trim())),
+          if (widget.initial != null) ...[
+            const SizedBox(height: PsSpace.sm),
+            PsSecondaryButton.outlined(label: 'Remove voucher', expand: true, onPressed: () => Navigator.of(context).pop('')),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -370,7 +424,7 @@ class _VoucherRow extends StatelessWidget {
       onTap: onTap,
       child: Row(
         children: [
-          const Icon(Icons.confirmation_number_outlined, color: PsColors.primaryStrong),
+          Icon(Icons.confirmation_number_outlined, color: PsColors.primaryStrong),
           const SizedBox(width: PsSpace.sm),
           Expanded(
             child: Column(
@@ -385,7 +439,7 @@ class _VoucherRow extends StatelessWidget {
             ),
           ),
           if (v.total > 0) PsTag('-${formatPesoFixed(v.total)}') else if (usable > 0) const PsTag('SELECT'),
-          const Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
+          Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
         ],
       ),
     );
@@ -405,7 +459,12 @@ class _PlaceBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
-      decoration: const BoxDecoration(color: PsColors.surface, border: Border(top: BorderSide(color: PsColors.border))),
+      decoration: BoxDecoration(
+        color: PsColors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border(top: BorderSide(color: PsColors.border)),
+        boxShadow: PsColors.isDark ? null : const [BoxShadow(color: Color(0x141B1B1B), blurRadius: 24, offset: Offset(0, -6))],
+      ),
       child: SafeArea(
         top: false,
         child: Padding(
@@ -431,6 +490,81 @@ class _PlaceBar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// "Ship with": the logistics companies one store's parcel can go with
+/// (website checkout), each with its fee and arrival window.
+class _CarrierPicker extends StatelessWidget {
+  const _CarrierPicker({required this.options, required this.onPick, this.busy = false});
+
+  final List<CarrierOption> options;
+  final ValueChanged<CarrierOption> onPick;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Ship with', style: PsText.ui.copyWith(fontSize: 13)),
+        const SizedBox(height: PsSpace.xs),
+        for (final c in options) ...[
+          Semantics(
+            inMutuallyExclusiveGroup: true,
+            checked: c.selected,
+            enabled: c.ok,
+            button: true,
+            label: [c.name, if (c.isDefault) 'recommended', if (c.ok) formatPesoFixed(c.fee), c.ok ? (c.etaLabel ?? '') : (c.message ?? 'Not available')].join(', '),
+            excludeSemantics: true,
+            child: Opacity(
+              opacity: c.ok ? 1 : 0.55,
+              child: Material(
+                color: c.selected ? PsColors.primarySoft : PsColors.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(color: c.selected ? PsColors.primary : PsColors.border, width: c.selected ? 1.6 : 1),
+                ),
+                child: InkWell(
+                  onTap: busy || !c.ok || c.selected ? null : () => onPick(c),
+                  customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: PsSpace.sm, vertical: 10),
+                    child: Row(
+                      children: [
+                        Icon(c.selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                            size: 20, color: c.selected ? PsColors.textPrimary : PsColors.textMuted),
+                        const SizedBox(width: PsSpace.sm),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(child: Text(c.name, style: PsText.ui.copyWith(fontSize: 14), overflow: TextOverflow.ellipsis)),
+                                  if (c.isDefault) ...[const SizedBox(width: 6), const PsTag('RECOMMENDED')],
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                c.ok ? (c.etaLabel == null ? 'Date shown after ordering' : 'Arrives ${c.etaLabel}') : (c.message ?? 'Not available for this parcel'),
+                                style: PsText.caption.copyWith(color: c.ok ? null : PsColors.errorStrong),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (c.ok) Text(formatPesoFixed(c.fee), style: PsText.price.copyWith(fontSize: 15)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: PsSpace.xs),
+        ],
+      ],
     );
   }
 }

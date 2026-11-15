@@ -69,7 +69,7 @@ class PsRatingInline extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (r != null) ...[
-          const Icon(Icons.star_rounded, size: 15, color: PsColors.star),
+          Icon(Icons.star_rounded, size: 15, color: PsColors.star),
           const SizedBox(width: 3),
           Text(r.toStringAsFixed(1), style: PsText.caption.copyWith(color: PsColors.textPrimary, fontWeight: FontWeight.w700)),
           if (count != null && count! > 0) Text(' (${compactCount(count!)})', style: PsText.caption),

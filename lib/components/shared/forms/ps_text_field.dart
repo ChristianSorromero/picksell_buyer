@@ -20,7 +20,7 @@ class PsFieldError extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 1),
               child: Icon(Icons.error_rounded, size: 15, color: PsColors.error),
             ),

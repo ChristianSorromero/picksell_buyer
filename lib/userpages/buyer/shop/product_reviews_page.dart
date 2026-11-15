@@ -64,7 +64,7 @@ class _ProductReviewsPageState extends State<ProductReviewsPage> {
                       selected: _filter == f,
                       showCheckmark: false,
                       selectedColor: PsColors.textPrimary,
-                      labelStyle: PsText.caption.copyWith(fontWeight: FontWeight.w600, color: _filter == f ? Colors.white : PsColors.textPrimary),
+                      labelStyle: PsText.caption.copyWith(fontWeight: FontWeight.w600, color: _filter == f ? PsColors.surface : PsColors.textPrimary),
                       onSelected: (_) => setState(() {
                         _filter = f;
                         _key = UniqueKey();

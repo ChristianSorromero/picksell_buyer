@@ -33,7 +33,7 @@ class _MyPicksPageState extends State<MyPicksPage> {
     final ok = await PsProductConfigSheet.show(
       context,
       detail: detail,
-      actionLabel: 'Add to cart',
+      actionLabel: 'Add to Cart',
       onSubmit: (s) => CartStore.instance.add(detail.product, quantity: s.quantity, variationIds: s.variationIds),
     );
     if (!ok || !mounted) return;
@@ -101,7 +101,7 @@ class _MyPicksPageState extends State<MyPicksPage> {
                         onPressed: p.inStock ? () => _moveToCart(p) : null,
                         style: OutlinedButton.styleFrom(
                           foregroundColor: PsColors.textPrimary,
-                          side: const BorderSide(color: PsColors.textPrimary),
+                          side: BorderSide(color: PsColors.textPrimary),
                           minimumSize: const Size.fromHeight(40),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),

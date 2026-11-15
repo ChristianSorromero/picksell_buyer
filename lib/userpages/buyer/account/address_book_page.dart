@@ -210,10 +210,10 @@ class _AddressBookPageState extends State<AddressBookPage> {
                 onTap: _pinDefault,
                 child: Row(
                   children: [
-                    const Icon(Icons.push_pin_outlined, size: 18, color: PsColors.primaryStrong),
+                    Icon(Icons.push_pin_outlined, size: 18, color: PsColors.primaryStrong),
                     const SizedBox(width: PsSpace.xs),
                     Expanded(child: Text('Pin your door on the map so riders find it faster.', style: PsText.caption.copyWith(color: PsColors.primaryStrong))),
-                    const Icon(Icons.chevron_right_rounded, color: PsColors.primaryStrong),
+                    Icon(Icons.chevron_right_rounded, color: PsColors.primaryStrong),
                   ],
                 ),
               ),
@@ -225,7 +225,7 @@ class _AddressBookPageState extends State<AddressBookPage> {
             PsCard(
               child: Row(
                 children: [
-                  const Icon(Icons.bookmark_add_outlined, color: PsColors.textMuted),
+                  Icon(Icons.bookmark_add_outlined, color: PsColors.textMuted),
                   const SizedBox(width: PsSpace.sm),
                   Expanded(child: Text('Save your office, a relative’s house or anywhere else you ship to.', style: PsText.bodyMuted)),
                 ],
@@ -304,7 +304,7 @@ class _AddressTile extends StatelessWidget {
       landmark: incomplete ? 'Incomplete: tap to finish this address' : (pinned ? 'Pinned on the map' : null),
       trailing: PopupMenuButton<_Action>(
         tooltip: 'Address options',
-        icon: const Icon(Icons.more_vert_rounded, color: PsColors.textMuted),
+        icon: Icon(Icons.more_vert_rounded, color: PsColors.textMuted),
         onSelected: onAction,
         itemBuilder: (_) => [
           for (final a in actions)

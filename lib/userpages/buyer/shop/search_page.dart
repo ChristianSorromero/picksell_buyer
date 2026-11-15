@@ -118,7 +118,7 @@ class _SearchPageState extends State<SearchPage> {
                 onTap: () => _open(p),
               ),
             ListTile(
-              leading: const Icon(Icons.arrow_forward_rounded, color: PsColors.primaryStrong),
+              leading: Icon(Icons.arrow_forward_rounded, color: PsColors.primaryStrong),
               title: Text('Search for “${_query.text.trim()}”', style: PsText.link),
               onTap: () => _open(_query.text.trim()),
             ),

@@ -48,9 +48,9 @@ class _ReorderPageState extends State<ReorderPage> {
   Widget build(BuildContext context) {
     return PsAsyncView<List<ReorderItem>>(
       load: _orders.reorderCandidates,
-      loading: const Scaffold(backgroundColor: PsColors.background, body: PsSkeletonList()),
+      loading: Scaffold(backgroundColor: PsColors.background, body: PsSkeletonList()),
       isEmpty: (l) => l.isEmpty,
-      empty: const Scaffold(
+      empty: Scaffold(
         backgroundColor: PsColors.background,
         appBar: PsTopBar(title: 'Buy Again'),
         body: PsEmptyState(icon: Icons.replay_rounded, title: 'Nothing to reorder yet', message: 'Items from your past orders appear here.'),
@@ -108,7 +108,7 @@ class _ReorderPageState extends State<ReorderPage> {
                                 if (!item.available)
                                   const PsTag.muted('OUT OF STOCK')
                                 else if (item.priceChanged)
-                                  const PsTag('PRICE UPDATED', color: PsColors.info, background: PsColors.infoSoft),
+                                  PsTag('PRICE UPDATED', color: PsColors.info, background: PsColors.infoSoft),
                               ],
                             ),
                           ],

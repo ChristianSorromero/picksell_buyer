@@ -43,11 +43,11 @@ class PsOrderLineRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(name, style: PsText.bodyStrong, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  Text(name, style: PsText.ui.copyWith(fontSize: 14, fontWeight: FontWeight.w600, height: 1.3), maxLines: 2, overflow: TextOverflow.ellipsis),
                   if (variationLabel != null) Text(variationLabel!, style: PsText.caption),
                   Text(qty, style: PsText.caption),
                   const SizedBox(height: 2),
-                  Text(formatPesoFixed(unitPrice * quantity), style: PsText.bodyStrong),
+                  Text(formatPesoFixed(unitPrice * quantity), style: PsText.price),
                 ],
               ),
             ),
@@ -82,7 +82,7 @@ class PsOrderSummary extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: PsColors.surface,
-        borderRadius: PsRadius.card,
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: PsColors.border),
       ),
       child: Column(
@@ -92,20 +92,25 @@ class PsOrderSummary extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(PsSpace.md, PsSpace.sm, PsSpace.md, PsSpace.sm),
             child: Row(
               children: [
-                const Icon(Icons.storefront_rounded, size: 18),
-                const SizedBox(width: 8),
-                Flexible(child: Text(sellerName, style: PsText.bodyStrong, overflow: TextOverflow.ellipsis)),
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(color: PsColors.primarySoft, borderRadius: BorderRadius.circular(10)),
+                  child: Icon(Icons.storefront_rounded, size: 17, color: PsColors.textPrimary),
+                ),
+                const SizedBox(width: 10),
+                Flexible(child: Text(sellerName, style: PsText.ui.copyWith(fontSize: 15, fontWeight: FontWeight.w800), overflow: TextOverflow.ellipsis)),
                 if (verified) ...[const SizedBox(width: 4), const PsVerifiedBadge(size: 15)],
                 if (headerTrailing != null) ...[const Spacer(), headerTrailing!],
               ],
             ),
           ),
-          const Divider(),
+          Divider(color: PsColors.divider),
           for (var i = 0; i < lines.length; i++) ...[
-            if (i > 0) const Divider(),
+            if (i > 0) Divider(indent: PsSpace.md, endIndent: PsSpace.md, color: PsColors.divider),
             Padding(padding: const EdgeInsets.symmetric(horizontal: PsSpace.md, vertical: 4), child: lines[i]),
           ],
-          if (footer != null) ...[const Divider(), Padding(padding: const EdgeInsets.all(PsSpace.md), child: footer!)],
+          if (footer != null) ...[Divider(color: PsColors.divider), Padding(padding: const EdgeInsets.all(PsSpace.md), child: footer!)],
         ],
       ),
     );

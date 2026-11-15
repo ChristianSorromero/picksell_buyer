@@ -8,22 +8,22 @@ class AppColors {
 
   // ── Brand ────────────────────────────────────────────────────────────────
   static const Color primary = PsColors.primary;
-  static const Color primaryLight = PsColors.primarySoft;
+  static Color get primaryLight => PsColors.primarySoft;
   static const Color brandOrange = Color(0xFFE8632B); // "SELL" on splash
 
   // ── Backgrounds ──────────────────────────────────────────────────────────
-  static const Color background = PsColors.background;
+  static Color get background => PsColors.background;
   static const Color splashBackground = Color(0xFF121212);
   static const Color inputFill = Color(0xFFF3F4F6);
 
   // ── Text ─────────────────────────────────────────────────────────────────
-  static const Color textPrimary = PsColors.textPrimary;
-  static const Color textSecondary = PsColors.textMuted;
-  static const Color textHint = Color(0xFF9CA3AF);
+  static Color get textPrimary => PsColors.textPrimary;
+  static Color get textSecondary => PsColors.textMuted;
+  static Color get textHint => PsColors.textHint;
 
   // ── Register page (multi-step form) ──────────────────────────────────────
   static const Color label = Color(0xFF1C1C1E);
-  static const Color hint = textHint;
+  static Color get hint => PsColors.textHint;
   static const Color progressBg = Color(0xFFFFDADB);
   static const Color cardShadow = Color(0x1A000000);
 
@@ -33,15 +33,8 @@ class AppColors {
   static const Color verified = Color(0xFF1D9BF0);
 
   // ── Borders / indicators ─────────────────────────────────────────────────
-  static const Color border = Color(0xFFE5E7EB);
+  static Color get border => PsColors.border;
   static const Color dotInactive = Color(0xFFD1D5DB);
-
-  // ── Social ───────────────────────────────────────────────────────────────
-  static const Color facebook = Color(0xFF1877F2);
-  static const Color googleBlue = Color(0xFF4285F4);
-  static const Color googleRed = Color(0xFFEA4335);
-  static const Color googleYellow = Color(0xFFFBBC05);
-  static const Color googleGreen = Color(0xFF34A853);
 
   // ── Placeholder tiles (landing page 3 collage) ───────────────────────────
   static const Color tileGrey = Color(0xFFEFEFEF);

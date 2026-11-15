@@ -24,14 +24,18 @@ class PsRadius {
 
   static const double sm = 8;
   static const double md = 12;
-  static const double lg = 16;
+  static const double lg = 20;
+
+  /// Hero tiles, promo bands and sheets.
+  static const double xl = 24;
   static const double pill = 999;
 
-  static final BorderRadius card = BorderRadius.circular(md);
-  static final BorderRadius field = BorderRadius.circular(md);
-  static final BorderRadius button = BorderRadius.circular(md);
+  /// Soft, rounded cards (modern look): 20 for cards, 14 for buttons and fields.
+  static final BorderRadius card = BorderRadius.circular(lg);
+  static final BorderRadius field = BorderRadius.circular(14);
+  static final BorderRadius button = BorderRadius.circular(14);
   static final BorderRadius sheet =
-      const BorderRadius.vertical(top: Radius.circular(20));
+      const BorderRadius.vertical(top: Radius.circular(28));
 }
 
 class PsSize {
@@ -42,7 +46,7 @@ class PsSize {
   static const double buttonHeight = 52;
   static const double fieldHeight = 52;
   static const double topBarHeight = 56;
-  static const double bottomNavHeight = 64;
+  static const double bottomNavHeight = 58;
   static const double iconSm = 18;
   static const double icon = 22;
 }

@@ -15,7 +15,7 @@ class PlaceholderImage extends StatelessWidget {
     this.width,
     this.height,
     this.fit = BoxFit.contain,
-    this.backgroundColor = AppColors.primaryLight,
+    this.backgroundColor,
     this.iconColor = AppColors.primary,
     this.iconSize = 56,
     this.borderRadius = BorderRadius.zero,
@@ -27,7 +27,7 @@ class PlaceholderImage extends StatelessWidget {
   final double? width;
   final double? height;
   final BoxFit fit;
-  final Color backgroundColor;
+  final Color? backgroundColor;
   final Color iconColor;
   final double iconSize;
   final BorderRadius borderRadius;
@@ -39,7 +39,7 @@ class PlaceholderImage extends StatelessWidget {
       height: height,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: backgroundColor,
+        color: backgroundColor ?? AppColors.primaryLight,
         borderRadius: borderRadius,
       ),
       child: FittedBox(

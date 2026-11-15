@@ -391,6 +391,17 @@ class Category {
   final int productCount;
 
   factory Category.fromJson(Json j) => Category(name: j['name'] as String? ?? '', productCount: toInt(j['product_count']));
+
+  /// The website's categories, in its menu order (partials/navbar.blade.php and
+  /// the seller product form). The API also lists names sellers can't pick
+  /// (Clothing, Pet Supplies), so the app shows only these.
+  static const webOrder = ['Electronics', 'Fashion', 'Home & Living', 'Sports', 'Beauty', 'Food & Grocery', 'Books', 'Toys'];
+
+  /// [all] reduced to the website's categories, in the website's order.
+  static List<Category> alignToWeb(List<Category> all) {
+    final byName = {for (final c in all) c.name.toLowerCase(): c};
+    return [for (final n in webOrder) byName[n.toLowerCase()] ?? Category(name: n)];
+  }
 }
 
 class HomeBanner {
@@ -433,7 +444,7 @@ class HomeFeed {
 
   factory HomeFeed.fromJson(Json j) => HomeFeed(
         banners: listOf(j['banners'], HomeBanner.fromJson),
-        categories: listOf(j['categories'], Category.fromJson),
+        categories: Category.alignToWeb(listOf(j['categories'], Category.fromJson)),
         hotDiscounts: listOf(j['hot_discounts'], Product.fromJson),
         featured: listOf(j['featured'], Product.fromJson),
         recommended: listOf(j['recommended'], Product.fromJson),

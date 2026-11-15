@@ -73,7 +73,7 @@ class PsDateField extends StatelessWidget {
               decoration: psInputDecoration(
                 hint: 'MM / DD / YYYY',
                 hasError: hasError,
-                suffix: const Icon(Icons.calendar_month_outlined, color: PsColors.textHint),
+                suffix: Icon(Icons.calendar_month_outlined, color: PsColors.textHint),
               ),
               child: Text(value == null ? '' : format(value!), style: PsText.input),
             ),

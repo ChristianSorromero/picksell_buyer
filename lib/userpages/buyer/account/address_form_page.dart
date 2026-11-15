@@ -199,9 +199,9 @@ class _PinCard extends StatelessWidget {
             ),
           ),
           if (onRemove != null)
-            IconButton(tooltip: 'Remove pin', onPressed: onRemove, icon: const Icon(Icons.close_rounded, color: PsColors.textMuted))
+            IconButton(tooltip: 'Remove pin', onPressed: onRemove, icon: Icon(Icons.close_rounded, color: PsColors.textMuted))
           else
-            const Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
+            Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
         ],
       ),
     );

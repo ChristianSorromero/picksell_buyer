@@ -38,12 +38,12 @@ void main() {
 
     // Invalid email is caught before any request.
     await tester.enterText(find.byType(TextField).first, 'not-an-email');
-    await tester.tap(find.text('SEND CODE'));
+    await tester.tap(find.text('Send code'));
     await tester.pumpAndSettle();
     expect(api.calls('POST', '/password/forgot'), isEmpty);
 
     await tester.enterText(find.byType(TextField).first, 'ana@test.ph');
-    await tester.tap(find.text('SEND CODE'));
+    await tester.tap(find.text('Send code'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(jsonDecode(api.calls('POST', '/password/forgot').single.body), {'email': 'ana@test.ph'});
@@ -58,9 +58,9 @@ void main() {
       await tester.ensureVisible(finder);
       await tester.enterText(finder, text);
     }
-    await tester.ensureVisible(find.text('RESET PASSWORD'));
+    await tester.ensureVisible(find.text('Reset password'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('RESET PASSWORD'));
+    await tester.tap(find.text('Reset password'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(api.calls('POST', '/password/reset'), hasLength(1));
@@ -70,9 +70,9 @@ void main() {
 
     await tester.ensureVisible(codeField);
     await tester.enterText(codeField, '123456');
-    await tester.ensureVisible(find.text('RESET PASSWORD'));
+    await tester.ensureVisible(find.text('Reset password'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('RESET PASSWORD'));
+    await tester.tap(find.text('Reset password'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(api.calls('POST', '/password/reset'), hasLength(2));

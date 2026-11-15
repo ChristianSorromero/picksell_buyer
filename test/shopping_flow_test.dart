@@ -158,7 +158,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Submit without choosing → both groups flagged.
-    await tester.tap(find.text('ADD TO CART'));
+    await tester.tap(find.descendant(of: find.byType(BottomSheet), matching: find.text('Add to Cart')));
     await tester.pumpAndSettle();
     expect(find.text('Please select'), findsNWidgets(2));
     expect(api.calls('POST', '/buyer/cart'), isEmpty);
@@ -170,7 +170,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.descendant(of: sheet, matching: find.bySemanticsLabel('L, sold out')), findsOneWidget);
 
-    await tester.tap(find.text('ADD TO CART'));
+    await tester.tap(find.descendant(of: find.byType(BottomSheet), matching: find.text('Add to Cart')));
     await tester.pumpAndSettle();
     final sent = jsonDecode(api.calls('POST', '/buyer/cart').single.body) as Map;
     expect(sent['variation_ids'], [21]);
@@ -203,6 +203,8 @@ void main() {
 
     expect(find.text('Order Placed'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Cancel Order'), 200);
+    await tester.ensureVisible(find.text('Cancel Order'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Cancel Order'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ordered by mistake'));

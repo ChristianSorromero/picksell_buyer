@@ -193,7 +193,7 @@ class PsAddressFieldsState extends State<PsAddressFields> {
             borderColor: PsColors.warningSoft,
             child: Row(
               children: [
-                const Icon(Icons.info_outline_rounded, size: 18, color: PsColors.warning),
+                Icon(Icons.info_outline_rounded, size: 18, color: PsColors.warning),
                 const SizedBox(width: PsSpace.xs),
                 Expanded(child: Text('Couldn’t load the address directory. Type your address instead.', style: PsText.caption.copyWith(color: PsColors.warning))),
               ],

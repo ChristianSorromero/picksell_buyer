@@ -55,7 +55,7 @@ class PsPhoneField extends StatelessWidget {
             children: [
               Text('+63', style: PsText.input.copyWith(fontWeight: FontWeight.w600, color: PsColors.textSecondary)),
               const SizedBox(width: 12),
-              const VerticalDivider(width: 1, thickness: 1, color: PsColors.border, indent: 2, endIndent: 2),
+              VerticalDivider(width: 1, thickness: 1, color: PsColors.border, indent: 2, endIndent: 2),
             ],
           ),
         ),

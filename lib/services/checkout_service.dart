@@ -58,12 +58,14 @@ class CheckoutService {
     int? addressId,
     VoucherPicks vouchers = const VoucherPicks(),
     String? code,
+    Map<int, int> carriers = const {},
   }) async {
     final j = await _api.postJson('/buyer/checkout/quote', {
       'item_ids': lineIds,
       if (voucherCode != null && voucherCode.isNotEmpty) 'voucher_code': voucherCode,
       if (addressId != null) 'address_id': addressId,
       ...vouchers.toJson(),
+      if (carriers.isNotEmpty) 'carriers': {for (final e in carriers.entries) '${e.key}': e.value},
       if (code != null && code.trim().isNotEmpty) 'code': code.trim(),
     });
     final v = mapOrNull(j['vouchers']);
@@ -85,6 +87,7 @@ class CheckoutService {
     String? voucherCode,
     int? addressId,
     VoucherPicks vouchers = const VoucherPicks(),
+    Map<int, int> carriers = const {},
   }) async {
     final j = await _api.postJson('/buyer/checkout', {
       'item_ids': lineIds,
@@ -92,6 +95,7 @@ class CheckoutService {
       if (voucherCode != null && voucherCode.isNotEmpty) 'voucher_code': voucherCode,
       if (addressId != null) 'address_id': addressId,
       ...vouchers.toJson(),
+      if (carriers.isNotEmpty) 'carriers': {for (final e in carriers.entries) '${e.key}': e.value},
     });
     return PlacedCheckout(
       checkoutRef: j['checkout_ref'] as String? ?? '',

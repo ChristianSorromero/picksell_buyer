@@ -69,7 +69,23 @@ class CartGroup {
     required this.subtotal,
     this.discount = 0,
     this.shippingFee = 0,
+    this.shippingProblem,
+    this.carriers = const [],
+    this.carrierId,
+    this.deliveryLabel,
   });
+
+  /// Why this seller's parcel can't be shipped (website's shipping check), or null.
+  final String? shippingProblem;
+
+  /// Logistics companies this parcel can go with (website checkout's "Ship with").
+  final List<CarrierOption> carriers;
+
+  /// The chosen company's id (the recommended one unless the buyer picked another).
+  final int? carrierId;
+
+  /// "Nov 18 – 20" style arrival window for the chosen company, when known.
+  final String? deliveryLabel;
 
   final SellerBrief? seller;
   final List<CartLine> items;
@@ -83,6 +99,53 @@ class CartGroup {
         subtotal: toDouble(j['subtotal']),
         discount: toDouble(j['discount']),
         shippingFee: toDouble(j['shipping_fee']),
+        shippingProblem: _shippingProblem(mapOrNull(j['shipping'])),
+        carriers: listOf(j['carriers'], CarrierOption.fromJson),
+        carrierId: j['carrier'] == null ? null : int.tryParse('${j['carrier']}'),
+        deliveryLabel: toStr(mapOrNull(mapOrNull(j['shipping'])?['estimated_delivery'])?['label']),
+      );
+
+  static String? _shippingProblem(Json? s) {
+    if (s == null || s['ok'] != false) return null;
+    return toStr(s['message']) ?? 'We could not calculate shipping for these items.';
+  }
+}
+
+/// One logistics company a seller's parcel can ship with, priced for this checkout.
+class CarrierOption {
+  const CarrierOption({
+    required this.id,
+    required this.name,
+    this.isDefault = false,
+    this.selected = false,
+    this.ok = true,
+    this.fee = 0,
+    this.etaLabel,
+    this.message,
+  });
+
+  final int id;
+  final String name;
+
+  /// PickSell's own (Pickrush): shown as "recommended", as on the website.
+  final bool isDefault;
+  final bool selected;
+
+  /// False when this company can't take the parcel ([message] says why).
+  final bool ok;
+  final double fee;
+  final String? etaLabel;
+  final String? message;
+
+  factory CarrierOption.fromJson(Json j) => CarrierOption(
+        id: toInt(j['id']),
+        name: toStr(j['name']) ?? 'Courier',
+        isDefault: j['is_default'] == true,
+        selected: j['selected'] == true,
+        ok: j['ok'] != false,
+        fee: toDouble(j['delivery_fee']),
+        etaLabel: toStr(mapOrNull(j['estimated_delivery'])?['label']),
+        message: toStr(j['message']),
       );
 }
 

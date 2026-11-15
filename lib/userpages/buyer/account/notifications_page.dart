@@ -4,7 +4,7 @@ import '../../../components/components.dart';
 import '../../../format_utils.dart';
 import '../../../models/account.dart';
 import '../../../services/account_service.dart';
-import '../nav.dart';
+import 'notification_detail_page.dart';
 
 /// SYS-C16 Notification Center wired to order tracking events.
 class NotificationsPage extends StatefulWidget {
@@ -85,7 +85,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
               body: n.body,
               timeLabel: n.occurredAt == null ? '' : formatRelative(n.occurredAt!),
               unread: n.unread,
-              onTap: n.orderId == null ? null : () => openOrder(context, n.orderId!),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => NotificationDetailPage(notification: n, icon: _style(n.status).$1, iconColor: _style(n.status).$2),
+              )),
             ),
         ],
       ),

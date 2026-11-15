@@ -146,7 +146,7 @@ class _MapPinPageState extends State<MapPinPage> {
                   ],
                 ),
                 // The pin's tip marks the middle of the map.
-                const IgnorePointer(
+                IgnorePointer(
                   child: Center(
                     child: Padding(
                       padding: EdgeInsets.only(bottom: 44),

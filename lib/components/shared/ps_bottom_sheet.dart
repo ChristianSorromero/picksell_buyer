@@ -70,7 +70,7 @@ class PsBottomSheet {
               ),
               subtitle: o.description == null ? null : Text(o.description!, style: PsText.caption),
               trailing: o.value == selected
-                  ? const Icon(Icons.check_rounded, color: PsColors.primaryStrong)
+                  ? Icon(Icons.check_rounded, color: PsColors.primaryStrong)
                   : null,
               onTap: () => Navigator.of(ctx).pop(o.value),
             ),

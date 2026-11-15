@@ -131,7 +131,7 @@ class PsNotificationTile extends StatelessWidget {
                   child: Container(
                     width: 8,
                     height: 8,
-                    decoration: const BoxDecoration(color: PsColors.primary, shape: BoxShape.circle),
+                    decoration: BoxDecoration(color: PsColors.primary, shape: BoxShape.circle),
                   ),
                 ),
             ],

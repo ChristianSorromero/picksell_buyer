@@ -24,9 +24,9 @@ class RegisterPage extends StatefulWidget {
 
 enum _Step {
   personal('Personal Information', 'Create your account', 'Let’s start with your personal information.'),
-  contact('Contact Information', 'Your contact details', 'We’ll send a code to verify your email.'),
-  address('Address and ID', 'Address and valid ID', 'We deliver to this address. Admins check your ID before approving your account.'),
-  security('Security and Consent', 'Secure your account', 'Create a strong password to protect your account.');
+  credentials('Account Credentials', 'Your login details', 'Verify your email with a 6-digit code, then create a strong password.'),
+  address('Address', 'Your address', 'We deliver to this address.'),
+  validId('Valid ID', 'Upload a valid ID', 'Admins check your ID before approving your account.');
 
   const _Step(this.label, this.title, this.subtitle);
 
@@ -42,20 +42,21 @@ enum _Step {
       case 'middle_initial':
       case 'birthday':
       case 'sex':
+      case 'contact_no':
         return personal;
       case 'email':
-      case 'contact_no':
       case 'registration_token':
-        return contact;
+      case 'password':
+      case 'password_confirmation':
+        return credentials;
       case 'province':
       case 'municipality':
       case 'barangay':
       case 'street':
       case 'house_no':
-      case 'id_upload':
         return address;
       default:
-        return security;
+        return validId;
     }
   }
 }
@@ -80,7 +81,7 @@ class _RegisterPageState extends State<RegisterPage> {
   DateTime? _birthday;
   String? _sex;
 
-  // Step 2
+  // Step 1 (mobile) and step 2 (email)
   final _email = TextEditingController();
   final _mobile = TextEditingController();
 
@@ -88,7 +89,7 @@ class _RegisterPageState extends State<RegisterPage> {
   String? _registrationToken;
   String? _verifiedEmail;
 
-  // Step 3 — kept here because the step's widgets are rebuilt when it reappears.
+  // Step 3 (address) and step 4 (valid ID) — kept here because the step's widgets are rebuilt when it reappears.
   final _addressKey = GlobalKey<PsAddressFieldsState>();
   String _province = '';
   String _municipality = '';
@@ -97,7 +98,7 @@ class _RegisterPageState extends State<RegisterPage> {
   String? _houseNo;
   List<String> _idPhoto = [];
 
-  // Step 4
+  // Step 2 (password) and step 4 (consent)
   final _password = TextEditingController();
   final _confirm = TextEditingController();
   bool _acceptedTerms = false;
@@ -106,6 +107,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _lastNameFocus = FocusNode();
   final _mobileFocus = FocusNode();
   final _confirmFocus = FocusNode();
+  final _passwordFocus = FocusNode();
 
   @override
   void initState() {
@@ -118,7 +120,7 @@ class _RegisterPageState extends State<RegisterPage> {
     for (final c in [_firstName, _middleInitial, _lastName, _email, _mobile, _password, _confirm]) {
       c.dispose();
     }
-    for (final f in [_lastNameFocus, _mobileFocus, _confirmFocus]) {
+    for (final f in [_lastNameFocus, _mobileFocus, _confirmFocus, _passwordFocus]) {
       f.dispose();
     }
     super.dispose();
@@ -157,10 +159,10 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   static const Map<_Step, List<String>> _fields = {
-    _Step.personal: ['first_name', 'last_name', 'birthday', 'sex'],
-    _Step.contact: ['email', 'contact_no'],
-    _Step.address: ['id_upload'],
-    _Step.security: ['password', 'password_confirmation', 'terms', 'confirmed'],
+    _Step.personal: ['first_name', 'last_name', 'birthday', 'sex', 'contact_no'],
+    _Step.credentials: ['email', 'password', 'password_confirmation'],
+    _Step.address: [],
+    _Step.validId: ['id_upload', 'terms', 'confirmed'],
   };
 
   /// Validates every field on [step]; returns true when all pass.
@@ -196,7 +198,7 @@ class _RegisterPageState extends State<RegisterPage> {
         _errors[field] = error;
       }
       // Changing the password can fix or break the confirmation match.
-      if (field == 'password' && _confirm.text.isNotEmpty && _attempted.contains(_Step.security)) {
+      if (field == 'password' && _confirm.text.isNotEmpty && _attempted.contains(_Step.credentials)) {
         final c = _validate('password_confirmation');
         c == null ? _errors.remove('password_confirmation') : _errors['password_confirmation'] = c;
       }
@@ -250,12 +252,12 @@ class _RegisterPageState extends State<RegisterPage> {
 
     switch (_step) {
       case _Step.personal:
-        setState(() => _goTo(_Step.contact));
-      case _Step.contact:
+        setState(() => _goTo(_Step.credentials));
+      case _Step.credentials:
         await _checkContactAndVerify();
       case _Step.address:
-        setState(() => _goTo(_Step.security));
-      case _Step.security:
+        setState(() => _goTo(_Step.validId));
+      case _Step.validId:
         await _createAccount();
     }
   }
@@ -337,7 +339,7 @@ class _RegisterPageState extends State<RegisterPage> {
     if (token == null || _verifiedEmail != _email.text.trim().toLowerCase()) {
       setState(() {
         _errors['email'] = 'Verify your email to continue.';
-        _goTo(_Step.contact);
+        _goTo(_Step.credentials);
       });
       return;
     }
@@ -424,8 +426,8 @@ class _RegisterPageState extends State<RegisterPage> {
             showDivider: _step != _Step.personal,
             primary: PsPrimaryButton(
               label: switch (_step) {
-                _Step.contact => _registrationToken != null && _verifiedEmail == _email.text.trim().toLowerCase() ? 'Continue' : 'Send code',
-                _Step.security => 'Submit registration',
+                _Step.credentials => _registrationToken != null && _verifiedEmail == _email.text.trim().toLowerCase() ? 'Continue' : 'Verify email',
+                _Step.validId => 'Submit registration',
                 _ => 'Continue',
               },
               loading: _busy,
@@ -539,32 +541,6 @@ class _RegisterPageState extends State<RegisterPage> {
             ],
           ),
           if (_errors['sex'] != null) PsFieldError(_errors['sex']!),
-        ];
-
-      case _Step.contact:
-        return [
-          PsTextField(
-            label: 'Email',
-            hint: 'name@example.com',
-            controller: _email,
-            errorText: _errors['email'],
-            keyboardType: TextInputType.emailAddress,
-            autofillHints: const [AutofillHints.email],
-            inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
-            onChanged: (_) => _onEdited('email'),
-            onSubmitted: (_) => _mobileFocus.requestFocus(),
-          ),
-          if (_registrationToken != null && _verifiedEmail == _email.text.trim().toLowerCase())
-            Padding(
-              padding: const EdgeInsets.only(top: 6, left: 4),
-              child: Row(
-                children: [
-                  const Icon(Icons.verified_rounded, size: 16, color: PsColors.success),
-                  const SizedBox(width: 4),
-                  Text('Email verified', style: PsText.caption.copyWith(color: PsColors.success, fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ),
           gap,
           PsPhoneField(
             controller: _mobile,
@@ -575,40 +551,36 @@ class _RegisterPageState extends State<RegisterPage> {
           ),
         ];
 
-      case _Step.address:
+      case _Step.credentials:
         return [
-          PsAddressFields(
-            key: _addressKey,
-            province: _province,
-            municipality: _municipality,
-            barangay: _barangay,
-            street: _street,
-            houseNo: _houseNo,
-            errors: _errors,
+          PsTextField(
+            label: 'Email',
+            hint: 'name@example.com',
+            controller: _email,
+            errorText: _errors['email'],
+            keyboardType: TextInputType.emailAddress,
+            autofillHints: const [AutofillHints.email],
+            inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
+            onChanged: (_) => _onEdited('email'),
+            onSubmitted: (_) => _passwordFocus.requestFocus(),
           ),
+          if (_registrationToken != null && _verifiedEmail == _email.text.trim().toLowerCase())
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 4),
+              child: Row(
+                children: [
+                  Icon(Icons.verified_rounded, size: 16, color: PsColors.success),
+                  const SizedBox(width: 4),
+                  Text('Email verified', style: PsText.caption.copyWith(color: PsColors.success, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
           gap,
-          const PsFieldLabel('Valid ID'),
-          Padding(
-            padding: const EdgeInsets.only(bottom: PsSpace.xs),
-            child: Text('A clear photo of a government-issued ID. Only PickSell admins see it.', style: PsText.caption),
-          ),
-          EvidencePicker(
-            paths: _idPhoto,
-            max: 1,
-            onChanged: (p) {
-              _idPhoto = p;
-              _onEdited('id_upload');
-            },
-          ),
-          if (_errors['id_upload'] != null) PsFieldError(_errors['id_upload']!),
-        ];
-
-      case _Step.security:
-        return [
           PsTextField(
             label: 'Password',
             hint: 'Create a password',
             controller: _password,
+            focusNode: _passwordFocus,
             obscure: true,
             errorText: _errors['password'],
             autofillHints: const [AutofillHints.newPassword],
@@ -628,7 +600,38 @@ class _RegisterPageState extends State<RegisterPage> {
             autofillHints: const [AutofillHints.newPassword],
             onChanged: (_) => _onEdited('password_confirmation'),
           ),
-          const SizedBox(height: PsSpace.md),
+        ];
+
+      case _Step.address:
+        return [
+          PsAddressFields(
+            key: _addressKey,
+            province: _province,
+            municipality: _municipality,
+            barangay: _barangay,
+            street: _street,
+            houseNo: _houseNo,
+            errors: _errors,
+          ),
+        ];
+
+      case _Step.validId:
+        return [
+          const PsFieldLabel('Valid ID'),
+          Padding(
+            padding: const EdgeInsets.only(bottom: PsSpace.xs),
+            child: Text('A clear photo of a government-issued ID (JPG or PNG, up to 5 MB). Only PickSell admins see it.', style: PsText.caption),
+          ),
+          EvidencePicker(
+            paths: _idPhoto,
+            max: 1,
+            onChanged: (p) {
+              _idPhoto = p;
+              _onEdited('id_upload');
+            },
+          ),
+          if (_errors['id_upload'] != null) PsFieldError(_errors['id_upload']!),
+          const SizedBox(height: PsSpace.lg),
           PsCheckboxTile(
             value: _acceptedTerms,
             errorText: _errors['terms'],
@@ -681,8 +684,8 @@ class _RegistrationSubmittedPage extends StatelessWidget {
             child: Container(
               width: 96,
               height: 96,
-              decoration: const BoxDecoration(color: PsColors.primarySoft, shape: BoxShape.circle),
-              child: const Icon(Icons.hourglass_top_rounded, size: 44, color: PsColors.primary),
+              decoration: BoxDecoration(color: PsColors.primarySoft, shape: BoxShape.circle),
+              child: Icon(Icons.hourglass_top_rounded, size: 44, color: PsColors.primary),
             ),
           ),
           const SizedBox(height: PsSpace.lg),

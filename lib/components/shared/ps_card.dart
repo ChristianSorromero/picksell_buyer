@@ -15,8 +15,8 @@ class PsCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(PsSpace.md),
     this.onTap,
     this.margin,
-    this.color = PsColors.surface,
-    this.borderColor = PsColors.border,
+    this.color,
+    this.borderColor,
   });
 
   final Widget child;
@@ -29,8 +29,8 @@ class PsCard extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
   final EdgeInsetsGeometry? margin;
-  final Color color;
-  final Color borderColor;
+  final Color? color;
+  final Color? borderColor;
 
   @override
   Widget build(BuildContext context) {
@@ -56,8 +56,8 @@ class PsCard extends StatelessWidget {
     return Padding(
       padding: margin ?? EdgeInsets.zero,
       child: Material(
-        color: color,
-        shape: RoundedRectangleBorder(borderRadius: PsRadius.card, side: BorderSide(color: borderColor)),
+        color: color ?? PsColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: PsRadius.card, side: BorderSide(color: borderColor ?? PsColors.border)),
         clipBehavior: Clip.antiAlias,
         child: onTap == null ? body : InkWell(onTap: onTap, child: body),
       ),
@@ -173,7 +173,7 @@ class _Radio extends StatelessWidget {
         duration: PsMotion.fast,
         width: selected ? 11 : 0,
         height: selected ? 11 : 0,
-        decoration: const BoxDecoration(color: PsColors.primary, shape: BoxShape.circle),
+        decoration: BoxDecoration(color: PsColors.primary, shape: BoxShape.circle),
       ),
     );
   }
@@ -181,15 +181,22 @@ class _Radio extends StatelessWidget {
 
 /// Small rounded tag: "OFFICIAL", "RECOMMENDED", "Coming Soon", "WORK".
 class PsTag extends StatelessWidget {
-  const PsTag(this.label, {super.key, this.color = PsColors.primaryStrong, this.background = PsColors.primarySoft, this.icon});
+  const PsTag(this.label, {super.key, Color? color, Color? background, this.icon})
+      : _color = color,
+        _background = background,
+        _muted = false;
 
   const PsTag.muted(this.label, {super.key, this.icon})
-      : color = PsColors.textMuted,
-        background = PsColors.neutralSoft;
+      : _color = null,
+        _background = null,
+        _muted = true;
 
   final String label;
-  final Color color;
-  final Color background;
+  final Color? _color;
+  final Color? _background;
+  final bool _muted;
+  Color get color => _color ?? (_muted ? PsColors.textMuted : PsColors.primaryStrong);
+  Color get background => _background ?? (_muted ? PsColors.neutralSoft : PsColors.primarySoft);
   final IconData? icon;
 
   @override

@@ -61,7 +61,7 @@ class _StorePageState extends State<StorePage> {
                                 children: [
                                   Row(children: [
                                     Flexible(child: Text(s.name, style: PsText.heading.copyWith(fontSize: 20))),
-                                    if (s.verified) ...[const SizedBox(width: 6), const PsTag('VERIFIED', icon: Icons.verified_rounded, color: PsColors.success, background: PsColors.successSoft)],
+                                    if (s.verified) ...[const SizedBox(width: 6), PsTag('VERIFIED', icon: Icons.verified_rounded, color: PsColors.success, background: PsColors.successSoft)],
                                   ]),
                                   if (s.rating != null) PsRatingInline(rating: s.rating, count: s.reviewCount),
                                   if (s.location.isNotEmpty) Text(s.location, style: PsText.caption),

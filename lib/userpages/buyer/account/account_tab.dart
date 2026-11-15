@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../../components/components.dart';
+import '../../../core/theme/theme_prefs.dart';
 import '../../../models/account.dart';
 import '../../../page_transitions.dart';
 import '../../../services/account_service.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/cart_service.dart';
 import '../../../services/wishlist_service.dart';
-import '../../landing_page1.dart';
+import '../../welcome_page.dart';
 import '../nav.dart';
 import '../orders/reorder_page.dart';
 import 'address_book_page.dart';
@@ -68,7 +69,7 @@ class _AccountTabState extends State<AccountTab> {
     WishlistStore.instance.clear();
     NotificationBadge.instance.value = 0;
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(fadeRoute(const LandingPage1()), (_) => false);
+    Navigator.of(context).pushAndRemoveUntil(fadeRoute(const WelcomePage()), (_) => false);
   }
 
   @override
@@ -97,13 +98,13 @@ class _AccountTabState extends State<AccountTab> {
           padding: const EdgeInsets.all(PsSpace.gutter),
           children: [
             PsAccountSummary(profile: a.profile, onEdit: () => _push(EditProfilePage(profile: a.profile))),
-            const SizedBox(height: PsSpace.sm),
+            const SizedBox(height: PsSpace.md),
             PsOrderStatusSummary(
               counts: a.orderCounts,
               onTab: (t) => openOrders(context, initial: t).then((_) => _view.currentState?.reload()),
               onViewAll: () => openOrders(context).then((_) => _view.currentState?.reload()),
             ),
-            const SizedBox(height: PsSpace.sm),
+            const SizedBox(height: PsSpace.md),
             PsCard(
               title: 'Shopping',
               child: Column(
@@ -118,7 +119,7 @@ class _AccountTabState extends State<AccountTab> {
                 ],
               ),
             ),
-            const SizedBox(height: PsSpace.sm),
+            const SizedBox(height: PsSpace.md),
             PsCard(
               title: 'Settings',
               child: Column(
@@ -138,13 +139,36 @@ class _AccountTabState extends State<AccountTab> {
                     onTap: () => PsToast.show(context, 'PickSell orders are paid in cash when they arrive.'),
                   ),
                   const Divider(),
-                  PsMenuTile(icon: Icons.person_outline_rounded, label: 'Edit Profile', onTap: () => _push(EditProfilePage(profile: a.profile))),
-                  const Divider(),
                   PsMenuTile(icon: Icons.lock_outline_rounded, label: 'Change Password', onTap: () => _push(const ChangePasswordPage())),
+                  const Divider(),
+                  ValueListenableBuilder<ThemeMode>(
+                    valueListenable: ThemePrefs.mode,
+                    builder: (_, mode, __) => PsMenuTile(
+                      icon: Icons.dark_mode_outlined,
+                      label: 'Appearance',
+                      subtitle: ThemePrefs.label(mode),
+                      onTap: () async {
+                        final picked = await PsBottomSheet.options<ThemeMode>(
+                          context,
+                          title: 'Appearance',
+                          selected: mode,
+                          options: [
+                            for (final (m, icon) in [
+                              (ThemeMode.system, Icons.phone_android_rounded),
+                              (ThemeMode.light, Icons.light_mode_outlined),
+                              (ThemeMode.dark, Icons.dark_mode_outlined),
+                            ])
+                              PsSheetOption(value: m, label: ThemePrefs.label(m), icon: icon),
+                          ],
+                        );
+                        if (picked != null) await ThemePrefs.set(picked);
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: PsSpace.sm),
+            const SizedBox(height: PsSpace.md),
             PsCard(
               child: Column(
                 children: [
@@ -154,7 +178,7 @@ class _AccountTabState extends State<AccountTab> {
                 ],
               ),
             ),
-            const SizedBox(height: PsSpace.lg),
+            const SizedBox(height: PsSpace.xl),
           ],
         ),
       ),

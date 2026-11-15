@@ -42,7 +42,7 @@ class PsToast {
               Icon(icon, color: color, size: 20),
               const SizedBox(width: PsSpace.sm),
               Expanded(
-                child: Text(message, style: PsText.body.copyWith(color: Colors.white)),
+                child: Text(message, style: PsText.body.copyWith(color: PsColors.surface)),
               ),
             ],
           ),

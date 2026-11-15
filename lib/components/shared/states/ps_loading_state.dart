@@ -22,7 +22,7 @@ class PsLoadingState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox.square(
+            SizedBox.square(
               dimension: 32,
               child: CircularProgressIndicator(strokeWidth: 3, color: PsColors.primary),
             ),

@@ -44,7 +44,7 @@ class PsAddressCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 2),
             child: Icon(Icons.location_on_rounded, color: PsColors.primary, size: 20),
           ),
@@ -70,7 +70,7 @@ class PsAddressCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Icons.near_me_outlined, size: 14, color: PsColors.textMuted),
+                      Icon(Icons.near_me_outlined, size: 14, color: PsColors.textMuted),
                       const SizedBox(width: 4),
                       Flexible(child: Text(landmark!, style: PsText.caption)),
                     ],

@@ -84,7 +84,7 @@ class RefundStatusPage extends StatelessWidget {
                           ],
                         ),
                       ),
-                      const Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
+                      Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
                     ],
                   ),
                 ),

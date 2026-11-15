@@ -14,7 +14,7 @@ class PsStateLayout extends StatelessWidget {
     this.message,
     this.action,
     this.iconColor = PsColors.primary,
-    this.haloColor = PsColors.primarySoft,
+    this.haloColor,
     this.compact = false,
   });
 
@@ -23,7 +23,7 @@ class PsStateLayout extends StatelessWidget {
   final String? message;
   final Widget? action;
   final Color iconColor;
-  final Color haloColor;
+  final Color? haloColor;
 
   /// Smaller halo and spacing for use inside cards or dialogs.
   final bool compact;
@@ -37,7 +37,7 @@ class PsStateLayout extends StatelessWidget {
         Container(
           width: halo,
           height: halo,
-          decoration: BoxDecoration(color: haloColor, shape: BoxShape.circle),
+          decoration: BoxDecoration(color: haloColor ?? PsColors.primarySoft, shape: BoxShape.circle),
           child: Icon(icon, size: halo * 0.42, color: iconColor),
         ),
         SizedBox(height: compact ? PsSpace.md : PsSpace.lg),

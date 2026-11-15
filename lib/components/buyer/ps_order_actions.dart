@@ -41,15 +41,18 @@ class PsMenuTile extends StatelessWidget {
               Container(
                 width: 40,
                 height: 40,
-                decoration: const BoxDecoration(color: PsColors.surfaceMuted, shape: BoxShape.circle),
-                child: Icon(icon, size: 20, color: color),
+                decoration: BoxDecoration(
+                  color: destructive ? PsColors.errorSoft : PsColors.neutralSoft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 20, color: destructive ? PsColors.errorStrong : color),
               ),
               const SizedBox(width: PsSpace.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(label, style: PsText.bodyStrong.copyWith(color: color)),
+                    Text(label, style: PsText.ui.copyWith(fontSize: 14, color: destructive ? PsColors.errorStrong : color)),
                     if (subtitle != null) Text(subtitle!, style: PsText.caption),
                   ],
                 ),
@@ -111,9 +114,9 @@ class PsOrderActionGroup extends StatelessWidget {
       else if (a.canReturn && onReturn != null)
         PsMenuTile(icon: Icons.inventory_2_outlined, label: 'Return / Refund', onTap: onReturn),
       if (a.canReport && onReport != null) PsMenuTile(icon: Icons.report_problem_outlined, label: 'Report a Problem', onTap: onReport),
-      if (a.canCancel && onCancel != null) PsMenuTile(icon: Icons.cancel_outlined, label: 'Cancel Order', destructive: true, onTap: onCancel),
     ];
-    if (buttons.isEmpty && rows.isEmpty) return const SizedBox.shrink();
+    final cancel = a.canCancel && onCancel != null;
+    if (buttons.isEmpty && rows.isEmpty && !cancel) return const SizedBox.shrink();
 
     return PsCard(
       title: 'Actions',
@@ -132,6 +135,11 @@ class PsOrderActionGroup extends StatelessWidget {
             ),
           if (buttons.isNotEmpty && rows.isNotEmpty) const SizedBox(height: PsSpace.sm),
           for (var i = 0; i < rows.length; i++) ...[if (i > 0) const Divider(), rows[i]],
+          // Cancelling stands apart from everything else: a red outlined button, last.
+          if (cancel) ...[
+            if (buttons.isNotEmpty || rows.isNotEmpty) ...[const SizedBox(height: PsSpace.sm), const Divider(), const SizedBox(height: PsSpace.sm)],
+            PsSecondaryButton.outlined(label: 'Cancel Order', icon: Icons.cancel_outlined, destructive: true, expand: true, onPressed: onCancel),
+          ],
         ],
       ),
     );

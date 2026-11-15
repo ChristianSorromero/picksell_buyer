@@ -16,7 +16,7 @@ class PsPrimaryButton extends StatelessWidget {
     this.loading = false,
     this.icon,
     this.trailingIcon,
-    this.uppercase = true,
+    this.uppercase = false,
     this.expand = true,
     this.height = PsSize.buttonHeight,
   });
@@ -27,7 +27,8 @@ class PsPrimaryButton extends StatelessWidget {
   final IconData? icon;
   final IconData? trailingIcon;
 
-  /// Form CTAs ("CONTINUE") are uppercase; in-card actions ("Track Order") aren't.
+  /// Labels read as written ("Add to Cart") everywhere; pass true only for a
+  /// deliberate all-caps label.
   final bool uppercase;
   final bool expand;
   final double height;
@@ -38,7 +39,7 @@ class PsPrimaryButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = PsText.button;
     final content = loading
-        ? const SizedBox(
+        ? SizedBox(
             width: 22,
             height: 22,
             child: CircularProgressIndicator(strokeWidth: 2.4, color: PsColors.onPrimary),
@@ -146,10 +147,10 @@ class PsSecondaryButton extends StatelessWidget {
             style: OutlinedButton.styleFrom(
               foregroundColor: destructive ? PsColors.error : PsColors.textPrimary,
               backgroundColor: PsColors.surface,
-              textStyle: PsText.bodyStrong,
+              textStyle: PsText.ui.copyWith(fontSize: 14),
               minimumSize: const Size(PsSize.minTap, PsSize.minTap),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              side: const BorderSide(color: PsColors.border),
+              side: BorderSide(color: destructive ? PsColors.error : PsColors.border, width: destructive ? 1.4 : 1),
               shape: RoundedRectangleBorder(borderRadius: PsRadius.button),
             ),
             child: child,
@@ -180,7 +181,7 @@ class PsIconButton extends StatelessWidget {
     required this.tooltip,
     this.badgeCount,
     this.showDot = false,
-    this.color = PsColors.textPrimary,
+    this.color,
     this.size = PsSize.icon,
     this.filled = false,
   });
@@ -192,7 +193,7 @@ class PsIconButton extends StatelessWidget {
   final String tooltip;
   final int? badgeCount;
   final bool showDot;
-  final Color color;
+  final Color? color;
   final double size;
 
   /// White circular chip behind the icon (e.g. over product images).
@@ -201,7 +202,7 @@ class PsIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final count = badgeCount ?? 0;
-    Widget glyph = Icon(icon, size: size, color: color);
+    Widget glyph = Icon(icon, size: size, color: color ?? PsColors.textPrimary);
 
     if (count > 0 || showDot) {
       glyph = Badge(

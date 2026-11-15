@@ -9,12 +9,27 @@ import 'ps_tokens.dart';
 class PsTheme {
   PsTheme._();
 
+  /// Light theme (also switches [PsColors] to its light set).
   static ThemeData get light {
-    final base = ThemeData(useMaterial3: true);
+    PsColors.isDark = false;
+    return current;
+  }
+
+  /// Dark theme (also switches [PsColors] to its dark set).
+  static ThemeData get dark {
+    PsColors.isDark = true;
+    return current;
+  }
+
+  /// The theme for the palette [PsColors] is set to (light or dark).
+  static ThemeData get current {
+    final brightness = PsColors.isDark ? Brightness.dark : Brightness.light;
+    final base = ThemeData(useMaterial3: true, brightness: brightness);
     final colorScheme = ColorScheme.fromSeed(
       seedColor: PsColors.primary,
+      brightness: brightness,
       primary: PsColors.primaryStrong,
-      onPrimary: Colors.white,
+      onPrimary: PsColors.isDark ? PsColors.onPrimary : Colors.white,
       error: PsColors.error,
       surface: PsColors.surface,
     );
@@ -22,7 +37,7 @@ class PsTheme {
     return base.copyWith(
       colorScheme: colorScheme,
       scaffoldBackgroundColor: PsColors.background,
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: PsColors.background,
         foregroundColor: PsColors.textPrimary,
         surfaceTintColor: Colors.transparent,
@@ -34,7 +49,7 @@ class PsTheme {
         displayColor: PsColors.textPrimary,
       ),
       splashFactory: InkSparkle.splashFactory,
-      dividerTheme: const DividerThemeData(
+      dividerTheme: DividerThemeData(
         color: PsColors.divider,
         thickness: 1,
         space: 1,
@@ -61,23 +76,23 @@ class PsTheme {
         ),
         border: OutlineInputBorder(
           borderRadius: PsRadius.field,
-          borderSide: const BorderSide(color: PsColors.border),
+          borderSide: BorderSide(color: PsColors.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: PsRadius.field,
-          borderSide: const BorderSide(color: PsColors.border),
+          borderSide: BorderSide(color: PsColors.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: PsRadius.field,
-          borderSide: const BorderSide(color: PsColors.primary, width: 1.4),
+          borderSide: BorderSide(color: PsColors.primary, width: 1.4),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: PsRadius.field,
-          borderSide: const BorderSide(color: PsColors.error),
+          borderSide: BorderSide(color: PsColors.error),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: PsRadius.field,
-          borderSide: const BorderSide(color: PsColors.error, width: 1.4),
+          borderSide: BorderSide(color: PsColors.error, width: 1.4),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -91,7 +106,7 @@ class PsTheme {
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(PsSize.minTap, PsSize.minTap),
           shape: RoundedRectangleBorder(borderRadius: PsRadius.button),
-          side: const BorderSide(color: PsColors.border),
+          side: BorderSide(color: PsColors.border),
         ),
       ),
       datePickerTheme: DatePickerThemeData(
@@ -104,7 +119,7 @@ class PsTheme {
         backgroundColor: PsColors.surface,
         selectedColor: PsColors.textPrimary,
         disabledColor: PsColors.surfaceMuted,
-        side: const BorderSide(color: PsColors.border),
+        side: BorderSide(color: PsColors.border),
         shape: const StadiumBorder(),
         showCheckmark: false,
         labelStyle: GoogleFonts.montserrat(
@@ -115,14 +130,14 @@ class PsTheme {
         secondaryLabelStyle: GoogleFonts.montserrat(
           fontSize: 13,
           fontWeight: FontWeight.w600,
-          color: Colors.white,
+          color: PsColors.surface,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
+      progressIndicatorTheme: ProgressIndicatorThemeData(
         color: PsColors.primary,
       ),
-      textSelectionTheme: const TextSelectionThemeData(
+      textSelectionTheme: TextSelectionThemeData(
         cursorColor: PsColors.primaryStrong,
         selectionColor: PsColors.primarySoft,
         selectionHandleColor: PsColors.primaryStrong,

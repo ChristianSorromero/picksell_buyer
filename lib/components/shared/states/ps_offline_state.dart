@@ -24,12 +24,12 @@ class PsOfflineBanner extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: PsSpace.gutter, vertical: 6),
         child: Row(
           children: [
-            const Icon(Icons.wifi_off_rounded, size: 16, color: Colors.white),
+            Icon(Icons.wifi_off_rounded, size: 16, color: PsColors.surface),
             const SizedBox(width: PsSpace.xs),
             Expanded(
               child: Text(
                 'You’re offline. Showing saved information.',
-                style: PsText.caption.copyWith(color: Colors.white),
+                style: PsText.caption.copyWith(color: PsColors.surface),
               ),
             ),
             if (onRetry != null)

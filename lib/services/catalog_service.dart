@@ -11,7 +11,7 @@ class CatalogService {
   Future<HomeFeed> home() async => HomeFeed.fromJson(await _api.getJson('/home'));
 
   Future<List<Category>> categories() async =>
-      listOf((await _api.getJson('/categories'))['categories'], Category.fromJson);
+      Category.alignToWeb(listOf((await _api.getJson('/categories'))['categories'], Category.fromJson));
 
   Future<ProductPage> products({
     String? search,

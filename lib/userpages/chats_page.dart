@@ -5,7 +5,11 @@ import '../components/shared/ps_app_shell.dart';
 import '../components/shared/ps_buttons.dart';
 import '../components/shared/ps_search_bar.dart';
 import '../components/shared/ps_top_bar.dart';
+import '../components/shared/ps_async_view.dart' show errorMessage;
 import '../components/shared/states/ps_empty_state.dart';
+import '../components/shared/states/ps_error_state.dart';
+import '../components/shared/states/ps_loading_state.dart';
+import '../components/shared/states/ps_offline_state.dart';
 import '../core/network/api_client.dart';
 import '../core/theme/ps_colors.dart';
 import '../core/theme/ps_tokens.dart';
@@ -15,7 +19,7 @@ import '../services/chat_service.dart';
 
 /// Soft token washes for contact avatars, picked by contact id so a contact
 /// keeps the same color in the list, while searching and in the thread.
-const List<Color> _avatarTints = [
+final List<Color> _avatarTints = [
   PsColors.primarySoft,
   PsColors.infoSoft,
   PsColors.successSoft,
@@ -52,19 +56,26 @@ class _ChatsPageState extends State<ChatsPage> {
     super.dispose();
   }
 
+  /// Why the list could not load; shown as a full error screen with Retry.
+  Object? _error;
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
       final contacts = await _service.getContacts();
-      if (mounted) setState(() => _contacts = contacts);
-    } on ApiException catch (e) {
-      if (mounted) _showError(e.message);
+      if (mounted) {
+        setState(() {
+          _contacts = contacts;
+          _error = null;
+        });
+      }
+    } catch (e) {
+      // Any failure (server error, odd data) shows a real error state, never a blank page.
+      if (mounted) setState(() => _error = e);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
-
-  void _showError(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 
   List<ChatContact> get _visible {
     final q = _query.trim().toLowerCase();
@@ -109,7 +120,13 @@ class _ChatsPageState extends State<ChatsPage> {
   }
 
   Widget _buildBody() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading && _contacts.isEmpty) return const PsSkeletonList(itemCount: 6);
+    final e = _error;
+    if (e != null && _contacts.isEmpty) {
+      return e is ApiException && e.isNetworkError
+          ? PsOfflineState(onRetry: _load)
+          : PsErrorState(title: 'Couldn’t load your chats', message: errorMessage(e), onRetry: _load);
+    }
     final contacts = _visible;
     if (contacts.isEmpty) {
       return _query.trim().isEmpty
@@ -370,7 +387,7 @@ class _ChatConversationPageState extends State<ChatConversationPage> {
 
   Widget _buildInput() {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: PsColors.surface,
         border: Border(top: BorderSide(color: PsColors.border)),
       ),
@@ -395,15 +412,15 @@ class _ChatConversationPageState extends State<ChatConversationPage> {
                     isDense: true,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(PsRadius.pill),
-                      borderSide: const BorderSide(color: PsColors.border),
+                      borderSide: BorderSide(color: PsColors.border),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(PsRadius.pill),
-                      borderSide: const BorderSide(color: PsColors.border),
+                      borderSide: BorderSide(color: PsColors.border),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(PsRadius.pill),
-                      borderSide: const BorderSide(color: PsColors.primary, width: 1.4),
+                      borderSide: BorderSide(color: PsColors.primary, width: 1.4),
                     ),
                   ),
                 ),
@@ -421,13 +438,13 @@ class _ChatConversationPageState extends State<ChatConversationPage> {
                       child: Center(
                         child: Container(
                           width: PsSize.minTap, height: PsSize.minTap,
-                          decoration: const BoxDecoration(color: PsColors.primary, shape: BoxShape.circle),
+                          decoration: BoxDecoration(color: PsColors.primary, shape: BoxShape.circle),
                           child: _sending
-                              ? const Padding(
+                              ? Padding(
                                   padding: EdgeInsets.all(12),
                                   child: CircularProgressIndicator(strokeWidth: 2, color: PsColors.onPrimary),
                                 )
-                              : const Icon(Icons.send_rounded, color: PsColors.onPrimary, size: 20),
+                              : Icon(Icons.send_rounded, color: PsColors.onPrimary, size: 20),
                         ),
                       ),
                     ),
@@ -449,7 +466,7 @@ class _ChatConversationPageState extends State<ChatConversationPage> {
         padding: const EdgeInsets.fromLTRB(PsSpace.gutter, 2, 0, 2),
         child: Row(
           children: [
-            const Icon(Icons.shopping_bag_outlined, size: 16, color: PsColors.textSecondary),
+            Icon(Icons.shopping_bag_outlined, size: 16, color: PsColors.textSecondary),
             const SizedBox(width: PsSpace.xxs),
             Expanded(
               child: Text.rich(
@@ -510,7 +527,7 @@ class _MessageBubble extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.smart_toy_outlined, size: 14, color: PsColors.textMuted),
+                        Icon(Icons.smart_toy_outlined, size: 14, color: PsColors.textMuted),
                         const SizedBox(width: PsSpace.xxs),
                         Text('Automatic reply', style: PsText.caption.copyWith(fontSize: 11.5, fontWeight: FontWeight.w600)),
                       ],

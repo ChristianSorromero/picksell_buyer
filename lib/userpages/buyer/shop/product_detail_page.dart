@@ -39,7 +39,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     await PsProductConfigSheet.show(
       context,
       detail: d,
-      actionLabel: 'Add to cart',
+      actionLabel: 'Add to Cart',
       initialVariationIds: _lastVariationIds,
       onSubmit: (s) async {
         await CartStore.instance.add(d.product, quantity: s.quantity, variationIds: s.variationIds);
@@ -56,19 +56,52 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     );
   }
 
+  /// Buy Now: the API checks out cart lines only, so the item rides in the cart
+  /// for this checkout. Leaving without ordering puts the cart back as it was;
+  /// an item already in the cart is bought at the quantity chosen here.
   Future<void> _buyNow(ProductDetail d) async {
     int? lineId;
+    var before = 0;
+    var options = const <int>[];
+    final cart = CartStore.instance;
     final ok = await PsProductConfigSheet.show(
       context,
       detail: d,
       actionLabel: 'Buy now',
       initialVariationIds: _lastVariationIds,
       onSubmit: (s) async {
-        lineId = await CartStore.instance.add(d.product, quantity: s.quantity, variationIds: s.variationIds);
+        final current = await cart.load();
+        final same = current.lines.where((l) => l.product.id == d.product.id && _sameOptions(l.variationIds, s.variationIds));
+        before = same.isEmpty ? 0 : same.first.quantity;
+        options = s.variationIds;
+        final id = await cart.add(d.product, quantity: s.quantity, variationIds: s.variationIds);
+        if (before > 0) await cart.setLineQuantity(id, s.quantity);
+        lineId = id;
+        _lastVariationIds = s.variationIds;
       },
     );
-    if (ok && lineId != null && mounted) openCheckout(context, [lineId!]);
+    if (!ok || lineId == null || !mounted) return;
+    await openCheckout(context, [lineId!]);
+    try {
+      final after = await cart.load();
+      final stillThere = after.lines.any((l) => l.id == lineId);
+      if (stillThere) {
+        // Not ordered: undo Buy Now.
+        if (before > 0) {
+          await cart.setLineQuantity(lineId!, before);
+        } else {
+          await cart.removeLine(lineId!);
+        }
+      } else if (before > 0) {
+        // Ordered: the units that were already in the cart go back.
+        await cart.add(d.product, quantity: before, variationIds: options);
+      }
+    } on ApiException {
+      cart.refreshCount();
+    }
   }
+
+  static bool _sameOptions(List<int> a, List<int> b) => a.length == b.length && a.toSet().containsAll(b);
 
   void _chat(ProductDetail d) {
     final s = d.seller;
@@ -88,7 +121,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       load: _load,
       refreshable: false,
       errorTitle: 'Couldn’t load this product',
-      loading: const Scaffold(backgroundColor: PsColors.background, body: PsLoadingState()),
+      loading: Scaffold(backgroundColor: PsColors.background, body: PsLoadingState()),
       builder: (context, d, reload) => PsAppShell(
         footer: _BuyBar(
           product: d.product,
@@ -113,7 +146,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                     top: MediaQuery.paddingOf(context).top + PsSpace.xs,
                     right: PsSpace.xs,
                     child: Row(children: [
-                      Material(type: MaterialType.circle, color: Colors.white.withAlpha(235), child: CartIconButton(onPressed: () => ShellNav.goTo(context, BuyerTab.cart))),
+                      Material(type: MaterialType.circle, color: PsColors.surface.withAlpha(235), child: CartIconButton(onPressed: () => ShellNav.goTo(context, BuyerTab.cart))),
                       const SizedBox(width: PsSpace.xs),
                       PsWishlistButton(productId: d.product.id),
                     ]),
@@ -186,7 +219,7 @@ class _Summary extends StatelessWidget {
               borderColor: PsColors.warning.withAlpha(80),
               child: Row(
                 children: [
-                  const Icon(Icons.beach_access_outlined, size: 18, color: PsColors.warning),
+                  Icon(Icons.beach_access_outlined, size: 18, color: PsColors.warning),
                   const SizedBox(width: PsSpace.xs),
                   Expanded(
                     child: Text('This seller is on vacation and isn’t taking orders right now. You can still save it to My Picks.',
@@ -361,7 +394,12 @@ class _BuyBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final available = product.inStock;
     return DecoratedBox(
-      decoration: const BoxDecoration(color: PsColors.surface, border: Border(top: BorderSide(color: PsColors.border))),
+      decoration: BoxDecoration(
+        color: PsColors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border(top: BorderSide(color: PsColors.border)),
+        boxShadow: PsColors.isDark ? null : const [BoxShadow(color: Color(0x141B1B1B), blurRadius: 24, offset: Offset(0, -6))],
+      ),
       child: SafeArea(
         top: false,
         child: Padding(
@@ -370,10 +408,10 @@ class _BuyBar extends StatelessWidget {
             children: [
               if (onChat != null) ...[
                 Material(
-                  color: PsColors.surfaceMuted,
-                  borderRadius: PsRadius.button,
+                  color: PsColors.primarySoft,
+                  borderRadius: BorderRadius.circular(16),
                   child: InkWell(
-                    borderRadius: PsRadius.button,
+                    borderRadius: BorderRadius.circular(16),
                     onTap: onChat,
                     child: SizedBox(
                       width: 52,
@@ -394,9 +432,9 @@ class _BuyBar extends StatelessWidget {
                     onPressed: available ? onAdd : null,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: PsColors.textPrimary,
-                      side: const BorderSide(color: PsColors.textPrimary, width: 1.4),
+                      side: BorderSide(color: PsColors.textPrimary, width: 1.4),
                       shape: RoundedRectangleBorder(borderRadius: PsRadius.button),
-                      textStyle: PsText.bodyStrong.copyWith(fontSize: 15),
+                      textStyle: PsText.ui.copyWith(fontSize: 15, fontWeight: FontWeight.w800),
                     ),
                     child: const Text('Add to Cart'),
                   ),

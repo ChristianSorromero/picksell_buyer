@@ -97,7 +97,7 @@ class PsOptionChip extends StatelessWidget {
                 style: PsText.caption.copyWith(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: selected ? Colors.white : (enabled ? PsColors.textPrimary : PsColors.textDisabled),
+                  color: selected ? PsColors.surface : (enabled ? PsColors.textPrimary : PsColors.textDisabled),
                   decoration: enabled ? null : TextDecoration.lineThrough,
                 ),
               ),

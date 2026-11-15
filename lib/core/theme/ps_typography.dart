@@ -17,16 +17,18 @@ class PsText {
       );
 
   /// Top-bar titles ("My Orders", "Order Progress").
-  static TextStyle get title => GoogleFonts.montserrat(
+  static TextStyle get title => GoogleFonts.openSans(
         fontSize: 20,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.3,
         color: PsColors.textPrimary,
       );
 
   /// Section headings ("Recommended for You", status header).
-  static TextStyle get heading => GoogleFonts.montserrat(
+  static TextStyle get heading => GoogleFonts.openSans(
         fontSize: 18,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.3,
         color: PsColors.textPrimary,
       );
 
@@ -85,10 +87,10 @@ class PsText {
       );
 
   /// Uppercase button label ("CONTINUE", "CREATE ACCOUNT").
-  static TextStyle get button => GoogleFonts.montserrat(
+  static TextStyle get button => GoogleFonts.manrope(
         fontSize: 15,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.4,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.2,
         color: PsColors.onPrimary,
       );
 
@@ -104,19 +106,36 @@ class PsText {
         color: PsColors.error,
       );
 
-  static TextStyle get badge => GoogleFonts.montserrat(
+  static TextStyle get badge => GoogleFonts.manrope(
         fontSize: 11,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w800,
         letterSpacing: 0.4,
       );
 
-  static TextStyle get price => GoogleFonts.montserrat(
+  static TextStyle get price => GoogleFonts.manrope(
         fontSize: 16,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.3,
         color: PsColors.textPrimary,
       );
 
   /// One large digit inside the OTP boxes.
+  /// Big promo numbers and hero headlines ("-24%", "Flash Picks").
+  static TextStyle get hero => GoogleFonts.openSans(
+        fontSize: 24,
+        fontWeight: FontWeight.w800,
+        height: 1.0,
+        letterSpacing: -0.8,
+        color: PsColors.textPrimary,
+      );
+
+  /// Short UI labels: chips, nav, tags.
+  static TextStyle get ui => GoogleFonts.manrope(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: PsColors.textPrimary,
+      );
+
   static TextStyle get otpDigit => GoogleFonts.montserrat(
         fontSize: 22,
         fontWeight: FontWeight.w500,

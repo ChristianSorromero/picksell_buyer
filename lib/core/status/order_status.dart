@@ -94,15 +94,29 @@ enum ThreadMarker { step, warning, returned, cancelled }
 
 /// Visual tone shared by [PsStatusBadge] and other status-aware components.
 enum StatusTone {
-  info(PsColors.infoSoft, PsColors.info),
-  warning(PsColors.warningSoft, PsColors.warning),
-  success(PsColors.successSoft, PsColors.success),
-  error(PsColors.errorSoft, PsColors.error),
-  neutral(PsColors.neutralSoft, PsColors.textMuted),
-  brand(PsColors.primarySoft, PsColors.primaryStrong);
+  info,
+  warning,
+  success,
+  error,
+  neutral,
+  brand;
 
-  const StatusTone(this.background, this.foreground);
+  /// Read live so badges follow the light or dark theme.
+  Color get background => switch (this) {
+        info => PsColors.infoSoft,
+        warning => PsColors.warningSoft,
+        success => PsColors.successSoft,
+        error => PsColors.errorSoft,
+        neutral => PsColors.neutralSoft,
+        brand => PsColors.primarySoft,
+      };
 
-  final Color background;
-  final Color foreground;
+  Color get foreground => switch (this) {
+        info => PsColors.info,
+        warning => PsColors.warning,
+        success => PsColors.success,
+        error => PsColors.errorStrong,
+        neutral => PsColors.textMuted,
+        brand => PsColors.primaryStrong,
+      };
 }

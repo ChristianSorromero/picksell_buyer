@@ -9,14 +9,17 @@ class ChatService {
   Future<List<ChatContact>> getContacts() async {
     final data = await _api.getJson('/chat/contacts');
     return (data['contacts'] as List? ?? const [])
-        .map((e) => ChatContact.fromJson(e as Map<String, dynamic>))
+        .whereType<Map<String, dynamic>>()
+        .map(ChatContact.fromJson)
+        .where((c) => c.id > 0)
         .toList();
   }
 
   Future<List<ChatMessage>> getMessages(int userId) async {
     final data = await _api.getJson('/chat/messages/$userId');
     return (data['messages'] as List? ?? const [])
-        .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+        .whereType<Map<String, dynamic>>()
+        .map(ChatMessage.fromJson)
         .toList();
   }
 

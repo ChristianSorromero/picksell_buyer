@@ -71,7 +71,7 @@ class PsCostBreakdown extends StatelessWidget {
               Expanded(child: Text('Total Payment', style: PsText.heading.copyWith(fontSize: 17))),
               Text(
                 formatPesoFixed((totals.total - storeVoucherDiscount - pickSellVoucherDiscount).clamp(0, double.infinity).toDouble()),
-                style: PsText.price.copyWith(fontSize: 19, color: PsColors.primary),
+                style: PsText.price.copyWith(fontSize: 19, color: PsColors.textPrimary),
               ),
             ],
           ),

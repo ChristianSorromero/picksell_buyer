@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import '../app_assets.dart';
 import '../components/components.dart';
 import '../components/shared/auth/register_prompt.dart';
-import '../components/shared/auth/social_button.dart';
 import '../components/shared/auth/waterfall_product_carousel.dart';
 import '../page_transitions.dart';
 import '../services/auth_service.dart';
@@ -38,8 +37,6 @@ class _LoginPageState extends State<LoginPage> {
     _passwordFocus.dispose();
     super.dispose();
   }
-
-  void _comingSoon(String what) => PsToast.show(context, '$what coming soon');
 
   Future<void> _login() async {
     if (_isLoading) return;
@@ -156,16 +153,16 @@ class _LoginPageState extends State<LoginPage> {
             const Positioned.fill(
               child: Opacity(opacity: 0.28, child: WaterfallProductCarousel()),
             ),
-            const Positioned.fill(
+            Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Color(0x88FFFFFF),
-                      Color(0xCCFFFFFF),
-                      Color(0xEEF9F8F6),
+                      PsColors.surface.withAlpha(0x88),
+                      PsColors.surface.withAlpha(0xCC),
+                      PsColors.background.withAlpha(0xEE),
                     ],
                   ),
                 ),
@@ -254,18 +251,6 @@ class _LoginPageState extends State<LoginPage> {
                   label: 'Log in',
                   loading: _isLoading,
                   onPressed: _login,
-                ),
-                const SizedBox(height: PsSpace.lg),
-                const OrContinueWith(),
-                const SizedBox(height: PsSpace.md),
-                SocialButton.google(
-                  label: 'Continue with Google',
-                  onPressed: () => _comingSoon('Google sign-in'),
-                ),
-                const SizedBox(height: PsSpace.sm),
-                SocialButton.facebook(
-                  label: 'Continue with Facebook',
-                  onPressed: () => _comingSoon('Facebook sign-in'),
                 ),
                 const SizedBox(height: PsSpace.lg),
                 RegisterPrompt(

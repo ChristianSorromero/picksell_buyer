@@ -183,7 +183,7 @@ class _PsProductConfigSheetState extends State<PsProductConfigSheet> {
                   child: Text(
                     'Maximum $max ${max == 1 ? 'item' : 'items'} per order',
                     textAlign: TextAlign.right,
-                    style: PsText.caption.copyWith(color: PsColors.primaryStrong, fontWeight: FontWeight.w600),
+                    style: PsText.caption,
                   ),
                 ),
             ],

@@ -255,7 +255,7 @@ class PsCourierCard extends StatelessWidget {
               CircleAvatar(
                 radius: 26,
                 backgroundColor: PsColors.primarySoft,
-                child: const Icon(Icons.two_wheeler_rounded, color: PsColors.primaryStrong),
+                child: Icon(Icons.two_wheeler_rounded, color: PsColors.primaryStrong),
               ),
               const SizedBox(width: PsSpace.sm),
               Expanded(
@@ -274,7 +274,7 @@ class PsCourierCard extends StatelessWidget {
             const SizedBox(height: PsSpace.sm),
             Row(
               children: [
-                const Icon(Icons.motorcycle_rounded, size: 18, color: PsColors.textMuted),
+                Icon(Icons.motorcycle_rounded, size: 18, color: PsColors.textMuted),
                 const SizedBox(width: 6),
                 Text(courier.vehicle!, style: PsText.bodyMuted),
               ],
@@ -289,7 +289,7 @@ class PsCourierCard extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 foregroundColor: PsColors.primaryStrong,
                 minimumSize: const Size.fromHeight(PsSize.minTap),
-                side: const BorderSide(color: PsColors.primary),
+                side: BorderSide(color: PsColors.primary),
                 shape: RoundedRectangleBorder(borderRadius: PsRadius.button),
               ),
             ),
@@ -315,7 +315,7 @@ class PsDeliveryMapFallback extends StatelessWidget {
       color: PsColors.neutralSoft,
       child: Row(
         children: [
-          const Icon(Icons.map_outlined, color: PsColors.textMuted, size: 32),
+          Icon(Icons.map_outlined, color: PsColors.textMuted, size: 32),
           const SizedBox(width: PsSpace.sm),
           Expanded(
             child: Column(
@@ -410,7 +410,7 @@ class PsDeliveryExceptionCard extends StatelessWidget {
           const SizedBox(height: PsSpace.sm),
           Container(
             padding: const EdgeInsets.all(PsSpace.sm),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: PsColors.errorSoft,
               border: Border(left: BorderSide(color: PsColors.error, width: 3)),
             ),
@@ -476,7 +476,7 @@ class PsRefundTimeline extends StatelessWidget {
                         child: stages[i].$3 && i != currentIndex
                             ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
                             : (i == currentIndex
-                                ? Center(child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: PsColors.primary, shape: BoxShape.circle)))
+                                ? Center(child: Container(width: 10, height: 10, decoration: BoxDecoration(color: PsColors.primary, shape: BoxShape.circle)))
                                 : null),
                       ),
                       if (i < stages.length - 1)

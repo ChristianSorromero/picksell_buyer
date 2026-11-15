@@ -5,7 +5,6 @@ import '../../core/theme/ps_tokens.dart';
 import '../../core/theme/ps_typography.dart';
 import '../../format_utils.dart';
 import '../../models/cart.dart';
-import '../shared/ps_card.dart';
 import 'ps_product_image.dart';
 import 'ps_quantity_stepper.dart';
 import 'ps_seller_card.dart';
@@ -45,7 +44,7 @@ class PsCheck extends StatelessWidget {
                 border: Border.all(color: !enabled ? PsColors.border : (on ? PsColors.primary : PsColors.textHint), width: 1.6),
               ),
               child: on
-                  ? Icon(partial && !value ? Icons.remove_rounded : Icons.check_rounded, size: 16, color: Colors.white)
+                  ? Icon(partial && !value ? Icons.remove_rounded : Icons.check_rounded, size: 16, color: PsColors.onPrimary)
                   : null,
             ),
           ),
@@ -89,7 +88,7 @@ class PsCartItemTile extends StatelessWidget {
     final selectable = editing || line.purchasable;
     final stockCap = line.availableStock < maxQuantity ? line.availableStock : maxQuantity;
 
-    return PsCard(
+    return Padding(
       padding: const EdgeInsets.fromLTRB(0, PsSpace.sm, PsSpace.sm, PsSpace.sm),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -107,7 +106,7 @@ class PsCartItemTile extends StatelessWidget {
               children: [
                 GestureDetector(
                   onTap: onTap,
-                  child: Text(line.product.name, style: PsText.bodyStrong.copyWith(fontSize: 15), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  child: Text(line.product.name, style: PsText.ui.copyWith(fontSize: 14, fontWeight: FontWeight.w600, height: 1.3), maxLines: 2, overflow: TextOverflow.ellipsis),
                 ),
                 if (line.variationLabel != null)
                   InkWell(
@@ -118,7 +117,7 @@ class PsCartItemTile extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Flexible(child: Text(line.variationLabel!, style: PsText.caption, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                          if (onEditVariation != null) const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: PsColors.textMuted),
+                          if (onEditVariation != null) Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: PsColors.textMuted),
                         ],
                       ),
                     ),
@@ -141,7 +140,7 @@ class PsCartItemTile extends StatelessWidget {
                     Expanded(
                       child: Text(
                         formatPesoFixed(line.unitPrice),
-                        style: PsText.price.copyWith(color: issue == null ? PsColors.primary : PsColors.textHint),
+                        style: PsText.price.copyWith(fontSize: 17, color: issue == null ? PsColors.textPrimary : PsColors.textHint),
                       ),
                     ),
                     if (busy)
@@ -196,11 +195,16 @@ class PsSellerGroupHeader extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.storefront_outlined, size: 18),
-                  const SizedBox(width: 6),
-                  Flexible(child: Text(name, style: PsText.bodyStrong.copyWith(fontSize: 15), overflow: TextOverflow.ellipsis)),
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(color: PsColors.primarySoft, borderRadius: BorderRadius.circular(10)),
+                    child: Icon(Icons.storefront_rounded, size: 17, color: PsColors.textPrimary),
+                  ),
+                  const SizedBox(width: 10),
+                  Flexible(child: Text(name, style: PsText.ui.copyWith(fontSize: 15, fontWeight: FontWeight.w800), overflow: TextOverflow.ellipsis)),
                   if (verified) ...[const SizedBox(width: 4), const PsVerifiedBadge()],
-                  if (onTap != null) const Icon(Icons.chevron_right_rounded, size: 18, color: PsColors.textMuted),
+                  if (onTap != null) Icon(Icons.chevron_right_rounded, size: 18, color: PsColors.textMuted),
                 ],
               ),
             ),
@@ -222,13 +226,17 @@ class PsSellerGroupFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(PsSpace.xs, PsSpace.xs, 0, 0),
+      padding: const EdgeInsets.fromLTRB(PsSpace.md, PsSpace.sm, PsSpace.md, PsSpace.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Shipping: ${formatPesoFixed(shippingFee)}${shippingName == null ? '' : ' ($shippingName)'}',
-            style: PsText.caption,
+            // The cart doesn't price delivery yet (the website works it out at
+            // checkout from the address), so a zero here means "not yet", not "free".
+            shippingFee > 0
+                ? 'Shipping: ${formatPesoFixed(shippingFee)}${shippingName == null ? '' : ' ($shippingName)'}'
+                : 'Shipping fee shown at checkout',
+            style: PsText.caption.copyWith(fontWeight: FontWeight.w600),
           ),
           if (discount > 0)
             Text('Voucher: ${formatPesoFixed(discount)} off applied',

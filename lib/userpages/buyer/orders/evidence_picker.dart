@@ -76,7 +76,7 @@ class EvidencePicker extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.add_rounded, color: PsColors.textSecondary),
+                    Icon(Icons.add_rounded, color: PsColors.textSecondary),
                     Text('Add Photo', style: PsText.caption.copyWith(fontSize: 11)),
                   ],
                 ),

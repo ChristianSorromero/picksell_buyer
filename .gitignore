@@ -54,3 +54,7 @@ app.*.map.json
 
 # Test runner cache
 .phpunit.result.cache
+
+# Leftovers from the retired Laravel backend
+/bootstrap/
+/storage/
