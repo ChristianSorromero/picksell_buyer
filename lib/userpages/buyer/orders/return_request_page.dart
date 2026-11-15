@@ -7,8 +7,9 @@ import '../../../services/order_service.dart';
 import 'evidence_picker.dart';
 import 'refund_status_page.dart';
 
-/// BUY-C11 Request Return — quantity, reason, details and photos, as on the
-/// website. Eligibility (delivered, once per order) is enforced server-side.
+/// BUY-C11 Request Return — quantity, reason, details, photos and the GCash account for the
+/// refund, as on the website. Eligibility (delivered, not yet received, within the return
+/// window, once per order, seller-fault reasons only) is enforced server-side.
 class ReturnRequestPage extends StatefulWidget {
   const ReturnRequestPage({super.key, required this.order});
 
@@ -21,6 +22,8 @@ class ReturnRequestPage extends StatefulWidget {
 class _ReturnRequestPageState extends State<ReturnRequestPage> {
   final _orders = OrderService();
   final _details = TextEditingController();
+  final _gcashNumber = TextEditingController();
+  final _gcashName = TextEditingController();
   late int _quantity = widget.order.summary.quantity;
   String? _reason;
   List<String> _photos = [];
@@ -30,6 +33,8 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
   @override
   void dispose() {
     _details.dispose();
+    _gcashNumber.dispose();
+    _gcashName.dispose();
     super.dispose();
   }
 
@@ -38,6 +43,10 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
       _errors.clear();
       if (_reason == null) _errors['reason'] = 'Select a reason for the return.';
       if (_details.text.trim().isEmpty) _errors['details'] = 'Describe the problem with the item.';
+      if (!RegExp(r'^(09|\+639)\d{9}$').hasMatch(_gcashNumber.text.trim())) {
+        _errors['gcash_number'] = 'Enter your GCash mobile number, e.g. 09171234567.';
+      }
+      if (_gcashName.text.trim().isEmpty) _errors['gcash_name'] = 'Enter the name on your GCash account.';
     });
     if (_errors.isNotEmpty) return;
     setState(() => _busy = true);
@@ -47,6 +56,8 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
         quantity: _quantity,
         reason: _reason!,
         details: _details.text,
+        gcashNumber: _gcashNumber.text,
+        gcashName: _gcashName.text,
         photos: _photos,
       );
       final fresh = await _orders.detail(widget.order.id);
@@ -61,6 +72,10 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
         if (m != null) _errors['reason'] = m;
         final d = e.fieldError('details');
         if (d != null) _errors['details'] = d;
+        for (final f in ['gcash_number', 'gcash_name']) {
+          final g = e.fieldError(f);
+          if (g != null) _errors[f] = g;
+        }
       });
       if (!e.isValidation) PsDialog.error(context, title: 'Couldn’t submit return', message: e.message);
     }
@@ -126,9 +141,29 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
             const PsFieldLabel('Upload Photos'),
             EvidencePicker(paths: _photos, max: 5, onChanged: (p) => setState(() => _photos = p)),
             const SizedBox(height: PsSpace.md),
+            const PsFieldLabel('GCash Number for Your Refund'),
+            TextField(
+              controller: _gcashNumber,
+              keyboardType: TextInputType.phone,
+              style: PsText.input,
+              decoration: psInputDecoration(hint: '09XXXXXXXXX', hasError: _errors['gcash_number'] != null),
+            ),
+            if (_errors['gcash_number'] != null) PsFieldError(_errors['gcash_number']!),
+            const SizedBox(height: PsSpace.md),
+            const PsFieldLabel('GCash Account Name'),
+            TextField(
+              controller: _gcashName,
+              textCapitalization: TextCapitalization.words,
+              style: PsText.input,
+              decoration: psInputDecoration(hint: 'Name on your GCash account', hasError: _errors['gcash_name'] != null),
+            ),
+            if (_errors['gcash_name'] != null) PsFieldError(_errors['gcash_name']!),
+            const SizedBox(height: PsSpace.md),
             Text(
-              'The seller reviews your request first. If they decline it, PickSell support reviews it. '
-              'Please keep the item in its original packaging with all accessories.',
+              'Only problems with the item itself can be returned; for anything else, contact Support. '
+              'The seller reviews your request first (PickSell decides if they decline). If approved, a Pickrush rider '
+              'picks the item up from you. After the seller checks it, PickSell sends your refund to this GCash. '
+              'Keep the item in its original packaging with all accessories.',
               style: PsText.caption,
             ),
           ],

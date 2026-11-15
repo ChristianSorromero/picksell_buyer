@@ -38,7 +38,8 @@ Future<OrderDetail?> confirmReceived(BuildContext context, int orderId, String p
   final ok = await PsDialog.confirm(
     context,
     title: 'Got your order?',
-    message: 'Confirm only once the parcel is in your hands and you’ve checked it. The seller then gets paid, and you can rate your order.',
+    message: 'Confirm only once you’ve checked the item. The order is then completed, the seller gets paid and you can rate it, '
+        'but you can no longer ask for a return or refund (only Contact Support).',
     confirmLabel: 'Yes, I received it',
     cancelLabel: 'Not yet',
     icon: Icons.inventory_2_outlined,

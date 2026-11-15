@@ -87,11 +87,20 @@ class OrderService {
     required int quantity,
     required String reason,
     required String details,
+    required String gcashNumber,
+    required String gcashName,
     List<String> photos = const [],
   }) async {
     final j = await _api.multipartJson(
       '/buyer/orders/$id/return',
-      fields: {'quantity': '$quantity', 'reason': reason, 'details': details.trim()},
+      fields: {
+        'quantity': '$quantity',
+        'reason': reason,
+        'details': details.trim(),
+        // Where PickSell sends the refund.
+        'gcash_number': gcashNumber.trim(),
+        'gcash_name': gcashName.trim(),
+      },
       files: {if (photos.isNotEmpty) 'evidence': photos},
     );
     return ReturnRequest.fromJson(mapOrNull(j['return_request']) ?? const {});

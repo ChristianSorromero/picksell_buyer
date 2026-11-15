@@ -140,10 +140,20 @@ class PsOrderActionGroup extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: PsSpace.xs),
               child: Text(
-                'Got your parcel? Confirm it, then rate it. We’ll confirm it for you on ${formatDate(order.autoConfirmAt!)}.',
+                [
+                  'Check your item, then confirm it.',
+                  if (a.canReturn && a.returnUntil != null) 'Something wrong with it? Ask for a return/refund by ${formatDate(a.returnUntil!)}.',
+                  'If you do nothing, it is marked received on ${formatDate(order.autoConfirmAt!)}.',
+                ].join(' '),
                 style: PsText.caption,
                 textAlign: TextAlign.center,
               ),
+            )
+          else if (order.returnRequest != null && !{RefundStage.refunded, RefundStage.rejected}.contains(order.returnRequest!.stage))
+            Padding(
+              padding: const EdgeInsets.only(top: PsSpace.xs),
+              child: Text('Your return/refund request is being handled. The order stays open until it is resolved.',
+                  style: PsText.caption, textAlign: TextAlign.center),
             ),
           if (buttons.isNotEmpty && rows.isNotEmpty) const SizedBox(height: PsSpace.sm),
           for (var i = 0; i < rows.length; i++) ...[if (i > 0) const Divider(), rows[i]],

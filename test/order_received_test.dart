@@ -66,7 +66,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Rate Product'), findsNothing, reason: 'not before confirming receipt');
-    await tester.scrollUntilVisible(find.textContaining('We’ll confirm it for you on Nov 13, 2026'), 200);
+    await tester.scrollUntilVisible(find.textContaining('it is marked received on Nov 13, 2026'), 200);
     await tester.scrollUntilVisible(find.text('Order Received'), 200);
     await tester.ensureVisible(find.text('Order Received'));
     await tester.pumpAndSettle();

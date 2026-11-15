@@ -249,9 +249,14 @@ class OrderActions {
     this.canReportDelivery = false,
     this.canReorder = false,
     this.canTrack = false,
+    this.returnUntil,
   });
 
+  /// The last moment the buyer can ask for a return/refund (null once they cannot).
+  final DateTime? returnUntil;
+
   /// Pickrush delivered it: the buyer taps "Order Received", which completes it and opens rating.
+  /// Not while a return/refund is pending.
   final bool canConfirmReceived;
   final bool canCancel;
   final bool canRate;
@@ -275,6 +280,7 @@ class OrderActions {
           canReportDelivery: j['can_report_delivery'] == true,
           canReorder: j['can_reorder'] == true,
           canTrack: j['can_track'] == true,
+          returnUntil: toDate(j['return_until']),
         );
 }
 
