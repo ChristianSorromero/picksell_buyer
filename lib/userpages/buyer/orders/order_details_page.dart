@@ -140,13 +140,13 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                 sellerName: s.seller?.name ?? 'Seller',
                 verified: s.seller?.verified ?? false,
                 lines: [
-                  PsOrderLineRow(
-                    name: s.productName,
-                    image: s.image,
-                    quantity: s.quantity,
-                    unitPrice: s.unitPrice,
-                    variationLabel: s.variationLabel,
-                    onTap: s.productId == null ? null : () => openProduct(context, s.productId!),
+                  for (final line in s.lines) PsOrderLineRow(
+                    name: line.productName,
+                    image: line.image,
+                    quantity: line.quantity,
+                    unitPrice: line.unitPrice,
+                    variationLabel: line.variationLabel,
+                    onTap: line.productId == null ? null : () => openProduct(context, line.productId!),
                   ),
                 ],
               ),
@@ -267,7 +267,7 @@ class _OrderBreakdown extends StatelessWidget {
         children: [
           Text('Payment Details', style: PsText.heading.copyWith(fontSize: 16)),
           const SizedBox(height: PsSpace.xs),
-          row('Item price', '${formatPesoFixed(s.unitPrice)} × ${s.quantity}'),
+          if (s.lines.length == 1) row('Item price', '${formatPesoFixed(s.unitPrice)} × ${s.quantity}'),
           if (o.storeDiscount > 0)
             row(
               'Store voucher',

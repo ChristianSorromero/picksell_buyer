@@ -68,6 +68,10 @@ class CartGroup {
     required this.items,
     required this.subtotal,
     this.discount = 0,
+    this.storeDiscount = 0,
+    this.platformDiscount = 0,
+    this.shippingDiscount = 0,
+    this.storeTotal,
     this.shippingFee = 0,
     this.shippingProblem,
     this.carriers = const [],
@@ -91,6 +95,10 @@ class CartGroup {
   final List<CartLine> items;
   final double subtotal;
   final double discount;
+  final double storeDiscount;
+  final double platformDiscount;
+  final double shippingDiscount;
+  final double? storeTotal;
   final double shippingFee;
 
   factory CartGroup.fromJson(Json j) => CartGroup(
@@ -98,6 +106,10 @@ class CartGroup {
         items: listOf(j['items'], CartLine.fromJson),
         subtotal: toDouble(j['subtotal']),
         discount: toDouble(j['discount']),
+        storeDiscount: toDouble(j['store_discount']),
+        platformDiscount: toDouble(j['platform_discount']),
+        shippingDiscount: toDouble(j['shipping_discount']),
+        storeTotal: j['total'] == null ? null : toDouble(j['total']),
         shippingFee: toDouble(j['shipping_fee']),
         shippingProblem: _shippingProblem(mapOrNull(j['shipping'])),
         carriers: listOf(j['carriers'], CarrierOption.fromJson),

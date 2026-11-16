@@ -318,7 +318,7 @@ class _CartTabState extends State<CartTab> {
                   PsSellerGroupHeader(
                     name: group.seller?.name ?? 'Seller',
                     verified: group.seller?.verified ?? false,
-                    allSelected: group.items.every((l) => _selected.contains(l.id)),
+                    allSelected: group.items.where((l) => _editing || l.purchasable).isNotEmpty && group.items.where((l) => _editing || l.purchasable).every((l) => _selected.contains(l.id)),
                     someSelected: group.items.any((l) => _selected.contains(l.id)),
                     onSelected: (v) => _toggleAll(group.items, v),
                     onTap: group.seller == null ? null : () => openStore(context, group.seller!.id),
@@ -349,6 +349,7 @@ class _CartTabState extends State<CartTab> {
                     ),
                   ],
                   Divider(height: 1, color: PsColors.divider),
+                  Padding(padding: const EdgeInsets.all(PsSpace.sm), child: Text('Store subtotal: ${formatPesoFixed(group.subtotal)}', style: PsText.bodyStrong)),
                   PsSellerGroupFooter(shippingFee: group.shippingFee, shippingName: quote.shippingOption?.name),
                 ],
               ),
@@ -406,7 +407,7 @@ class _CartTabState extends State<CartTab> {
             children: [
               Row(
                 children: [
-                  PsCheck(value: allSelected, label: 'Select all', onChanged: (v) => _toggleAll(selectableLines, v)),
+                  PsCheck(value: allSelected, partial: !allSelected && selectableLines.any((l) => _selected.contains(l.id)), label: 'Select all', onChanged: (v) => _toggleAll(selectableLines, v)),
                   Text('Select All', style: PsText.bodyMuted),
                   const Spacer(),
                   if (!_editing)

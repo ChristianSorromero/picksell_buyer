@@ -88,6 +88,7 @@ class OrderService {
   Future<ReturnRequest> requestReturn(
     int id, {
     required int quantity,
+    int? orderItemId,
     required String reason,
     required String details,
     required String gcashNumber,

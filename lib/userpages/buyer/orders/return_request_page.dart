@@ -26,6 +26,7 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
   final _gcashNumber = TextEditingController();
   final _gcashName = TextEditingController();
   late int _quantity = widget.order.summary.quantity;
+  int? _itemId;
   String? _reason;
   List<String> _photos = [];
   final Map<String, String> _errors = {};
@@ -55,6 +56,7 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
       await _orders.requestReturn(
         widget.order.id,
         quantity: _quantity,
+        orderItemId: _itemId,
         reason: _reason!,
         details: _details.text,
         gcashNumber: _gcashNumber.text,
@@ -84,7 +86,8 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.order.summary;
+    final summary = widget.order.summary;
+    final s = _itemId == null ? summary : summary.lines.firstWhere((line) => line.id == _itemId);
     return PsAppShell(
       topBar: const PsTopBar(title: 'Request Return'),
       footer: PsFooterActions(primary: PsPrimaryButton(label: 'Submit Return Request', uppercase: false, loading: _busy, onPressed: _submit)),
@@ -109,10 +112,23 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
                       ],
                     ),
                   ),
-                  if (s.quantity > 1)
+                  if (s.quantity > 1 && (_itemId != null || summary.lines.length == 1))
                     PsQuantityStepper(compact: true, value: _quantity, max: s.quantity, onChanged: (q) => setState(() => _quantity = q)),
                 ],
               ),
+            ),
+            if (summary.lines.length > 1) DropdownButtonFormField<int>(
+              initialValue: _itemId ?? 0,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Items to return'),
+              items: [
+                const DropdownMenuItem(value: 0, child: Text('All items in this order')),
+                for (final line in summary.lines) DropdownMenuItem(value: line.id, child: Text('${line.productName} ${line.variationLabel ?? ""}', overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: (id) => setState(() {
+                _itemId = id == 0 ? null : id;
+                _quantity = _itemId == null ? summary.quantity : summary.lines.firstWhere((line) => line.id == _itemId).quantity;
+              }),
             ),
             const SizedBox(height: PsSpace.lg),
             const PsFieldLabel('Reason for Return'),

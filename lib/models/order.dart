@@ -33,6 +33,9 @@ class OrderSummaryItem {
     required this.quantity,
     required this.unitPrice,
     required this.total,
+    this.items = const [],
+    this.amountDue,
+    this.paymentStatus,
     this.checkoutRef,
     this.seller,
     this.productId,
@@ -41,6 +44,11 @@ class OrderSummaryItem {
     this.rating,
     this.createdAt,
   });
+
+  final List<OrderSummaryItem> items;
+  final double? amountDue;
+  final String? paymentStatus;
+  List<OrderSummaryItem> get lines => items.isEmpty ? [this] : items;
 
   final int id;
   final String orderNumber;
@@ -60,6 +68,9 @@ class OrderSummaryItem {
 
   factory OrderSummaryItem.fromJson(Json j) => OrderSummaryItem(
         id: toInt(j['id']),
+        items: listOf(j['items'], OrderSummaryItem.fromJson),
+        amountDue: mapOrNull(j['payment']) == null ? null : toDouble(mapOrNull(j['payment'])!['amount_due']),
+        paymentStatus: toStr(mapOrNull(j['payment'])?['status']),
         orderNumber: j['order_number'] as String? ?? '',
         checkoutRef: toStr(j['checkout_ref']),
         status: OrderStatus.fromApi(j['status'] as String?),

@@ -22,7 +22,9 @@ Map<String, dynamic> _sent(FakeBuyerApi api, String method, String path) =>
 
 /// The row sits under the Place Order bar until scrolled clear of it.
 Future<void> _openVouchers(WidgetTester tester) async {
-  await tester.drag(find.byType(ListView).first, const Offset(0, -400));
+  await tester.scrollUntilVisible(find.text('Store & PickSell Vouchers'), 160, scrollable: find.byType(Scrollable).first);
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(find.text('Store & PickSell Vouchers'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Store & PickSell Vouchers'));
 }
@@ -68,6 +70,7 @@ void main() {
     await tester.pumpWidget(_app(const CheckoutPage(lineIds: [1, 2])));
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(find.text('Store & PickSell Vouchers'), 160, scrollable: find.byType(Scrollable).first);
     expect(find.text('Store & PickSell Vouchers'), findsOneWidget);
     expect(find.text('2 available for this order'), findsOneWidget);
 

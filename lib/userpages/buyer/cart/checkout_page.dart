@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../../components/components.dart';
@@ -149,7 +150,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
     if (mounted && result.code != null && _vouchers.error == null) PsToast.success(context, '${result.code!.toUpperCase()} applied');
   }
 
+  final String _checkoutKey = '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}';
+
   Future<void> _place() async {
+    if (_placing || _quoting) return;
     if (_address?.complete != true) {
       await PsDialog.error(context,
           title: 'Add your delivery address',
@@ -162,7 +166,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     }
     setState(() => _placing = true);
     try {
-      final placed = await _checkout.place(lineIds: widget.lineIds, voucherCode: _voucher, addressId: _addressId, vouchers: _picks, carriers: _carriers);
+      final placed = await _checkout.place(checkoutKey: _checkoutKey, lineIds: widget.lineIds, voucherCode: _voucher, addressId: _addressId, vouchers: _picks, carriers: _carriers);
       CartStore.instance.reset();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => OrderPlacedPage(result: placed)));
@@ -279,8 +283,17 @@ class _CheckoutPageState extends State<CheckoutPage> {
               for (final l in g.items)
                 PsOrderLineRow(name: l.product.name, image: l.product.image, quantity: l.quantity, unitPrice: l.unitPrice, variationLabel: l.variationLabel),
             ],
-            footer: g.carriers.length > 1
-                ? _CarrierPicker(
+            footer: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text('Subtotal: ${formatPesoFixed(g.subtotal)}', style: PsText.caption),
+              if (g.discount > 0) Text('Product voucher: -${formatPesoFixed(g.discount)}', style: PsText.caption),
+              TextButton(onPressed: _quoting ? null : _pickVouchers, child: Text('Store voucher: -${formatPesoFixed(g.storeDiscount)}')),
+              Text('Shipping: ${formatPesoFixed(g.shippingFee)}', style: PsText.caption),
+              if (g.platformDiscount + g.shippingDiscount > 0)
+                Text('PickSell savings: -${formatPesoFixed(g.platformDiscount + g.shippingDiscount)}', style: PsText.caption),
+              Text('Store total / COD: ${formatPesoFixed(g.storeTotal ?? (g.subtotal - g.discount + g.shippingFee))}', style: PsText.bodyStrong),
+              const SizedBox(height: PsSpace.sm),
+              if (g.carriers.length > 1)
+                _CarrierPicker(
                     options: g.carriers,
                     busy: _quoting,
                     onPick: (c) {
@@ -290,15 +303,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
                       _requote();
                     },
                   )
-                : (g.deliveryLabel == null
-                    ? null
-                    : Row(
+              else if (g.deliveryLabel != null) Row(
                         children: [
                           Icon(Icons.local_shipping_outlined, size: 18, color: PsColors.textMuted),
                           const SizedBox(width: PsSpace.xs),
                           Expanded(child: Text('Arrives ${g.deliveryLabel}', style: PsText.caption)),
                         ],
-                      )),
+                      ),
+            ]),
           ),
           const SizedBox(height: PsSpace.sm),
         ],
@@ -349,7 +361,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
               Icon(Icons.payments_outlined, size: 18, color: PsColors.primaryStrong),
               const SizedBox(width: PsSpace.xs),
               Expanded(
-                child: Text('Prepare ${formatPesoFixed(_payable)} in cash for the rider.',
+                child: Text('Total COD: ${formatPesoFixed(_payable)}. Each store has a separate order. Pay only for parcels delivered.',
                     style: PsText.caption.copyWith(color: PsColors.primaryStrong)),
               ),
             ],

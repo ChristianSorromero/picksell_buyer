@@ -68,13 +68,14 @@ class PsOrderCard extends StatelessWidget {
         Text(order.orderNumber, style: PsText.caption),
         const SizedBox(height: 2),
         Text('Total', style: PsText.caption),
-        Text(formatPesoFixed(order.total), style: PsText.price.copyWith(fontSize: 18)),
+        if (order.paymentStatus != null) Text('COD: ${order.paymentStatus}', style: PsText.caption),
+        Text(formatPesoFixed(order.amountDue ?? order.total), style: PsText.price.copyWith(fontSize: 18)),
       ],
     );
     return Semantics(
       button: true,
       label:
-          '${order.productName}, ${order.status.buyerLabel}, ${formatPesoFixed(order.total)}',
+          '${order.productName}, ${order.status.buyerLabel}, ${formatPesoFixed(order.amountDue ?? order.total)}',
       child: GestureDetector(
         onTap: onTap,
         child: PsOrderSummary(
@@ -82,12 +83,12 @@ class PsOrderCard extends StatelessWidget {
           verified: order.seller?.verified ?? false,
           headerTrailing: PsStatusBadge.order(order.status),
           lines: [
-            PsOrderLineRow(
-              name: order.productName,
-              image: order.image,
-              quantity: order.quantity,
-              unitPrice: order.unitPrice,
-              variationLabel: order.variationLabel,
+            for (final line in order.lines) PsOrderLineRow(
+              name: line.productName,
+              image: line.image,
+              quantity: line.quantity,
+              unitPrice: line.unitPrice,
+              variationLabel: line.variationLabel,
               onTap: onTap,
             ),
           ],

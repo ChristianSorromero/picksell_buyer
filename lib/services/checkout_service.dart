@@ -84,6 +84,7 @@ class CheckoutService {
   /// or `vouchers` (a picked voucher can no longer be used).
   Future<PlacedCheckout> place({
     required List<int> lineIds,
+    String? checkoutKey,
     String? voucherCode,
     int? addressId,
     VoucherPicks vouchers = const VoucherPicks(),
@@ -92,6 +93,7 @@ class CheckoutService {
     final j = await _api.postJson('/buyer/checkout', {
       'item_ids': lineIds,
       'payment_method': 'cod',
+      if (checkoutKey != null) 'checkout_key': checkoutKey,
       if (voucherCode != null && voucherCode.isNotEmpty) 'voucher_code': voucherCode,
       if (addressId != null) 'address_id': addressId,
       ...vouchers.toJson(),
