@@ -78,8 +78,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('ISLAND THREADS VOUCHERS'), findsOneWidget);
     expect(find.text('PICKSELL VOUCHERS'), findsOneWidget);
-    await tester.tap(find.text('SAVE50'));
-    await tester.tap(find.text('PICK20'));
+    await tester.tap(find.text('₱50 off'));
+    await tester.tap(find.text('PickSell treat'));
     await tester.pump();
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
@@ -102,7 +102,7 @@ void main() {
     await tester.pumpAndSettle();
     await _openVouchers(tester);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('SAVE50'));
+    await tester.tap(find.text('₱50 off'));
     await tester.pump();
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
