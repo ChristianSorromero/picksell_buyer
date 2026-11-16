@@ -198,16 +198,36 @@ class FakeBuyerApi {
     };
   }
 
-  /// The quote's `vouchers`, priced like CheckoutVouchers: SAVE50 on the store's items, then PICK20.
+  /// The quote's `vouchers`, priced like CheckoutVouchers: per store SAVE50 or the tee's TEE10
+  /// product voucher (never both), then PICK20. A typed code counts only where it was typed (code_for).
   Map<String, dynamic> _vouchers(Iterable<Map<String, dynamic>> lines, Map<String, dynamic> body) {
     final merch = lines.fold<double>(0, (s, l) => s + ((l['product'] as Map)['price'] as double) * (l['quantity'] as int));
     final stores = <String, dynamic>{...?(body['store_vouchers'] as Map?)};
+    final products = <String, dynamic>{...?(body['product_vouchers'] as Map?)};
+    final hasTee = lines.any((l) => (l['product'] as Map)['voucher_code'] == 'TEE10');
+    if (body['voucher_code'] == 'TEE10' && hasTee) products.putIfAbsent('3', () => 'TEE10');
     var platform = body['platform_voucher'];
     String? error;
-    final code = '${body['code'] ?? ''}'.toUpperCase();
-    if (code == 'SAVE50') stores['3'] = 61;
-    if (code == 'PICK20') platform = 62;
-    if (code.isNotEmpty && code != 'SAVE50' && code != 'PICK20') error = '$code is not a voucher for these items.';
+    final typed = '${body['code'] ?? ''}';
+    final code = typed.toUpperCase();
+    final codeFor = body['code_for'];
+    if (code.isEmpty) {
+    } else if (codeFor == 'platform' && code != 'PICK20') {
+      error = '$typed is not a PickSell voucher. Enter store and product codes on the store\u2019s vouchers.';
+    } else if (codeFor == '3' && code == 'PICK20') {
+      error = '$typed is not a voucher for this store.';
+    } else if (code == 'SAVE50') {
+      stores['3'] = 61;
+      products.remove('3');
+    } else if (code == 'PICK20') {
+      platform = 62;
+    } else if (typed == 'TEE10' && hasTee) {
+      products['3'] = 'TEE10';
+      stores.remove('3');
+    } else {
+      error = '$typed is not a voucher for these items.';
+    }
+    if (stores.containsKey('3')) products.remove('3');
     final save50Problem = merch < 500 ? 'Spend ₱${(500 - merch).toStringAsFixed(2)} more to use this voucher.' : null;
     if (stores['3'] == 61 && save50Problem != null) {
       error ??= 'SAVE50: $save50Problem';
@@ -222,12 +242,15 @@ class FakeBuyerApi {
           'options': [
             {'id': 61, 'code': 'SAVE50', 'title': '₱50 off', 'summary': '₱50 off · min. spend ₱500', 'type': 'fixed', 'discount': 50, 'problem': save50Problem, 'ends_at': null},
           ],
+          'product_options': [
+            if (hasTee) {'code': 'TEE10', 'percent': 10.0, 'product': 'Cotton Basic Tee', 'discount': 40.0},
+          ],
         },
       ],
       'platform': [
         {'id': 62, 'code': 'PICK20', 'title': 'PickSell treat', 'summary': '₱20 off', 'type': 'fixed', 'discount': 20, 'problem': null, 'ends_at': null},
       ],
-      'picked': {'stores': stores, 'platform': platform == 62 ? 62 : null},
+      'picked': {'stores': stores, 'products': products, 'platform': platform == 62 ? 62 : null},
       'store_savings': {'3': storeSaving},
       'platform_saving': platformSaving,
       'total': storeSaving + platformSaving,
@@ -275,11 +298,12 @@ class FakeBuyerApi {
         final shipTo = _shipTo(body['address_id']);
         if (shipTo == null) return _addressIdError();
         final picked = cart.where((l) => ids.contains(l['id']));
+        final vouchers = _vouchers(picked, body);
         return _json({
-          'quote': _quote(picked, voucher: body['voucher_code']),
+          'quote': _quote(picked, voucher: ((vouchers['picked'] as Map)['products'] as Map)['3'] as String?),
           'delivery_address': defaultAddress,
           'ship_to': shipTo,
-          'vouchers': _vouchers(picked, body),
+          'vouchers': vouchers,
         });
       case ('POST', '/buyer/checkout'):
         if (_shipTo(body['address_id']) == null) return _addressIdError();
@@ -290,7 +314,7 @@ class FakeBuyerApi {
           return _json({'message': 'Not enough stock for: Cotton Basic Tee.', 'errors': {'item_ids': ['Not enough stock for: Cotton Basic Tee.']}}, 422);
         }
         final ids = (body['item_ids'] as List).cast<int>();
-        final q = _quote(cart.where((l) => ids.contains(l['id'])), voucher: body['voucher_code']);
+        final q = _quote(cart.where((l) => ids.contains(l['id'])), voucher: (body['product_vouchers'] as Map?)?['3'] ?? body['voucher_code']);
         cart.removeWhere((l) => ids.contains(l['id']));
         return _json({
           'message': 'Order placed! We’ll notify you as it moves.',

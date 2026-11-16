@@ -36,9 +36,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   /// The address-book entry chosen for this checkout; null ships to the default address.
   int? _addressId;
+
+  /// The product page's code, sent with the first quote only: from then on it
+  /// is a product voucher pick of the store(s) it fits.
   late String? _voucher = widget.voucherCode;
 
-  /// Store and PickSell vouchers picked; the quote keeps only the ones that apply.
+  /// Store, product and PickSell vouchers picked; the quote keeps only the ones that apply.
   VoucherPicks _picks = const VoucherPicks();
 
   /// Logistics company per seller id ("Ship with"); empty = the recommended ones.
@@ -55,10 +58,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
     _requote();
   }
 
-  Future<void> _requote({String? code}) async {
+  Future<void> _requote({String? code, String? codeFor}) async {
     setState(() => _quoting = true);
     try {
-      final r = await _checkout.quote(lineIds: widget.lineIds, voucherCode: _voucher, addressId: _addressId, vouchers: _picks, code: code, carriers: _carriers);
+      final r = await _checkout.quote(lineIds: widget.lineIds, voucherCode: _voucher, addressId: _addressId, vouchers: _picks, code: code, codeFor: codeFor, carriers: _carriers);
       if (!mounted) return;
       setState(() {
         _quote = r.quote;
@@ -66,14 +69,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
         _vouchers = r.vouchers;
         _payable = r.payable;
         // The server drops picks that no longer apply (spend changed, used up...).
-        _picks = VoucherPicks(stores: r.vouchers.pickedStores, platform: r.vouchers.pickedPlatform);
+        _picks = VoucherPicks(stores: r.vouchers.pickedStores, products: r.vouchers.pickedProducts, platform: r.vouchers.pickedPlatform);
+        _voucher = null;
         // Keep the server's choice per parcel so the order goes with what was shown.
         for (final g in r.quote.groups) {
           final sellerId = g.seller?.id;
           if (sellerId != null && g.carrierId != null) _carriers[sellerId] = g.carrierId!;
         }
         _error = null;
-        if (r.quote.voucherError != null) _voucher = null;
       });
       if (r.quote.voucherError != null) PsToast.error(context, r.quote.voucherError!);
       if (r.vouchers.error != null) PsToast.error(context, r.vouchers.error!);
@@ -117,37 +120,22 @@ class _CheckoutPageState extends State<CheckoutPage> {
   /// Voucher sheets: the page gutter on both sides and room above the home bar.
   static const _sheetPadding = EdgeInsets.fromLTRB(PsSpace.gutter, PsSpace.xs, PsSpace.gutter, PsSpace.md);
 
-  Future<void> _enterVoucher() async {
-    final code = await PsBottomSheet.show<String>(
-      context,
-      title: 'Product voucher',
-      builder: (_) => VoucherCodeSheet(initial: _voucher),
-    );
-    if (code == null) return;
-    setState(() => _voucher = code.isEmpty ? null : code);
-    _requote();
-  }
-
-  /// Store and PickSell vouchers (or a typed code), as on the website's checkout.
-  Future<void> _pickVouchers() async {
-    final q = _quote;
-    if (q == null) return;
+  /// One store's vouchers (store or product, one per store) or, with no
+  /// [sellerId], the PickSell vouchers; or a typed code. As on the website's checkout.
+  Future<void> _pickVouchers({int? sellerId, String? sellerName}) async {
+    if (_quote == null) return;
     final result = await PsBottomSheet.show<VoucherSheetResult>(
       context,
-      title: 'Vouchers',
+      title: sellerId == null ? 'PickSell Vouchers' : '${sellerName ?? 'Store'} Vouchers',
       builder: (_) => Padding(
         padding: _sheetPadding,
-        child: VoucherPickerSheet(
-          vouchers: _vouchers,
-          picks: _picks,
-          sellerNames: {for (final g in q.groups) if (g.seller != null) g.seller!.id: g.seller!.name},
-        ),
+        child: VoucherPickerSheet(vouchers: _vouchers, picks: _picks, sellerId: sellerId, sellerName: sellerName),
       ),
     );
     if (result == null || !mounted) return;
     setState(() => _picks = result.picks);
-    await _requote(code: result.code);
-    if (mounted && result.code != null && _vouchers.error == null) PsToast.success(context, '${result.code!.toUpperCase()} applied');
+    await _requote(code: result.code, codeFor: result.codeFor);
+    if (mounted && result.code != null && _vouchers.error == null) PsToast.success(context, '${result.code} applied');
   }
 
   final String _checkoutKey = '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}';
@@ -166,7 +154,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     }
     setState(() => _placing = true);
     try {
-      final placed = await _checkout.place(checkoutKey: _checkoutKey, lineIds: widget.lineIds, voucherCode: _voucher, addressId: _addressId, vouchers: _picks, carriers: _carriers);
+      final placed = await _checkout.place(checkoutKey: _checkoutKey, lineIds: widget.lineIds, addressId: _addressId, vouchers: _picks, carriers: _carriers);
       CartStore.instance.reset();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => OrderPlacedPage(result: placed)));
@@ -185,7 +173,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
         if (!mounted) return;
         setState(() => _picks = const VoucherPicks());
         await _requote();
-        if (mounted) _pickVouchers();
       } else if (e.fieldError('address_id') != null) {
         _addressId = null;
         await PsDialog.error(context, title: 'Address no longer saved', message: 'That address was removed. Pick where to deliver this order.', actionLabel: 'Choose address');
@@ -217,7 +204,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
     final reasons = <String>[
       for (final g in q.groups)
         if (g.shippingProblem != null) g.shippingProblem!,
-      if (q.lines.any((l) => !l.purchasable))
+      if (q.lines.any((l) => l.issue == CartLineIssue.optionRequired))
+        'An item has no option chosen (like size or color). Go back to your cart and choose one.'
+      else if (q.lines.any((l) => !l.purchasable))
         'Some items are no longer available in the quantity you chose. Go back to your cart to adjust them.',
     ];
     return reasons.isEmpty ? 'This order can’t be placed right now. Go back to your cart and try again.' : reasons.join('\n\n');
@@ -285,8 +274,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
             ],
             footer: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Text('Subtotal: ${formatPesoFixed(g.subtotal)}', style: PsText.caption),
-              if (g.discount > 0) Text('Product voucher: -${formatPesoFixed(g.discount)}', style: PsText.caption),
-              TextButton(onPressed: _quoting ? null : _pickVouchers, child: Text('Store voucher: -${formatPesoFixed(g.storeDiscount)}')),
+              const SizedBox(height: PsSpace.xs),
+              _StoreVoucherRow(
+                vouchers: _vouchers,
+                group: g,
+                onTap: _quoting || g.seller == null ? null : () => _pickVouchers(sellerId: g.seller!.id, sellerName: g.seller!.name),
+              ),
+              const SizedBox(height: PsSpace.xs),
               Text('Shipping: ${formatPesoFixed(g.shippingFee)}', style: PsText.caption),
               if (g.platformDiscount + g.shippingDiscount > 0)
                 Text('PickSell savings: -${formatPesoFixed(g.platformDiscount + g.shippingDiscount)}', style: PsText.caption),
@@ -333,19 +327,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
         const SizedBox(height: PsSpace.sm),
         _VoucherRow(vouchers: _vouchers, onTap: _quoting ? null : _pickVouchers),
         const SizedBox(height: PsSpace.sm),
-        PsCard(
-          onTap: _enterVoucher,
-          child: Row(
-            children: [
-              Icon(Icons.sell_outlined, color: PsColors.primaryStrong),
-              const SizedBox(width: PsSpace.sm),
-              Expanded(child: Text('Product voucher', style: PsText.bodyStrong)),
-              if (q.voucher != null) PsTag('${q.voucher!.code} · -${formatPeso(q.voucher!.discount)}') else Text('Enter code', style: PsText.caption),
-              Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
-            ],
-          ),
-        ),
-        const SizedBox(height: PsSpace.sm),
         PsCostBreakdown(
           totals: q.totals,
           voucherCode: q.voucher?.code,
@@ -372,56 +353,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 }
 
-/// A product's own voucher code, as printed on its product page.
-class VoucherCodeSheet extends StatefulWidget {
-  const VoucherCodeSheet({super.key, this.initial});
-
-  final String? initial;
-
-  @override
-  State<VoucherCodeSheet> createState() => VoucherCodeSheetState();
-}
-
-class VoucherCodeSheetState extends State<VoucherCodeSheet> {
-  late final _code = TextEditingController(text: widget.initial ?? '');
-
-  @override
-  void dispose() {
-    _code.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Owns its margins, so it looks the same from the cart and from checkout.
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(PsSpace.gutter, PsSpace.xs, PsSpace.gutter, PsSpace.lg),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Enter the voucher code shown on the product page. Codes are case-sensitive.', style: PsText.bodyMuted),
-          const SizedBox(height: PsSpace.lg),
-          PsTextField(
-            label: 'Voucher code',
-            hint: 'e.g. SAVE50',
-            controller: _code,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => Navigator.of(context).pop(_code.text.trim()),
-          ),
-          const SizedBox(height: PsSpace.md),
-          PsPrimaryButton(label: 'Apply', uppercase: false, onPressed: () => Navigator.of(context).pop(_code.text.trim())),
-          if (widget.initial != null) ...[
-            const SizedBox(height: PsSpace.sm),
-            PsSecondaryButton.outlined(label: 'Remove voucher', expand: true, onPressed: () => Navigator.of(context).pop('')),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// "Store & PickSell Vouchers" row: what's picked and saved, or how many are on offer.
+/// "PickSell Vouchers" row: the picked one and what it saves, or how many are on offer.
 class _VoucherRow extends StatelessWidget {
   const _VoucherRow({required this.vouchers, required this.onTap});
 
@@ -431,7 +363,8 @@ class _VoucherRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final v = vouchers;
-    final usable = [...v.platform, for (final s in v.stores) ...s.options].where((o) => o.usable).length;
+    final picked = v.pickedPlatformOption;
+    final usable = v.platform.where((o) => o.usable).length;
     return PsCard(
       onTap: onTap,
       child: Row(
@@ -442,17 +375,65 @@ class _VoucherRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Store & PickSell Vouchers', style: PsText.bodyStrong),
-                if (v.pickedCount > 0)
-                  Text(v.pickedCodes.join(' · '), style: PsText.caption)
+                Text('PickSell Vouchers', style: PsText.bodyStrong),
+                if (picked != null)
+                  Text(picked.code, style: PsText.caption)
                 else
                   Text(usable > 0 ? '$usable available for this order' : 'Enter a voucher code', style: PsText.caption),
               ],
             ),
           ),
-          if (v.total > 0) PsTag('-${formatPesoFixed(v.total)}') else if (usable > 0) const PsTag('SELECT'),
+          if (v.platformSaving > 0) PsTag('-${formatPesoFixed(v.platformSaving)}') else if (usable > 0) const PsTag('SELECT'),
           Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
         ],
+      ),
+    );
+  }
+}
+
+/// A store's "Voucher" row on its card: the store or product voucher picked
+/// and what it saves, or how many are on offer. Opens that store's sheet.
+class _StoreVoucherRow extends StatelessWidget {
+  const _StoreVoucherRow({required this.vouchers, required this.group, required this.onTap});
+
+  final CheckoutVouchers vouchers;
+  final CartGroup group;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final sellerId = group.seller?.id;
+    final store = sellerId == null ? null : vouchers.storeOf(sellerId);
+    final productCode = sellerId == null ? null : vouchers.pickedProducts[sellerId];
+    final storeVoucher = store?.options.where((o) => o.id == vouchers.pickedStores[sellerId]).firstOrNull;
+    final available = store == null ? 0 : store.options.where((o) => o.usable).length + store.productOptions.length;
+    final saving = productCode != null ? group.discount : group.storeDiscount;
+    final String label;
+    if (productCode != null) {
+      label = 'Product voucher $productCode';
+    } else if (storeVoucher != null) {
+      label = 'Store voucher ${storeVoucher.code}';
+    } else {
+      label = available > 0 ? '$available available' : 'Enter code';
+    }
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: PsSpace.xs),
+        child: Row(
+          children: [
+            Icon(Icons.local_offer_outlined, size: 18, color: PsColors.primaryStrong),
+            const SizedBox(width: PsSpace.xs),
+            Text('Voucher', style: PsText.bodyStrong.copyWith(fontSize: 14)),
+            const SizedBox(width: PsSpace.sm),
+            Expanded(
+              child: Text(label, style: PsText.caption, textAlign: TextAlign.end, overflow: TextOverflow.ellipsis),
+            ),
+            if (saving > 0) ...[const SizedBox(width: PsSpace.xs), PsTag('-${formatPesoFixed(saving)}')],
+            Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
+          ],
+        ),
       ),
     );
   }

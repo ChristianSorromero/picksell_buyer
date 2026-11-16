@@ -24,17 +24,30 @@ class CheckoutQuote {
   double get payable => (quote.totals.total - vouchers.total).clamp(0, double.infinity).toDouble();
 }
 
-/// The store vouchers (seller id → voucher id) and PickSell voucher picked for a checkout.
+/// The vouchers picked for a checkout: per store either a store voucher
+/// (seller id → voucher id) or a product voucher (seller id → code), and one
+/// PickSell voucher.
 class VoucherPicks {
-  const VoucherPicks({this.stores = const {}, this.platform});
+  const VoucherPicks({this.stores = const {}, this.products = const {}, this.platform});
 
   final Map<int, int> stores;
+  final Map<int, String> products;
   final int? platform;
 
-  bool get isEmpty => stores.isEmpty && platform == null;
+  bool get isEmpty => stores.isEmpty && products.isEmpty && platform == null;
+
+  /// [sellerId]'s pick changed to a store voucher, a product voucher, or neither.
+  VoucherPicks withStore(int sellerId, {int? storeVoucher, String? productCode}) => VoucherPicks(
+        stores: {...stores}..remove(sellerId)..addAll({if (storeVoucher != null) sellerId: storeVoucher}),
+        products: {...products}..remove(sellerId)..addAll({if (productCode != null) sellerId: productCode}),
+        platform: platform,
+      );
+
+  VoucherPicks withPlatform(int? id) => VoucherPicks(stores: stores, products: products, platform: id);
 
   Map<String, dynamic> toJson() => {
         if (stores.isNotEmpty) 'store_vouchers': {for (final e in stores.entries) '${e.key}': e.value},
+        if (products.isNotEmpty) 'product_vouchers': {for (final e in products.entries) '${e.key}': e.value},
         if (platform != null) 'platform_voucher': platform,
       };
 }
@@ -49,15 +62,17 @@ class CheckoutService {
 
   /// [addressId] null ships to the default address (and is not sent).
   ///
-  /// [vouchers] are the store / PickSell vouchers picked so far; a typed [code]
-  /// picks the voucher it belongs to (not case-sensitive, unlike [voucherCode],
-  /// which is a product's own code).
+  /// [vouchers] are the store, product and PickSell vouchers picked so far; a
+  /// typed [code] picks the voucher it is among [codeFor]'s: 'platform' or a
+  /// seller id (store and PickSell codes are not case-sensitive, product codes
+  /// are). [voucherCode] is a product page's code, used for the stores it fits.
   Future<CheckoutQuote> quote({
     required List<int> lineIds,
     String? voucherCode,
     int? addressId,
     VoucherPicks vouchers = const VoucherPicks(),
     String? code,
+    String? codeFor,
     Map<int, int> carriers = const {},
   }) async {
     final j = await _api.postJson('/buyer/checkout/quote', {
@@ -67,6 +82,7 @@ class CheckoutService {
       ...vouchers.toJson(),
       if (carriers.isNotEmpty) 'carriers': {for (final e in carriers.entries) '${e.key}': e.value},
       if (code != null && code.trim().isNotEmpty) 'code': code.trim(),
+      if (code != null && codeFor != null) 'code_for': codeFor,
     });
     final v = mapOrNull(j['vouchers']);
     final delivery = DeliveryAddress.fromJson(mapOrNull(j['delivery_address']) ?? const {});

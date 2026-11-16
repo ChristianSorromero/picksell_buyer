@@ -122,7 +122,31 @@ class PsCartItemTile extends StatelessWidget {
                       ),
                     ),
                   ),
-                if (issue != null)
+                if (issue == CartLineIssue.optionRequired)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Material(
+                      color: PsColors.primary.withAlpha(20),
+                      shape: StadiumBorder(side: BorderSide(color: PsColors.primary.withAlpha(90))),
+                      child: InkWell(
+                        customBorder: const StadiumBorder(),
+                        onTap: onEditVariation,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.tune_rounded, size: 15, color: PsColors.primary),
+                              const SizedBox(width: 6),
+                              Text('Choose an option', style: PsText.caption.copyWith(color: PsColors.primary, fontWeight: FontWeight.w700)),
+                              Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: PsColors.primary),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                else if (issue != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(

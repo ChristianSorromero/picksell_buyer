@@ -57,9 +57,13 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: 'assets/picksell_bg.png'
-  adaptive_icon_background: '#000000'
-  adaptive_icon_foreground: 'assets/picksell_bg.png'
+  # The P centred on 1024px canvases (assets/icon): on the dark background for the
+  # legacy and iOS icons, and on transparency, sized for the adaptive mask, for Android 8+.
+  image_path: 'assets/icon/picksell_icon.png'
+  remove_alpha_ios: true
+  adaptive_icon_background: '#1B1B1B'
+  adaptive_icon_foreground_inset: 0
+  adaptive_icon_foreground: 'assets/icon/picksell_icon_foreground.png'
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

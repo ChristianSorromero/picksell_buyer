@@ -8,12 +8,11 @@ import '../../../models/cart.dart';
 import '../../../models/catalog.dart';
 import '../../../services/cart_service.dart';
 import '../../../services/catalog_service.dart';
-import '../../../services/checkout_service.dart';
 import '../nav.dart';
-import 'checkout_page.dart' show VoucherCodeSheet;
 
 /// Cart (COM-C12/C13/C14): seller groups, selection, quantity edits,
-/// variation changes, bulk delete, voucher choice and checkout.
+/// variation changes, bulk delete and checkout (vouchers are picked per store
+/// at checkout).
 class CartTab extends StatefulWidget {
   const CartTab({super.key});
 
@@ -23,7 +22,6 @@ class CartTab extends StatefulWidget {
 
 class _CartTabState extends State<CartTab> {
   final _store = CartStore.instance;
-  final _checkout = CheckoutService();
 
   bool _loading = true;
   Object? _error;
@@ -34,10 +32,6 @@ class _CartTabState extends State<CartTab> {
 
   /// Checkout selection parked while Edit mode uses selection for removal.
   Set<int> _checkoutSelection = {};
-
-  String? _voucherCode;
-  CartQuote? _selectionQuote;
-  int _quoteRequest = 0;
 
   @override
   void initState() {
@@ -79,7 +73,6 @@ class _CartTabState extends State<CartTab> {
     });
     try {
       await _store.load();
-      _requote();
     } catch (e) {
       if (mounted) setState(() => _error = e);
     } finally {
@@ -93,35 +86,10 @@ class _CartTabState extends State<CartTab> {
       if (_selected.contains(l.id) && l.purchasable) l.id,
   ];
 
-  /// Server price for the current selection + voucher.
-  Future<void> _requote() async {
-    final ids = _checkoutIds;
-    final id = ++_quoteRequest;
-    if (ids.isEmpty || _voucherCode == null) {
-      setState(() => _selectionQuote = null);
-      return;
-    }
-    try {
-      final q = (await _checkout.quote(lineIds: ids, voucherCode: _voucherCode)).quote;
-      if (!mounted || id != _quoteRequest) return;
-      setState(() => _selectionQuote = q);
-      if (q.voucherError != null) {
-        PsToast.error(context, q.voucherError!);
-        setState(() => _voucherCode = null);
-      }
-    } catch (_) {
-      if (mounted && id == _quoteRequest) {
-        setState(() => _selectionQuote = null);
-      }
-    }
-  }
-
   double get _selectedSubtotal => _lines.where((l) => _checkoutIds.contains(l.id)).fold(0.0, (s, l) => s + l.lineTotal);
-  double get _discount => _selectionQuote?.voucher?.discount ?? 0;
 
   void _toggle(int id, bool v) {
     setState(() => v ? _selected.add(id) : _selected.remove(id));
-    _requote();
   }
 
   void _toggleAll(Iterable<CartLine> lines, bool v) {
@@ -132,14 +100,12 @@ class _CartTabState extends State<CartTab> {
         }
       }
     });
-    _requote();
   }
 
   Future<void> _setQuantity(CartLine line, int qty) async {
     setState(() => _busy.add(line.id));
     try {
       await _store.setQuantity(line, qty);
-      _requote();
     } catch (e) {
       if (mounted) PsToast.error(context, errorMessage(e));
     } finally {
@@ -170,7 +136,6 @@ class _CartTabState extends State<CartTab> {
         }
       },
     );
-    _requote();
   }
 
   /// Edit mode starts with nothing ticked so a stray tap can't delete the
@@ -188,7 +153,6 @@ class _CartTabState extends State<CartTab> {
           ..addAll(_checkoutSelection.intersection(ids));
       }
     });
-    if (!_editing) _requote();
   }
 
   Future<void> _deleteSelected() async {
@@ -216,29 +180,10 @@ class _CartTabState extends State<CartTab> {
     }
   }
 
-  Future<void> _pickVoucher() async {
-    final ids = _checkoutIds;
-    if (ids.isEmpty) {
-      PsToast.show(context, 'Select items first, then enter their product voucher code.');
-      return;
-    }
-    final code = await PsBottomSheet.show<String>(
-      context,
-      title: 'Product voucher',
-      builder: (_) => VoucherCodeSheet(initial: _voucherCode),
-    );
-    if (code == null) return;
-    setState(() => _voucherCode = code.isEmpty ? null : code);
-    await _requote();
-    if (mounted && _selectionQuote?.voucher != null) {
-      PsToast.success(context, '${_selectionQuote!.voucher!.title} applied');
-    }
-  }
-
   Future<void> _checkoutNow() async {
     final ids = _checkoutIds;
     if (ids.isEmpty) return;
-    await openCheckout(context, ids, voucherCode: _voucherCode);
+    await openCheckout(context, ids);
     if (mounted) _reload();
   }
 
@@ -300,7 +245,9 @@ class _CartTabState extends State<CartTab> {
                 color: PsColors.warningSoft,
                 borderColor: PsColors.warning.withAlpha(80),
                 child: Text(
-                  'Some items changed since you added them. Adjust or remove them to check out.',
+                  quote.lines.any((l) => l.issue == CartLineIssue.optionRequired)
+                      ? 'Some items need an option (like size or color). Choose one, or remove them, to check out.'
+                      : 'Some items changed since you added them. Adjust or remove them to check out.',
                   style: PsText.caption.copyWith(color: PsColors.warning, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -345,7 +292,7 @@ class _CartTabState extends State<CartTab> {
                       onSelected: (v) => _toggle(line.id, v),
                       onQuantity: (q) => _setQuantity(line, q),
                       onTap: () => openProduct(context, line.product.id),
-                      onEditVariation: line.variationIds.isEmpty ? null : () => _editVariation(line),
+                      onEditVariation: line.variationIds.isEmpty && line.issue != CartLineIssue.optionRequired ? null : () => _editVariation(line),
                     ),
                   ],
                   Divider(height: 1, color: PsColors.divider),
@@ -356,28 +303,6 @@ class _CartTabState extends State<CartTab> {
             ),
             const SizedBox(height: PsSpace.md),
           ],
-          PsCard(
-            onTap: _pickVoucher,
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(color: PsColors.primary, borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(Icons.confirmation_number_outlined, size: 20, color: PsColors.onPrimary),
-                ),
-                const SizedBox(width: PsSpace.sm),
-                Expanded(child: Text('Product voucher', style: PsText.ui.copyWith(fontSize: 14))),
-                if (_selectionQuote?.voucher != null)
-                  PsTag('-${formatPeso(_selectionQuote!.voucher!.discount)}')
-                else
-                  Flexible(
-                    child: Text('Enter code', style: PsText.caption, overflow: TextOverflow.ellipsis),
-                  ),
-                Icon(Icons.chevron_right_rounded, color: PsColors.textMuted),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -387,7 +312,7 @@ class _CartTabState extends State<CartTab> {
     final selectableLines = _editing ? quote.lines : quote.lines.where((l) => l.purchasable).toList();
     final allSelected = selectableLines.isNotEmpty && selectableLines.every((l) => _selected.contains(l.id));
     final count = _lines.where((l) => _checkoutIds.contains(l.id)).fold<int>(0, (s, l) => s + l.quantity);
-    final total = _selectedSubtotal - _discount;
+    final total = _selectedSubtotal;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -422,11 +347,6 @@ class _CartTabState extends State<CartTab> {
                             style: PsText.price.copyWith(fontSize: 20),
                           ),
                         ),
-                        if (_discount > 0)
-                          Text(
-                            'Saved ${formatPesoFixed(_discount)}',
-                            style: PsText.caption.copyWith(color: PsColors.primaryStrong),
-                          ),
                       ],
                     ),
                 ],

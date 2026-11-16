@@ -122,6 +122,7 @@ void main() {
 
     // Delivered to the profile address, as on the website.
     expect(find.text('Juan Dela Cruz'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Cash on Delivery'), 200, scrollable: find.byType(Scrollable).first);
     expect(find.text('Cash on Delivery'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Merchandise Subtotal'), 200, scrollable: find.byType(Scrollable).first);
     expect(find.text('Merchandise Subtotal'), findsOneWidget);

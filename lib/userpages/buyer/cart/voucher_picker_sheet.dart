@@ -6,35 +6,42 @@ import '../../../format_utils.dart';
 import '../../../models/checkout_vouchers.dart';
 import '../../../services/checkout_service.dart';
 
-/// What the buyer chose in the voucher sheet: the picks to quote with, or a typed code.
+/// What the buyer chose in a voucher sheet: the picks to quote with, or a typed code.
 class VoucherSheetResult {
-  const VoucherSheetResult({required this.picks, this.code});
+  const VoucherSheetResult({required this.picks, this.code, this.codeFor});
 
   final VoucherPicks picks;
 
-  /// A typed code: the quote picks the store or PickSell voucher it belongs to.
+  /// A typed code: the quote picks the voucher it is among [codeFor]'s.
   final String? code;
+
+  /// 'platform' or the seller id the code was typed for.
+  final String? codeFor;
 }
 
-/// The website checkout's voucher picker: one voucher per store (the store
-/// pays for it) and one PickSell voucher (PickSell pays), or a typed code.
-/// Savings shown are the server's; the quote checks the picks again.
+/// The website checkout's voucher picker, for one store or for PickSell.
+///
+/// A store's sheet ([sellerId]) lists its store vouchers (the store pays) and
+/// its items' product vouchers: one of them per store, never both kinds. The
+/// PickSell sheet ([sellerId] null) lists PickSell vouchers (PickSell pays),
+/// one per checkout. Either takes a typed code. Savings shown are the
+/// server's; the quote checks the picks again.
 class VoucherPickerSheet extends StatefulWidget {
-  const VoucherPickerSheet({super.key, required this.vouchers, required this.sellerNames, required this.picks});
+  const VoucherPickerSheet({super.key, required this.vouchers, required this.picks, this.sellerId, this.sellerName});
 
   final CheckoutVouchers vouchers;
-
-  /// seller id → store name, for each store's heading.
-  final Map<int, String> sellerNames;
   final VoucherPicks picks;
+
+  /// The store whose vouchers these are; null for PickSell vouchers.
+  final int? sellerId;
+  final String? sellerName;
 
   @override
   State<VoucherPickerSheet> createState() => _VoucherPickerSheetState();
 }
 
 class _VoucherPickerSheetState extends State<VoucherPickerSheet> {
-  late final Map<int, int> _stores = {...widget.picks.stores};
-  late int? _platform = widget.picks.platform;
+  late VoucherPicks _picks = widget.picks;
   final _code = TextEditingController();
 
   @override
@@ -43,27 +50,21 @@ class _VoucherPickerSheetState extends State<VoucherPickerSheet> {
     super.dispose();
   }
 
-  void _done() => Navigator.of(context).pop(
-    VoucherSheetResult(
-      picks: VoucherPicks(stores: _stores, platform: _platform),
-    ),
-  );
+  void _done() => Navigator.of(context).pop(VoucherSheetResult(picks: _picks));
 
   void _applyCode() {
     final code = _code.text.trim();
     if (code.isEmpty) return;
-    Navigator.of(context).pop(
-      VoucherSheetResult(
-        picks: VoucherPicks(stores: _stores, platform: _platform),
-        code: code,
-      ),
-    );
+    Navigator.of(context).pop(VoucherSheetResult(picks: _picks, code: code, codeFor: widget.sellerId?.toString() ?? 'platform'));
   }
 
   @override
   Widget build(BuildContext context) {
     final v = widget.vouchers;
-    final stores = v.stores.where((s) => s.options.isNotEmpty).toList();
+    final sellerId = widget.sellerId;
+    final store = sellerId == null ? null : v.storeOf(sellerId);
+    final storeName = widget.sellerName ?? 'this store';
+    final empty = store == null ? v.platform.isEmpty : store.isEmpty;
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.75),
       child: Column(
@@ -80,10 +81,11 @@ class _VoucherPickerSheetState extends State<VoucherPickerSheet> {
                   children: [
                     Expanded(
                       child: PsTextField(
-                        label: 'Have a voucher code?',
-                        hint: 'e.g. SAVE50',
+                        label: store == null ? 'Have a PickSell voucher code?' : 'Have a voucher code?',
+                        hint: store == null ? 'e.g. SAVE50' : 'Store or product code',
                         controller: _code,
-                        textCapitalization: TextCapitalization.characters,
+                        // Product codes are case-sensitive, so a store's field keeps what is typed.
+                        textCapitalization: store == null ? TextCapitalization.characters : TextCapitalization.none,
                         textInputAction: TextInputAction.done,
                         onSubmitted: (_) => _applyCode(),
                         maxLength: 30,
@@ -96,35 +98,47 @@ class _VoucherPickerSheetState extends State<VoucherPickerSheet> {
                     ),
                   ],
                 ),
-                if (!v.hasAny)
+                if (empty)
                   Padding(
                     padding: const EdgeInsets.only(top: PsSpace.lg),
-                    child: Text('No store or PickSell vouchers for these items right now.', style: PsText.bodyMuted),
+                    child: Text(store == null ? 'No PickSell vouchers right now.' : 'No vouchers from $storeName for these items.', style: PsText.bodyMuted),
                   ),
-                for (final s in stores) ...[
-                  const SizedBox(height: PsSpace.lg),
-                  Text('${widget.sellerNames[s.sellerId] ?? 'Store'} vouchers'.toUpperCase(), style: PsText.overline),
-                  const SizedBox(height: PsSpace.sm),
-                  for (final o in s.options)
-                    _OptionTile(
-                      option: o,
-                      platform: false,
-                      scope: 'for ${widget.sellerNames[s.sellerId] ?? 'this store'} items only',
-                      selected: _stores[s.sellerId] == o.id,
-                      onTap: () => setState(() => _stores[s.sellerId] == o.id ? _stores.remove(s.sellerId) : _stores[s.sellerId] = o.id),
-                    ),
+                if (store != null && sellerId != null && !store.isEmpty) ...[
+                  Text('One voucher per store: a store voucher or a product voucher.', style: PsText.caption),
+                  if (store.options.isNotEmpty) ...[
+                    const SizedBox(height: PsSpace.lg),
+                    Text('STORE VOUCHERS', style: PsText.overline),
+                    const SizedBox(height: PsSpace.sm),
+                    for (final o in store.options)
+                      _OptionTile(
+                        option: o,
+                        platform: false,
+                        scope: 'for $storeName items only',
+                        selected: _picks.stores[sellerId] == o.id,
+                        onTap: () => setState(() => _picks = _picks.withStore(sellerId, storeVoucher: _picks.stores[sellerId] == o.id ? null : o.id)),
+                      ),
+                  ],
+                  if (store.productOptions.isNotEmpty) ...[
+                    const SizedBox(height: PsSpace.lg),
+                    Text('PRODUCT VOUCHERS', style: PsText.overline),
+                    const SizedBox(height: PsSpace.sm),
+                    for (final o in store.productOptions)
+                      _ProductTile(
+                        option: o,
+                        selected: _picks.products[sellerId] == o.code,
+                        onTap: () => setState(() => _picks = _picks.withStore(sellerId, productCode: _picks.products[sellerId] == o.code ? null : o.code)),
+                      ),
+                  ],
                 ],
-                if (v.platform.isNotEmpty) ...[
+                if (store == null && v.platform.isNotEmpty) ...[
                   const SizedBox(height: PsSpace.lg),
-                  Text('PICKSELL VOUCHERS', style: PsText.overline),
-                  const SizedBox(height: PsSpace.sm),
                   for (final o in v.platform)
                     _OptionTile(
                       option: o,
                       platform: true,
                       scope: 'counts your whole order',
-                      selected: _platform == o.id,
-                      onTap: () => setState(() => _platform = _platform == o.id ? null : o.id),
+                      selected: _picks.platform == o.id,
+                      onTap: () => setState(() => _picks = _picks.withPlatform(_picks.platform == o.id ? null : o.id)),
                     ),
                 ],
               ],
@@ -133,6 +147,49 @@ class _VoucherPickerSheetState extends State<VoucherPickerSheet> {
           const SizedBox(height: PsSpace.md),
           PsPrimaryButton(label: 'Done', uppercase: false, onPressed: _done),
         ],
+      ),
+    );
+  }
+}
+
+/// A product voucher of one of the store's items: its % off, code and item.
+class _ProductTile extends StatelessWidget {
+  const _ProductTile({required this.option, required this.selected, required this.onTap});
+
+  final ProductVoucherOption option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final o = option;
+    final percent = o.percent == o.percent.roundToDouble() ? o.percent.toStringAsFixed(0) : o.percent.toString();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: PsSpace.sm),
+      child: PsCard(
+        onTap: onTap,
+        borderColor: selected ? PsColors.primary : PsColors.border,
+        padding: const EdgeInsets.fromLTRB(PsSpace.md, PsSpace.md, PsSpace.sm, PsSpace.md),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('$percent% off', style: PsText.heading.copyWith(fontSize: 18, color: PsColors.primary)),
+                  const SizedBox(height: 2),
+                  Text('Code ${o.code}', style: PsText.bodyStrong.copyWith(fontSize: 13)),
+                  Text('For ${o.product}', style: PsText.caption.copyWith(fontSize: 11.5), maxLines: 2, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            const SizedBox(width: PsSpace.sm),
+            if (selected)
+              Icon(Icons.check_circle_rounded, color: PsColors.primary)
+            else
+              Text('−${formatPesoFixed(o.discount)}', style: PsText.bodyStrong.copyWith(color: PsColors.success)),
+          ],
+        ),
       ),
     );
   }

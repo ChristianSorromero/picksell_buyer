@@ -70,15 +70,44 @@ class VoucherOption {
       );
 }
 
-/// A store's vouchers (one can be picked per store; the store pays for it).
+/// A product voucher one of a store's items carries (its own code, a % off that item).
+class ProductVoucherOption {
+  const ProductVoucherOption({required this.code, required this.percent, required this.product, this.discount = 0});
+
+  /// Case-sensitive, as printed on the product page.
+  final String code;
+  final double percent;
+
+  /// The item(s) it is for.
+  final String product;
+
+  /// What it takes off this checkout.
+  final double discount;
+
+  factory ProductVoucherOption.fromJson(Json j) => ProductVoucherOption(
+        code: j['code'] as String? ?? '',
+        percent: toDouble(j['percent']),
+        product: j['product'] as String? ?? '',
+        discount: toDouble(j['discount']),
+      );
+}
+
+/// A store's vouchers: its store vouchers (the store pays) and its items'
+/// product vouchers. One of them can be picked per store, never both kinds.
 class StoreVoucherOptions {
-  const StoreVoucherOptions({required this.sellerId, this.options = const []});
+  const StoreVoucherOptions({required this.sellerId, this.options = const [], this.productOptions = const []});
 
   final int sellerId;
   final List<VoucherOption> options;
+  final List<ProductVoucherOption> productOptions;
 
-  factory StoreVoucherOptions.fromJson(Json j) =>
-      StoreVoucherOptions(sellerId: toInt(j['seller_id']), options: listOf(j['options'], VoucherOption.fromJson));
+  bool get isEmpty => options.isEmpty && productOptions.isEmpty;
+
+  factory StoreVoucherOptions.fromJson(Json j) => StoreVoucherOptions(
+        sellerId: toInt(j['seller_id']),
+        options: listOf(j['options'], VoucherOption.fromJson),
+        productOptions: listOf(j['product_options'], ProductVoucherOption.fromJson),
+      );
 }
 
 /// The quote's `vouchers`: what's on offer, what's picked and what it saves.
@@ -87,6 +116,7 @@ class CheckoutVouchers {
     this.stores = const [],
     this.platform = const [],
     this.pickedStores = const {},
+    this.pickedProducts = const {},
     this.pickedPlatform,
     this.storeSavings = const {},
     this.platformSaving = 0,
@@ -101,6 +131,9 @@ class CheckoutVouchers {
 
   /// seller id → picked store voucher id.
   final Map<int, int> pickedStores;
+
+  /// seller id → picked product voucher code (instead of a store voucher).
+  final Map<int, String> pickedProducts;
   final int? pickedPlatform;
 
   /// seller id → what that store's voucher saves.
@@ -112,15 +145,12 @@ class CheckoutVouchers {
   final String? error;
 
   double get storeSaving => storeSavings.values.fold(0, (s, v) => s + v);
-  bool get hasAny => platform.isNotEmpty || stores.any((s) => s.options.isNotEmpty);
-  int get pickedCount => pickedStores.length + (pickedPlatform == null ? 0 : 1);
+  /// One store's vouchers (empty when the store has none).
+  StoreVoucherOptions storeOf(int sellerId) =>
+      stores.firstWhere((s) => s.sellerId == sellerId, orElse: () => StoreVoucherOptions(sellerId: sellerId));
 
-  /// The picked vouchers' codes, for the checkout row ("SAVE100 · PICK10").
-  List<String> get pickedCodes => [
-        for (final s in stores)
-          if (pickedStores[s.sellerId] != null) ...s.options.where((o) => o.id == pickedStores[s.sellerId]).map((o) => o.code),
-        if (pickedPlatform != null) ...platform.where((o) => o.id == pickedPlatform).map((o) => o.code),
-      ];
+  /// The picked PickSell voucher, if any.
+  VoucherOption? get pickedPlatformOption => platform.where((o) => o.id == pickedPlatform).firstOrNull;
 
   factory CheckoutVouchers.fromJson(Json j) {
     final picked = mapOrNull(j['picked']) ?? const {};
@@ -132,6 +162,7 @@ class CheckoutVouchers {
       stores: listOf(j['stores'], StoreVoucherOptions.fromJson),
       platform: listOf(j['platform'], VoucherOption.fromJson),
       pickedStores: byId(picked['stores'], (v) => toInt(v)),
+      pickedProducts: byId(picked['products'], (v) => v.toString()),
       pickedPlatform: picked['platform'] == null ? null : toInt(picked['platform']),
       storeSavings: byId(j['store_savings'], (v) => toDouble(v)),
       platformSaving: toDouble(j['platform_saving']),

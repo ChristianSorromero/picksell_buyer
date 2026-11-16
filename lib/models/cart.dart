@@ -5,7 +5,10 @@ import 'json.dart';
 enum CartLineIssue {
   unavailable('This item is no longer available.'),
   outOfStock('Out of stock.'),
-  insufficientStock('Not enough stock for this quantity.');
+  insufficientStock('Not enough stock for this quantity.'),
+  optionRequired('Choose an option to check out.'),
+  /// A problem this app version doesn't know yet: still blocks checkout.
+  other('This item can’t be checked out right now.');
 
   const CartLineIssue(this.message);
 
@@ -15,7 +18,9 @@ enum CartLineIssue {
         'unavailable' => unavailable,
         'out_of_stock' => outOfStock,
         'insufficient_stock' => insufficientStock,
-        _ => null,
+        'option_required' => optionRequired,
+        null => null,
+        _ => other,
       };
 }
 

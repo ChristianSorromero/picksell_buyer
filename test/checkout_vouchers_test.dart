@@ -20,13 +20,15 @@ void _phone(WidgetTester tester) {
 Map<String, dynamic> _sent(FakeBuyerApi api, String method, String path) =>
     jsonDecode(api.calls(method, path).last.body) as Map<String, dynamic>;
 
-/// The row sits under the Place Order bar until scrolled clear of it.
-Future<void> _openVouchers(WidgetTester tester) async {
-  await tester.scrollUntilVisible(find.text('Store & PickSell Vouchers'), 160, scrollable: find.byType(Scrollable).first);
+/// Taps a voucher row ([label]: a store card's "Voucher" or "PickSell Vouchers"),
+/// scrolled clear of the Place Order bar first.
+Future<void> _openVouchers(WidgetTester tester, String label) async {
+  await tester.scrollUntilVisible(find.text(label), 160, scrollable: find.byType(Scrollable).first);
   await tester.pumpAndSettle();
-  await tester.ensureVisible(find.text('Store & PickSell Vouchers'));
+  await tester.ensureVisible(find.text(label));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Store & PickSell Vouchers'));
+  await tester.tap(find.text(label));
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -44,7 +46,8 @@ void main() {
       expect(_sent(api, 'POST', '/buyer/checkout/quote').keys, isNot(contains('store_vouchers')));
       expect(none.vouchers.stores.single.options.single.code, 'SAVE50');
       expect(none.vouchers.platform.single.code, 'PICK20');
-      expect(none.vouchers.pickedCount, 0);
+      expect(none.vouchers.pickedStores, isEmpty);
+      expect(none.vouchers.stores.single.productOptions.single.code, 'TEE10');
       expect(none.payable, 1000);
 
       final both = await checkout.quote(lineIds: [1, 2], vouchers: const VoucherPicks(stores: {3: 61}, platform: 62));
@@ -54,9 +57,15 @@ void main() {
       expect(both.vouchers.total, 70);
       expect(both.payable, 1000 - 70);
 
-      final typed = await checkout.quote(lineIds: [1, 2], code: ' pick20 ');
-      expect(_sent(api, 'POST', '/buyer/checkout/quote'), containsPair('code', 'pick20'));
+      final typed = await checkout.quote(lineIds: [1, 2], code: ' pick20 ', codeFor: 'platform');
+      expect(_sent(api, 'POST', '/buyer/checkout/quote'), allOf(containsPair('code', 'pick20'), containsPair('code_for', 'platform')));
       expect(typed.vouchers.pickedPlatform, 62);
+
+      // A product code typed into the store's sheet replaces the store voucher.
+      final product = await checkout.quote(lineIds: [1, 2], vouchers: const VoucherPicks(stores: {3: 61}), code: 'TEE10', codeFor: '3');
+      expect(product.vouchers.pickedStores, isEmpty);
+      expect(product.vouchers.pickedProducts, {3: 'TEE10'});
+      expect(product.quote.totals.discountTotal, 40);
 
       // Below the minimum spend the server drops the pick and says why.
       final small = await checkout.quote(lineIds: [1], vouchers: const VoucherPicks(stores: {3: 61}));
@@ -65,26 +74,35 @@ void main() {
     });
   });
 
-  testWidgets('checkout: pick a store and a PickSell voucher, see the saving, place with them', (tester) async {
+  testWidgets('checkout: pick a store voucher on its card and a PickSell voucher below, place with them', (tester) async {
     _phone(tester);
     await tester.pumpWidget(_app(const CheckoutPage(lineIds: [1, 2])));
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Store & PickSell Vouchers'), 160, scrollable: find.byType(Scrollable).first);
-    expect(find.text('Store & PickSell Vouchers'), findsOneWidget);
-    expect(find.text('2 available for this order'), findsOneWidget);
+    // No product voucher row at the bottom: product vouchers are on each store's card.
+    await tester.scrollUntilVisible(find.text('PickSell Vouchers'), 160, scrollable: find.byType(Scrollable).first);
+    expect(find.text('Enter code'), findsNothing);
+    expect(find.text('1 available for this order'), findsOneWidget);
 
-    await _openVouchers(tester);
-    await tester.pumpAndSettle();
-    expect(find.text('ISLAND THREADS VOUCHERS'), findsOneWidget);
-    expect(find.text('PICKSELL VOUCHERS'), findsOneWidget);
+    await _openVouchers(tester, 'Voucher');
+    expect(find.text('Island Threads Vouchers'), findsOneWidget);
+    expect(find.text('STORE VOUCHERS'), findsOneWidget);
+    expect(find.text('PRODUCT VOUCHERS'), findsOneWidget);
+    expect(find.text('PickSell treat'), findsNothing);
     await tester.tap(find.text('₱50 off'));
+    await tester.pump();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(find.text('Store voucher SAVE50'), findsOneWidget);
+
+    await _openVouchers(tester, 'PickSell Vouchers');
+    expect(find.text('₱50 off'), findsNothing);
     await tester.tap(find.text('PickSell treat'));
     await tester.pump();
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
 
-    expect(find.text('SAVE50 · PICK20'), findsOneWidget);
+    expect(find.text('PICK20'), findsOneWidget);
     expect(find.text('Store Voucher'), findsOneWidget);
     expect(find.text('PickSell Voucher'), findsOneWidget);
     expect(find.text('You save ₱70.00'), findsOneWidget);
@@ -95,13 +113,56 @@ void main() {
     expect(_sent(api, 'POST', '/buyer/checkout'), allOf(containsPair('store_vouchers', {'3': 61}), containsPair('platform_voucher', 62)));
   });
 
+  testWidgets('checkout: a store takes a store voucher or a product voucher, not both', (tester) async {
+    _phone(tester);
+    await tester.pumpWidget(_app(const CheckoutPage(lineIds: [1, 2])));
+    await tester.pumpAndSettle();
+
+    await _openVouchers(tester, 'Voucher');
+    await tester.tap(find.text('₱50 off'));
+    await tester.pump();
+    await tester.tap(find.text('10% off'));
+    await tester.pump();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    final sent = _sent(api, 'POST', '/buyer/checkout/quote');
+    expect(sent, containsPair('product_vouchers', {'3': 'TEE10'}));
+    expect(sent.keys, isNot(contains('store_vouchers')));
+    expect(find.text('Product voucher TEE10'), findsOneWidget);
+    expect(find.text('-₱40.00'), findsWidgets);
+
+    await tester.tap(find.text('Place Order'), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    final placed = _sent(api, 'POST', '/buyer/checkout');
+    expect(placed, containsPair('product_vouchers', {'3': 'TEE10'}));
+    expect(placed.keys, isNot(contains('voucher_code')));
+  });
+
+  testWidgets('checkout: a product page code becomes that store\'s product voucher pick', (tester) async {
+    _phone(tester);
+    await tester.pumpWidget(_app(const CheckoutPage(lineIds: [1, 2], voucherCode: 'TEE10')));
+    await tester.pumpAndSettle();
+    expect(find.text('Product voucher TEE10'), findsOneWidget);
+
+    // Switching that store to its store voucher drops the product code for good.
+    await _openVouchers(tester, 'Voucher');
+    await tester.tap(find.text('₱50 off'));
+    await tester.pump();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    final sent = _sent(api, 'POST', '/buyer/checkout/quote');
+    expect(sent.keys, isNot(contains('voucher_code')));
+    expect(sent.keys, isNot(contains('product_vouchers')));
+    expect(find.text('Store voucher SAVE50'), findsOneWidget);
+  });
+
   testWidgets('checkout: a voucher used up since the quote is explained and dropped', (tester) async {
     _phone(tester);
     api.usedUp = true;
     await tester.pumpWidget(_app(const CheckoutPage(lineIds: [1, 2])));
     await tester.pumpAndSettle();
-    await _openVouchers(tester);
-    await tester.pumpAndSettle();
+    await _openVouchers(tester, 'Voucher');
     await tester.tap(find.text('₱50 off'));
     await tester.pump();
     await tester.tap(find.text('Done'));
@@ -114,9 +175,9 @@ void main() {
     await tester.tap(find.text('Review vouchers'));
     await tester.pumpAndSettle();
 
-    // Re-priced without it, and the picker opens again.
+    // Re-priced without it.
     expect(_sent(api, 'POST', '/buyer/checkout/quote').keys, isNot(contains('store_vouchers')));
-    expect(find.text('PICKSELL VOUCHERS'), findsOneWidget);
+    expect(find.text('Store voucher SAVE50'), findsNothing);
   });
 
   testWidgets('order details: the website’s breakdown for a parcel shared with other items', (tester) async {
