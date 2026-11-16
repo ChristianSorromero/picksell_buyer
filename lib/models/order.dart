@@ -295,6 +295,8 @@ class OrderDetail {
     this.shippingOption,
     this.estimatedFrom,
     this.estimatedTo,
+    this.etaStatus,
+    this.etaMessage,
     this.paymentMethod,
     this.paymentStatus,
     this.shipTo,
@@ -357,6 +359,10 @@ class OrderDetail {
   final String? shippingOption;
   final DateTime? estimatedFrom;
   final DateTime? estimatedTo;
+
+  /// on_time | today | late (null: nothing to estimate).
+  final String? etaStatus;
+  final String? etaMessage;
   final String? paymentMethod;
   final String? paymentStatus;
   final ShipTo? shipTo;
@@ -397,6 +403,8 @@ class OrderDetail {
       shippingOption: toStr(j['shipping_option']),
       estimatedFrom: eta == null ? null : toDate(eta['from']),
       estimatedTo: eta == null ? null : toDate(eta['to']),
+      etaStatus: eta == null ? null : toStr(eta['status']),
+      etaMessage: eta == null ? null : toStr(eta['message']),
       paymentMethod: toStr(j['payment_method']),
       paymentStatus: toStr(j['payment_status']),
       shipTo: mapOrNull(j['ship_to']) == null ? null : ShipTo.fromJson(mapOrNull(j['ship_to'])!),

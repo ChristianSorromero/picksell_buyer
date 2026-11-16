@@ -15,7 +15,7 @@ class AddressChoice {
 }
 
 /// My Addresses (website: account page "Delivery Address" and "Other
-/// Addresses"): the default address with its door pin, and up to 10 more.
+/// Addresses"): the default address with its door pin, and up to 3 more (the limit comes from the server).
 ///
 /// Opened from checkout with [picking], tapping an address pops an
 /// [AddressChoice]; otherwise it manages the book.

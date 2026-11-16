@@ -163,6 +163,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               if (d.variationGroups.isNotEmpty) _Variations(detail: d, onTap: () => _addToCart(d)),
               _Description(detail: d),
               _Reviews(detail: d),
+              _RelatedProducts(key: ValueKey(d.product.id), product: d.product),
               const SizedBox(height: PsSpace.xl),
             ],
           ),
@@ -377,6 +378,92 @@ class _Reviews extends StatelessWidget {
                 ),
         ),
       ],
+    );
+  }
+}
+
+/// "You May Also Like": other products from this product's category (best
+/// sellers first, buyable ones ahead), from the same GET /products the
+/// listings use. Hidden when the category has nothing else.
+class _RelatedProducts extends StatefulWidget {
+  const _RelatedProducts({super.key, required this.product});
+
+  final Product product;
+
+  @override
+  State<_RelatedProducts> createState() => _RelatedProductsState();
+}
+
+class _RelatedProductsState extends State<_RelatedProducts> {
+  static const _max = 12;
+
+  late Future<List<Product>> _future = _load();
+
+  Future<List<Product>> _load() async {
+    final p = widget.product;
+    if (p.category.isEmpty) return const [];
+    final page = await CatalogService().products(category: p.category, sort: ProductSort.popular);
+    final seen = <int>{p.id};
+    final related = [for (final r in page.products) if (seen.add(r.id)) r];
+    // Buyable first; the server's best-seller order is kept within each group.
+    final ordered = [...related.where((r) => r.inStock), ...related.where((r) => !r.inStock)].take(_max).toList();
+    WishlistStore.instance.sync(ordered);
+    return ordered;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Product>>(
+      future: _future,
+      builder: (context, snap) {
+        final Widget row;
+        if (snap.connectionState != ConnectionState.done) {
+          row = SizedBox(
+            height: PsProductCarousel.heightOf(context),
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(PsSpace.gutter, 2, PsSpace.gutter, 10),
+              itemCount: 3,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (_, __) => const PsSkeleton(width: PsProductCarousel.cardWidth, height: double.infinity, radius: PsRadius.md),
+            ),
+          );
+        } else if (snap.hasError) {
+          row = Padding(
+            padding: const EdgeInsets.symmetric(horizontal: PsSpace.gutter),
+            child: PsCard(
+              child: Row(
+                children: [
+                  Expanded(child: Text('Couldn’t load suggestions.', style: PsText.bodyMuted)),
+                  TextButton.icon(
+                    onPressed: () => setState(() => _future = _load()),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        } else if (snap.data!.isEmpty) {
+          return const SizedBox.shrink(); // nothing else in this category
+        } else {
+          row = PsProductCarousel(products: snap.data!, onTap: (r) => openProduct(context, r.id));
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            PsSectionHeader(
+              title: 'You May Also Like',
+              subtitle: 'More in ${widget.product.category}',
+              onViewAll: snap.hasData && snap.data!.isNotEmpty
+                  ? () => openProductList(context, title: widget.product.category, category: widget.product.category)
+                  : null,
+            ),
+            row,
+          ],
+        );
+      },
     );
   }
 }

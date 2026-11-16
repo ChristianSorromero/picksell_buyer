@@ -11,6 +11,12 @@ class VoucherOption {
     this.discount = 0,
     this.problem,
     this.endsAt,
+    this.usedPercent,
+    this.usesLeft,
+    this.recommended = false,
+    this.minSpend = 0,
+    this.startsAt,
+    this.upcoming = false,
   });
 
   final int id;
@@ -30,6 +36,20 @@ class VoucherOption {
   final String? problem;
   final DateTime? endsAt;
 
+  /// How much of its usage limit is taken, 0–100; null when it has no limit.
+  final int? usedPercent;
+
+  /// How many more times this buyer may use it (the "x1" stamp).
+  final int? usesLeft;
+
+  /// The best usable saving on offer, flagged for the buyer.
+  final bool recommended;
+  final double minSpend;
+
+  /// Scheduled and not started yet: shown ahead as a teaser, not usable.
+  final DateTime? startsAt;
+  final bool upcoming;
+
   bool get usable => problem == null;
 
   factory VoucherOption.fromJson(Json j) => VoucherOption(
@@ -41,6 +61,12 @@ class VoucherOption {
         discount: toDouble(j['discount']),
         problem: toStr(j['problem']),
         endsAt: toDate(j['ends_at']),
+        usedPercent: j['used_percent'] == null ? null : toInt(j['used_percent']),
+        usesLeft: j['uses_left'] == null ? null : toInt(j['uses_left']),
+        recommended: j['recommended'] == true,
+        minSpend: toDouble(j['min_spend']),
+        startsAt: toDate(j['starts_at']),
+        upcoming: j['upcoming'] == true,
       );
 }
 

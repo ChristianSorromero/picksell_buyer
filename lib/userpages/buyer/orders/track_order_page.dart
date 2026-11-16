@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../components/components.dart';
-import '../../../format_utils.dart';
 import '../../../models/order.dart';
 import '../../../services/order_service.dart';
 import 'delivery_problem_page.dart';
+import 'delivery_proof_link.dart';
 import 'report_problem_page.dart';
 
-/// Track Order (BUY-C01…C08): status header, Pick Thread with real
-/// timestamps, ETA, courier, map fallback, parcel and shipment history.
+/// Track Order (BUY-C01…C08): status header, ETA, courier, map fallback, parcel, one shipment history and the proof-of-delivery link.
 class TrackOrderPage extends StatelessWidget {
   const TrackOrderPage({super.key, required this.orderId});
 
@@ -24,11 +23,8 @@ class TrackOrderPage extends StatelessWidget {
         errorTitle: 'Couldn’t load tracking',
         builder: (context, o, _) {
           final s = o.summary;
-          final timestamps = <OrderStatus, String>{
-            for (final status in OrderStatus.values)
-              if (o.reachedAt(status) != null) status: formatDateTime(o.reachedAt(status)!),
-          };
           final lastLocation = o.events.reversed.map((e) => e.location).whereType<String>().firstOrNull;
+          final hasScans = o.tracking != null && o.tracking!.events.isNotEmpty;
           void support() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReportProblemPage(order: o)));
 
           return ListView(
@@ -36,14 +32,12 @@ class TrackOrderPage extends StatelessWidget {
             children: [
               PsOrderStatusHeader(order: o),
               const SizedBox(height: PsSpace.lg),
-              PsPickThread.forOrder(current: o.status, timestamps: timestamps),
-              const SizedBox(height: PsSpace.md),
               if (o.status == OrderStatus.deliveryFailed) ...[
                 PsDeliveryExceptionCard(order: o, onContactSupport: support),
                 const SizedBox(height: PsSpace.sm),
               ],
               if (!o.status.isException) ...[
-                PsDeliveryEtaCard(from: o.estimatedFrom, to: o.estimatedTo, delivered: o.deliveredAt),
+                PsDeliveryEtaCard(from: o.estimatedFrom, to: o.estimatedTo, delivered: o.deliveredAt, status: o.etaStatus, message: o.etaMessage),
                 const SizedBox(height: PsSpace.sm),
               ],
               if (o.courier != null) ...[
@@ -79,21 +73,27 @@ class TrackOrderPage extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: PsSpace.lg),
-              if (o.tracking != null && o.tracking!.events.isNotEmpty) ...[
-                Text('Pickrush Tracking · ${o.tracking!.trackingNo}', style: PsText.heading),
-                const SizedBox(height: PsSpace.sm),
-                PsTrackingEventList(
-                  events: [
-                    // Oldest first, as the list expects; the API sends newest first.
-                    for (final scan in o.tracking!.events.reversed)
-                      TrackingEvent(status: 'scan', title: scan.headline, location: scan.location, occurredAt: scan.at),
-                  ],
-                ),
+              // One shipment history: Pickrush's parcel scans once the parcel is
+              // handed over (the accurate record); the order's own events only
+              // before that, so the two never show the same steps twice.
+              Text(
+                hasScans ? 'Shipment History · ${o.tracking!.trackingNo}' : 'Shipment History',
+                style: PsText.heading,
+              ),
+              const SizedBox(height: PsSpace.sm),
+              PsTrackingEventList(
+                events: hasScans
+                    ? [
+                        // Oldest first, as the list expects; the API sends newest first.
+                        for (final scan in o.tracking!.events.reversed)
+                          TrackingEvent(status: 'scan', title: scan.headline, location: scan.location, occurredAt: scan.at),
+                      ]
+                    : o.events,
+              ),
+              if (o.hasProofOfDelivery) ...[
+                DeliveryProofLink(orderId: o.id, riderName: o.courier?.name, deliveredAt: o.deliveredAt),
                 const SizedBox(height: PsSpace.md),
               ],
-              Text('Order History', style: PsText.heading),
-              const SizedBox(height: PsSpace.sm),
-              PsTrackingEventList(events: o.events),
               if (o.actions.canReportDelivery) ...[
                 PsSecondaryButton.outlined(
                   label: 'Problem with the delivery?',

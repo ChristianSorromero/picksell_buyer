@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:picksell/components/components.dart';
 import 'package:picksell/core/theme/ps_theme.dart';
+import 'package:picksell/userpages/buyer/nav.dart';
+import 'package:picksell/userpages/buyer/shop/product_detail_page.dart';
 import 'package:picksell/userpages/buyer/shop/product_list_page.dart';
+import 'package:picksell/userpages/buyer/shop/store_page.dart';
 
 import 'support/fake_api.dart';
 
@@ -10,6 +13,7 @@ void main() {
   final api = FakeBuyerApi();
 
   setUp(() async {
+    ShellNav.discoverCategory.value = '';
     api.reset();
     await api.install();
   });
@@ -44,7 +48,8 @@ void main() {
     await tester.tap(find.text('On sale'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(find.text('No matches found'), findsOneWidget);
+    expect(find.text('No products match your filters'), findsOneWidget);
+    expect(find.text('Clear filters'), findsOneWidget);
   });
 
   testWidgets('Discover filters send the website’s rating, location and price filters', (tester) async {
@@ -81,5 +86,91 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Stores'), findsOneWidget);
     expect(find.text('Island Threads'), findsWidgets);
+  });
+
+  // The detail page's own vertical list (photo and suggestion rows scroll sideways).
+  final page = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down).first;
+
+  String? lastCategory() => api.calls('GET', '/products').last.url.queryParameters['category'];
+
+  // Home → Fashion → All used to keep "Fashion" in the header.
+  testWidgets('a category list: choosing All resets the header and the results', (tester) async {
+    phone(tester);
+    await tester.pumpWidget(MaterialApp(
+      theme: PsTheme.light,
+      home: const ProductListPage(title: 'Fashion', initialCategory: 'Fashion'),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: find.byType(PsTopBar), matching: find.text('Fashion')), findsOneWidget);
+    expect(lastCategory(), 'Fashion');
+
+    await tester.tap(find.text('All'));
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: find.byType(PsTopBar), matching: find.text('All Products')), findsOneWidget);
+    expect(find.descendant(of: find.byType(PsTopBar), matching: find.text('Fashion')), findsNothing);
+    expect(lastCategory(), isNull);
+  });
+
+  testWidgets('Discover follows the shared category; Home’s All brings it back to everything', (tester) async {
+    phone(tester);
+    ShellNav.discoverCategory.value = 'Home';
+    await openDiscover(tester);
+    expect(find.descendant(of: find.byType(PsTopBar), matching: find.text('Home')), findsOneWidget);
+    expect(lastCategory(), 'Home');
+
+    final before = api.calls('GET', '/products').length;
+    ShellNav.discoverCategory.value = '';
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: find.byType(PsTopBar), matching: find.text('Discover')), findsOneWidget);
+    expect(lastCategory(), isNull);
+    expect(api.calls('GET', '/products').length, before + 1, reason: 'one request per change');
+  });
+
+  testWidgets('a search with no results explains itself and can be cleared', (tester) async {
+    phone(tester);
+    await openDiscover(tester);
+    api.catalogEmpty = true;
+    await tester.enterText(find.byType(TextField).first, 'zzzz');
+    await tester.pumpAndSettle();
+    expect(find.text('No products found'), findsOneWidget);
+    expect(find.textContaining('Try another keyword'), findsOneWidget);
+    expect(find.descendant(of: find.byType(PsTopBar), matching: find.text('“zzzz”')), findsOneWidget);
+
+    await tester.tap(find.text('Clear search'));
+    await tester.pumpAndSettle();
+    expect(lastCategory(), isNull);
+    expect(api.calls('GET', '/products').last.url.queryParameters.containsKey('search'), isFalse);
+    expect(find.descendant(of: find.byType(PsTopBar), matching: find.text('Discover')), findsOneWidget);
+  });
+
+  testWidgets('product details: same-category suggestions, without the product itself', (tester) async {
+    phone(tester);
+    await tester.pumpWidget(MaterialApp(theme: PsTheme.light, home: const ProductDetailPage(productId: 7)));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('You May Also Like'), 300, scrollable: page);
+    await tester.pumpAndSettle();
+
+    expect(lastCategory(), 'Fashion');
+    final row = find.byType(PsProductCarousel);
+    expect(find.descendant(of: row, matching: find.text('Ceramic Mug')), findsOneWidget);
+    expect(find.descendant(of: row, matching: find.text('Cotton Basic Tee')), findsNothing);
+  });
+
+  testWidgets('product details: the seller’s name opens the same store as View Store', (tester) async {
+    phone(tester);
+    await tester.pumpWidget(MaterialApp(theme: PsTheme.light, home: const ProductDetailPage(productId: 7)));
+    await tester.pumpAndSettle();
+    final name = find.descendant(of: find.byType(PsSellerCard), matching: find.text('Island Threads'));
+    await tester.scrollUntilVisible(name, 200, scrollable: page);
+    await tester.tap(name);
+    await tester.pumpAndSettle();
+    expect(find.byType(StorePage), findsOneWidget);
+    expect(tester.widget<StorePage>(find.byType(StorePage)).sellerId, 3);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('View Store'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<StorePage>(find.byType(StorePage)).sellerId, 3);
   });
 }

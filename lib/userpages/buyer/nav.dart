@@ -16,6 +16,17 @@ class ShellNav {
 
   static final ValueNotifier<BuyerTab> tab = ValueNotifier(BuyerTab.home);
 
+  /// The Discover tab's category ('' = All). Discover reads and writes only
+  /// this, so its chips, header and results never disagree with a screen
+  /// that sends the buyer there (Home's "All").
+  static final ValueNotifier<String> discoverCategory = ValueNotifier('');
+
+  /// Opens the Discover tab on [category] ('' = All).
+  static void openDiscover(BuildContext context, {String category = ''}) {
+    discoverCategory.value = category;
+    goTo(context, BuyerTab.discover);
+  }
+
   /// Pops back to the shell and selects [target].
   static void goTo(BuildContext context, BuyerTab target) {
     Navigator.of(context).popUntil((r) => r.isFirst);

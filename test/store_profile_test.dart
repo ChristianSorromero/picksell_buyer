@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:picksell/components/components.dart';
 import 'package:picksell/core/theme/ps_theme.dart';
 import 'package:picksell/userpages/buyer/shop/search_page.dart';
 import 'package:picksell/userpages/buyer/shop/store_page.dart';
@@ -30,7 +31,12 @@ void main() {
         .map((i) => i.image)
         .whereType<NetworkImage>()
         .map((n) => n.url);
-    expect(urls, containsAll(['https://example.test/banner.jpg', 'https://example.test/logo.png']));
+    expect(urls, contains('https://example.test/banner.jpg'));
+    // The logo goes through the product-photo loader (cached, tunnel header).
+    expect(
+      tester.widgetList<PsProductImage>(find.byType(PsProductImage)).map((i) => i.url),
+      contains('https://example.test/logo.png'),
+    );
     expect(find.text('Island-made tees and homeware.'), findsOneWidget);
   });
 

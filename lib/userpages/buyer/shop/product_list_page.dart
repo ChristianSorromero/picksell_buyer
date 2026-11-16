@@ -38,7 +38,14 @@ class _ProductListPageState extends State<ProductListPage> {
   final _scroll = ScrollController();
 
   List<Category> _categories = [];
-  late String _category = widget.initialCategory ?? '';
+
+  /// The selected category ('' = All). Discover keeps it in
+  /// [ShellNav.discoverCategory]; a pushed list keeps its own.
+  late String _localCategory = widget.initialCategory ?? '';
+  String get _category => widget.embedded ? ShellNav.discoverCategory.value : _localCategory;
+
+  /// The search the shown results are for (the field may be mid-typing).
+  late String _query = (widget.initialSearch ?? '').trim();
   late bool _onSale = widget.onSale;
   ProductSort _sort = ProductSort.newest;
   ProductFilters _filters = const ProductFilters();
@@ -59,6 +66,7 @@ class _ProductListPageState extends State<ProductListPage> {
   @override
   void initState() {
     super.initState();
+    if (widget.embedded) ShellNav.discoverCategory.addListener(_onDiscoverCategory);
     _scroll.addListener(() {
       if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 600) _loadMore();
     });
@@ -73,13 +81,48 @@ class _ProductListPageState extends State<ProductListPage> {
 
   @override
   void dispose() {
+    if (widget.embedded) ShellNav.discoverCategory.removeListener(_onDiscoverCategory);
     _search.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
+  /// Discover's category changed (its chips, or another screen): show it.
+  void _onDiscoverCategory() {
+    if (mounted) _reload();
+  }
+
+  /// Selects [c] and reloads. On Discover the shared value is the one
+  /// written; its listener does the reload.
+  void _setCategory(String c) {
+    if (widget.embedded && ShellNav.discoverCategory.value != c) {
+      ShellNav.discoverCategory.value = c;
+      return;
+    }
+    _localCategory = c;
+    _reload();
+  }
+
+  /// Header: follows the selected category, then the search, then the
+  /// page's own context (Hot Discounts, Discover) — never a stale label.
+  String get _title {
+    if (_category.isNotEmpty) return _category;
+    if (_query.isNotEmpty) return '“$_query”';
+    if (widget.embedded) return 'Discover';
+    // A list opened for a category or search falls back to every product.
+    if (widget.initialCategory != null || widget.initialSearch != null) return 'All Products';
+    // Hot Discounts with "On sale" switched off is no longer a deals list.
+    if (widget.onSale && !_onSale) return 'All Products';
+    return widget.title ?? 'All Products';
+  }
+
+  void _clearSearch() {
+    _search.clear();
+    _reload();
+  }
+
   Future<ProductPage> _fetch(int page) => _catalog.products(
-    search: _search.text.trim(),
+    search: _query,
     category: _category,
     sort: _sort,
     onSale: _onSale,
@@ -97,11 +140,20 @@ class _ProductListPageState extends State<ProductListPage> {
     _reload();
   }
 
-  Future<void> _reload() async {
+  /// Loads page 1 for the current query. Results of the previous query are
+  /// dropped first (unless [keep], for pull-to-refresh), so a new category
+  /// never shows the old one's products — loading or after an error.
+  Future<void> _reload({bool keep = false}) async {
     final id = ++_requestId;
     setState(() {
+      _query = _search.text.trim();
       _loading = true;
       _error = null;
+      if (!keep) {
+        _products.clear();
+        _stores = const [];
+        _meta = const PageMeta();
+      }
     });
     try {
       final page = await _fetch(1);
@@ -121,6 +173,9 @@ class _ProductListPageState extends State<ProductListPage> {
       setState(() {
         _error = e;
         _loading = false;
+        // A failed reload must not leave the previous query's results up.
+        _products.clear();
+        _stores = const [];
       });
     }
   }
@@ -160,10 +215,7 @@ class _ProductListPageState extends State<ProductListPage> {
         PsFilterChips<String>(
           selected: _category,
           options: [const PsFilterOption('', 'All'), for (final c in _categories) PsFilterOption(c.name, c.name)],
-          onSelected: (c) {
-            setState(() => _category = c);
-            _reload();
-          },
+          onSelected: _setCategory,
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: PsSpace.xs),
@@ -293,43 +345,84 @@ class _ProductListPageState extends State<ProductListPage> {
       );
     }
     if (_products.isEmpty) {
-      final filtered = _search.text.isNotEmpty || _category.isNotEmpty || _onSale || !_filters.isEmpty;
       return SliverFillRemaining(
         // The state scrolls itself, so it takes the remaining height as given
         // (measuring it would throw and blank the screen).
         hasScrollBody: true,
-        child: PsEmptyState(
-          icon: Icons.search_off_rounded,
-          title: filtered ? 'No matches found' : 'Nothing here yet',
-          message: filtered ? 'Try a different keyword or remove some filters.' : 'New products will show up here.',
-          actionLabel: filtered ? 'Clear filters' : null,
-          onAction: filtered
-              ? () {
-                  _search.clear();
-                  setState(() {
-                    _category = '';
-                    _onSale = false;
-                    _filters = const ProductFilters();
-                  });
-                  _reload();
-                }
-              : null,
-        ),
+        child: _emptyState(),
       );
     }
     return PsProductGrid(products: _products, list: _list, onTap: (p) => openProduct(context, p.id));
+  }
+
+  /// Why nothing matched, most specific first: the search, the extra
+  /// filters, then the category.
+  Widget _emptyState() {
+    final filtered = _onSale || !_filters.isEmpty;
+    void clearFilters() {
+      setState(() {
+        _onSale = false;
+        _filters = const ProductFilters();
+      });
+      _reload();
+    }
+
+    void showAll() {
+      _search.clear();
+      setState(() {
+        _onSale = false;
+        _filters = const ProductFilters();
+      });
+      _setCategory('');
+    }
+
+    if (_query.isNotEmpty) {
+      return PsEmptyState(
+        icon: Icons.search_off_rounded,
+        title: 'No products found',
+        message: 'We couldn’t find anything for “$_query”${_category.isEmpty ? '' : ' in $_category'}. '
+            'Try another keyword or explore different categories.',
+        actionLabel: 'Clear search',
+        onAction: _clearSearch,
+        secondaryActionLabel: _category.isNotEmpty || filtered ? 'Show all products' : (widget.embedded ? null : 'Browse Discover'),
+        onSecondaryAction: _category.isNotEmpty || filtered ? showAll : (widget.embedded ? null : () => ShellNav.openDiscover(context)),
+      );
+    }
+    if (filtered) {
+      return PsEmptyState(
+        icon: Icons.filter_alt_off_outlined,
+        title: 'No products match your filters',
+        message: _category.isEmpty ? 'Try a wider price range or remove some filters.' : 'Nothing in $_category matches these filters. Try removing some.',
+        actionLabel: 'Clear filters',
+        onAction: clearFilters,
+      );
+    }
+    if (_category.isNotEmpty) {
+      return PsEmptyState(
+        icon: Icons.category_outlined,
+        title: 'No products in $_category yet',
+        message: 'Sellers haven’t listed anything in this category. Check back soon or browse other categories.',
+        actionLabel: 'View all products',
+        onAction: showAll,
+      );
+    }
+    return const PsEmptyState(
+      icon: Icons.storefront_outlined,
+      title: 'Nothing here yet',
+      message: 'New products will show up here. Pull down to check again.',
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return PsAppShell(
       topBar: PsTopBar(
-        title: widget.title ?? 'Products',
+        title: _title,
         showBack: !widget.embedded,
         actions: [CartIconButton(onPressed: () => ShellNav.goTo(context, BuyerTab.cart))],
       ),
       body: PsRefreshable(
-        onRefresh: _reload,
+        onRefresh: () => _reload(keep: true),
         child: CustomScrollView(
           controller: _scroll,
           physics: const AlwaysScrollableScrollPhysics(),

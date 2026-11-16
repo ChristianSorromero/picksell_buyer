@@ -355,3 +355,40 @@ class PsProductGridSkeleton extends StatelessWidget {
     );
   }
 }
+
+/// A sideways row of uniform product cards (Home sections, "You May Also
+/// Like"). Horizontal drags scroll the row; vertical ones still scroll the page.
+class PsProductCarousel extends StatelessWidget {
+  const PsProductCarousel({super.key, required this.products, required this.onTap});
+
+  final List<Product> products;
+  final ValueChanged<Product> onTap;
+
+  static const double cardWidth = 156;
+
+  /// Height of the row at the phone's text size (see [PsProductCard.uniform]).
+  static double heightOf(BuildContext context) => cardWidth + 150 * MediaQuery.textScalerOf(context).scale(1) + 12;
+
+  @override
+  Widget build(BuildContext context) {
+    // Every card is the same width and height; the card lays its content out
+    // inside (see PsProductCard.uniform). Height fits photo + two-line name +
+    // price + stars/sold + low-stock note + store, and grows with the
+    // phone's text size setting.
+    final rowHeight = heightOf(context);
+    return SizedBox(
+      height: rowHeight,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(PsSpace.gutter, 2, PsSpace.gutter, 10),
+        itemCount: products.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (_, i) => SizedBox(
+          width: cardWidth,
+          height: rowHeight - 12,
+          child: PsProductCard(product: products[i], uniform: true, onTap: () => onTap(products[i])),
+        ),
+      ),
+    );
+  }
+}

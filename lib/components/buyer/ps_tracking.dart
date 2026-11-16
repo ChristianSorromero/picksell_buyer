@@ -206,31 +206,46 @@ class PsTrackingEventList extends StatelessWidget {
   }
 }
 
-/// BUY-C04 Delivery ETA — only from the stored shipping window; never a
-/// fabricated live estimate.
+/// BUY-C04 Delivery ETA — the server's estimate from the shipping route (never a fabricated
+/// live time): a date window, "Today" once a rider has it, or flagged late past the window.
 class PsDeliveryEtaCard extends StatelessWidget {
-  const PsDeliveryEtaCard({super.key, required this.from, required this.to, this.delivered});
+  const PsDeliveryEtaCard({super.key, required this.from, required this.to, this.delivered, this.status, this.message});
 
   final DateTime? from;
   final DateTime? to;
   final DateTime? delivered;
+  final String? status;
+  final String? message;
 
   @override
   Widget build(BuildContext context) {
+    final late = status == 'late';
+    final today = status == 'today';
+    final String title;
+    final String value;
+    final String note;
+    if (delivered != null) {
+      title = 'DELIVERED ON';
+      value = formatShortDate(delivered!);
+      note = formatTime(delivered!);
+    } else if (from == null) {
+      title = 'ESTIMATED ARRIVAL';
+      value = '—';
+      note = 'We’ll show an estimate once your parcel is on its way.';
+    } else {
+      title = today ? 'ARRIVING' : (late ? 'NEW ESTIMATED ARRIVAL' : 'ESTIMATED ARRIVAL');
+      value = today ? 'Today' : (from == to || to == null ? formatShortDate(from!) : formatDateRange(from, to));
+      note = message ?? 'Estimated from the shipping route.';
+    }
+    final accent = late ? const Color(0xFF9A6700) : (today ? PsColors.primaryStrong : null);
     return PsCard(
       padding: const EdgeInsets.all(PsSpace.lg),
       child: Column(
         children: [
-          Text(delivered != null ? 'DELIVERED ON' : 'EXPECTED ARRIVAL WINDOW', style: PsText.overline),
+          Text(title, style: PsText.overline),
           const SizedBox(height: PsSpace.xs),
-          Text(
-            delivered != null ? formatShortDate(delivered!) : formatDateRange(from, to),
-            style: PsText.display.copyWith(fontSize: 30, fontWeight: FontWeight.w700),
-          ),
-          if (delivered != null)
-            Text(formatTime(delivered!), style: PsText.caption)
-          else
-            Text('Based on your chosen shipping method', style: PsText.caption),
+          Text(value, style: PsText.display.copyWith(fontSize: 30, fontWeight: FontWeight.w700, color: accent)),
+          Text(note, textAlign: TextAlign.center, style: PsText.caption.copyWith(color: accent)),
         ],
       ),
     );

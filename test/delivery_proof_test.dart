@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:picksell/core/theme/ps_theme.dart';
 import 'package:picksell/services/order_service.dart';
 import 'package:picksell/userpages/buyer/orders/order_details_page.dart';
+import 'package:picksell/userpages/buyer/orders/track_order_page.dart';
 
 import 'support/fake_api.dart';
 
@@ -54,25 +55,54 @@ void main() {
     expect(() => OrderService().proofOfDelivery(501), throwsA(predicate((e) => e.toString().contains('404'))));
   });
 
-  testWidgets('order details: rider and payment while on the way, then the delivery photo', (tester) async {
+  testWidgets('order details: rider and payment, but no delivery photo (it lives in tracking)', (tester) async {
     _phone(tester);
     api.orderDetail = _order(delivered: false);
     await tester.pumpWidget(_app(const OrderDetailsPage(orderId: 501)));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('To pay on delivery'), 200);
     expect(find.text('Rico Santos · Motorcycle · NBC 1234'), findsOneWidget);
-    expect(find.text('Proof of Delivery'.toUpperCase()), findsNothing);
 
     api.orderDetail = _order(delivered: true);
     await tester.pumpWidget(_app(OrderDetailsPage(key: UniqueKey(), orderId: 501)));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Photo taken by Rico Santos'), 200);
-    expect(find.text('Tap to view full photo'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Paid'), 200);
+    expect(find.text('View proof of delivery'), findsNothing);
+    expect(api.calls('GET', '/buyer/orders/501/proof-of-delivery'), isEmpty);
+  });
 
-    await tester.scrollUntilVisible(find.text('Tap to view full photo'), -200);
-    await tester.tap(find.text('Tap to view full photo'));
+  testWidgets('tracking: one Pickrush history, then the proof-of-delivery link opens the photo', (tester) async {
+    _phone(tester);
+    api.orderDetail = {
+      ..._order(delivered: true),
+      'events': [
+        {'status': 'placed', 'title': 'Order placed', 'occurred_at': '2026-11-07T09:00:00+08:00'},
+      ],
+      'tracking': {
+        'tracking_no': 'PR-123456',
+        'status': 'delivered',
+        'events': [
+          {'status': 'delivered', 'headline': 'Parcel delivered', 'location': 'Cebu City', 'at': '2026-11-08T15:30:00+08:00'},
+          {'status': 'picked_up', 'headline': 'Parcel picked up', 'location': 'Mandaue', 'at': '2026-11-08T09:00:00+08:00'},
+        ],
+      },
+    };
+    await tester.pumpWidget(_app(const TrackOrderPage(orderId: 501)));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Close'), findsOneWidget);
+    final page = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down).first;
+    await tester.scrollUntilVisible(find.text('View proof of delivery'), 200, scrollable: page);
+
+    expect(find.text('Shipment History · PR-123456'), findsOneWidget);
+    expect(find.text('Order History'), findsNothing);
+    expect(find.text('Order placed'), findsNothing, reason: 'only Pickrush scans once handed over');
+    expect(api.calls('GET', '/buyer/orders/501/proof-of-delivery'), isEmpty, reason: 'downloads only when opened');
+
+    await tester.tap(find.text('View proof of delivery'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Photo taken by Rico Santos'), findsOneWidget);
+    expect(find.bySemanticsLabel('Delivery photo'), findsOneWidget);
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Photo taken by'), findsNothing);
   });
 }

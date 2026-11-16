@@ -40,22 +40,25 @@ void main() {
     expect(api.calls('DELETE', '/buyer/sellers/3/follow'), hasLength(1));
   });
 
-  testWidgets('store page: Follow shows the count and flips to Following', (tester) async {
+  testWidgets('store page: follower count under the rating; Follow flips to Following', (tester) async {
     _phone(tester);
     await tester.pumpWidget(_app(const StorePage(sellerId: 3)));
     await tester.pumpAndSettle();
 
-    expect(find.text('Follow · 4'), findsOneWidget);
-    await tester.tap(find.text('Follow · 4'));
+    // The count sits under the rating; the button only says Follow / Following.
+    expect(find.text('4 followers'), findsOneWidget);
+    await tester.tap(find.text('Follow'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Following · 5'), findsOneWidget);
+    expect(find.text('Following'), findsOneWidget);
+    expect(find.text('5 followers'), findsOneWidget);
     expect(find.text('You are now following Island Threads.'), findsOneWidget);
     expect(api.following, {3});
 
-    await tester.tap(find.text('Following · 5'));
+    await tester.tap(find.text('Following'));
     await tester.pumpAndSettle();
-    expect(find.text('Follow · 4'), findsOneWidget);
+    expect(find.text('Follow'), findsOneWidget);
+    expect(find.text('4 followers'), findsOneWidget);
     expect(api.following, isEmpty);
   });
 

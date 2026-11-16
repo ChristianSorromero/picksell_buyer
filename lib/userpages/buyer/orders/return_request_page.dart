@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../components/components.dart';
 import '../../../format_utils.dart';
@@ -43,8 +44,8 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
       _errors.clear();
       if (_reason == null) _errors['reason'] = 'Select a reason for the return.';
       if (_details.text.trim().isEmpty) _errors['details'] = 'Describe the problem with the item.';
-      if (!RegExp(r'^(09|\+639)\d{9}$').hasMatch(_gcashNumber.text.trim())) {
-        _errors['gcash_number'] = 'Enter your GCash mobile number, e.g. 09171234567.';
+      if (!RegExp(r'^09\d{9}$').hasMatch(_gcashNumber.text.trim())) {
+        _errors['gcash_number'] = 'GCash number must be 11 digits starting with 09, e.g. 09171234567.';
       }
       if (_gcashName.text.trim().isEmpty) _errors['gcash_name'] = 'Enter the name on your GCash account.';
     });
@@ -144,7 +145,8 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
             const PsFieldLabel('GCash Number for Your Refund'),
             TextField(
               controller: _gcashNumber,
-              keyboardType: TextInputType.phone,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(11)],
               style: PsText.input,
               decoration: psInputDecoration(hint: '09XXXXXXXXX', hasError: _errors['gcash_number'] != null),
             ),

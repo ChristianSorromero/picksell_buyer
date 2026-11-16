@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart';
+import 'package:printing/printing.dart';
 
 import '../../../components/components.dart';
 import '../../../format_utils.dart';
 import '../../../models/order.dart';
+import '../../../services/order_service.dart';
 import '../nav.dart';
 
 /// BUY-C12 Refund Status, following the website's return workflow: the
@@ -44,7 +47,19 @@ class RefundStatusPage extends StatelessWidget {
                 ),
                 if (r.returnShipment != null) ...[
                   const SizedBox(height: PsSpace.sm),
-                  PsCard(title: 'Return shipment', child: Text(r.returnShipment!, style: PsText.body)),
+                  PsCard(
+                    title: 'Return shipment',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(r.returnShipment!, style: PsText.body),
+                        const SizedBox(height: PsSpace.xs),
+                        Text('Print the waybill and stick it on the package so the rider can scan it.', style: PsText.caption),
+                        const SizedBox(height: PsSpace.sm),
+                        _PrintWaybillButton(orderId: order.id),
+                      ],
+                    ),
+                  ),
                 ],
                 const SizedBox(height: PsSpace.lg),
                 Text('Tracking Details', style: PsText.heading),
@@ -92,6 +107,44 @@ class RefundStatusPage extends StatelessWidget {
             ),
     );
   }
+}
+
+/// Downloads the Pickrush 4×6 return label and opens the system print / save-as-PDF sheet.
+class _PrintWaybillButton extends StatefulWidget {
+  const _PrintWaybillButton({required this.orderId});
+
+  final int orderId;
+
+  @override
+  State<_PrintWaybillButton> createState() => _PrintWaybillButtonState();
+}
+
+class _PrintWaybillButtonState extends State<_PrintWaybillButton> {
+  bool _busy = false;
+
+  Future<void> _print() async {
+    setState(() => _busy = true);
+    try {
+      final pdf = await OrderService().returnWaybill(widget.orderId);
+      final name = 'return-waybill-${widget.orderId}.pdf';
+      try {
+        await Printing.layoutPdf(name: name, format: PdfPageFormat(4 * PdfPageFormat.inch, 6 * PdfPageFormat.inch), onLayout: (_) async => pdf);
+      } catch (_) {
+        // No print service on this phone: share / save the PDF instead.
+        await Printing.sharePdf(bytes: pdf, filename: name);
+      }
+    } on ApiException catch (e) {
+      if (mounted) PsDialog.error(context, title: 'Couldn’t load waybill', message: e.message);
+    } catch (e) {
+      if (mounted) PsDialog.error(context, title: 'Couldn’t open waybill', message: '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      PsPrimaryButton(label: 'Print Waybill', uppercase: false, loading: _busy, onPressed: _print);
 }
 
 /// Stacked "LABEL / value" pair.

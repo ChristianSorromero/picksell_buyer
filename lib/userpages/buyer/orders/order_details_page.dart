@@ -5,7 +5,6 @@ import '../../../format_utils.dart';
 import '../../../models/cart.dart';
 import '../../../models/order.dart';
 import '../../../services/order_service.dart';
-import 'delivery_proof_card.dart';
 import '../nav.dart';
 import 'order_actions.dart';
 import 'refund_status_page.dart';
@@ -163,10 +162,6 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                     ],
                   ),
                 ),
-              ],
-              if (o.hasProofOfDelivery) ...[
-                const SizedBox(height: PsSpace.sm),
-                DeliveryProofCard(orderId: o.id, riderName: o.courier?.name, deliveredAt: o.deliveredAt),
               ],
               const SizedBox(height: PsSpace.sm),
               if (o.hasBreakdown)

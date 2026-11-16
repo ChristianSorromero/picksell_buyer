@@ -143,7 +143,7 @@ class _HomeTabState extends State<HomeTab> {
                   SliverToBoxAdapter(
                     child: _CategoryChips(
                       categories: categories,
-                      onAll: () => ShellNav.tab.value = BuyerTab.discover,
+                      onAll: () => ShellNav.openDiscover(context),
                       onCategory: (c) => openProductList(context, title: c, category: c),
                     ),
                   ),
@@ -190,15 +190,15 @@ class _HomeTabState extends State<HomeTab> {
                               padding: const EdgeInsets.fromLTRB(PsSpace.gutter, 22, PsSpace.gutter, 10),
                               onViewAll: deals,
                             ),
-                            _HorizontalProducts(products: feed.hotDiscounts, onTap: open),
+                            PsProductCarousel(products: feed.hotDiscounts, onTap: open),
                           ],
                           if (feed.featured.isNotEmpty) ...[
                             const PsSectionHeader(title: 'Featured Picks', subtitle: 'Hand-picked by the Picksell team'),
-                            _HorizontalProducts(products: feed.featured, onTap: open),
+                            PsProductCarousel(products: feed.featured, onTap: open),
                           ],
                           if (recent.isNotEmpty) ...[
                             const PsSectionHeader(title: 'Recently Viewed'),
-                            _HorizontalProducts(products: recent, onTap: open),
+                            PsProductCarousel(products: recent, onTap: open),
                           ],
                         ],
                       ),
@@ -237,40 +237,6 @@ class _HomeTabState extends State<HomeTab> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(PsSpace.gutter, PsSpace.lg, PsSpace.gutter, PsSpace.xl),
       child: Center(child: child),
-    );
-  }
-}
-
-/// A sideways row of cards (hot discounts, featured, recently viewed).
-class _HorizontalProducts extends StatelessWidget {
-  const _HorizontalProducts({required this.products, required this.onTap});
-
-  final List<Product> products;
-  final ValueChanged<Product> onTap;
-
-  static const double _cardWidth = 156;
-
-  @override
-  Widget build(BuildContext context) {
-    // Every card is the same width and height; the card lays its content out
-    // inside (see PsProductCard.uniform). Height fits photo + two-line name +
-    // price + stars/sold + low-stock note + store, and grows with the
-    // phone's text size setting.
-    final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final height = _cardWidth + 150 * textScale;
-    return SizedBox(
-      height: height + 12,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(PsSpace.gutter, 2, PsSpace.gutter, 10),
-        itemCount: products.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (_, i) => SizedBox(
-          width: _cardWidth,
-          height: height,
-          child: PsProductCard(product: products[i], uniform: true, onTap: () => onTap(products[i])),
-        ),
-      ),
     );
   }
 }

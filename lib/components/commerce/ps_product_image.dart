@@ -14,6 +14,8 @@ class PsProductImage extends StatelessWidget {
     this.borderRadius = BorderRadius.zero,
     this.iconSize = 32,
     this.semanticLabel,
+    this.fullResolution = false,
+    this.placeholder,
   });
 
   final String? url;
@@ -22,9 +24,17 @@ class PsProductImage extends StatelessWidget {
   final double iconSize;
   final String? semanticLabel;
 
+  /// Decode at the photo's own size (full-screen viewer, where the buyer
+  /// zooms in) instead of the size it is drawn.
+  final bool fullResolution;
+
+  /// Shown while loading, when missing or when the URL fails (default: a
+  /// neutral photo icon). A store logo uses the store's initials.
+  final Widget? placeholder;
+
   @override
   Widget build(BuildContext context) {
-    final placeholder = Container(
+    final placeholder = this.placeholder ?? Container(
       color: PsColors.surfaceMuted,
       alignment: Alignment.center,
       child: Icon(Icons.image_outlined, size: iconSize, color: PsColors.textHint),
@@ -63,7 +73,7 @@ class PsProductImage extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, box) {
           final dpr = MediaQuery.devicePixelRatioOf(context);
-          final w = box.maxWidth.isFinite ? (box.maxWidth * dpr).round() : null;
+          final w = !fullResolution && box.maxWidth.isFinite ? (box.maxWidth * dpr).round() : null;
           return Semantics(
             image: true,
             label: semanticLabel,

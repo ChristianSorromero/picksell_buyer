@@ -13,6 +13,9 @@ class OrderService {
   /// The rider's photo at the door, when [OrderDetail.hasProofOfDelivery]. Private: downloaded with the buyer's login.
   Future<Uint8List> proofOfDelivery(int orderId) => _api.getBytes('/buyer/orders/$orderId/proof-of-delivery');
 
+  /// The Pickrush 4×6 return label (PDF) of an approved return.
+  Future<Uint8List> returnWaybill(int orderId) => _api.getBytes('/buyer/orders/$orderId/return/waybill');
+
   Future<OrderList> list({OrderTab tab = OrderTab.all}) async {
     final j = await _api.getJson('/buyer/orders', query: {'tab': tab.apiValue});
     return OrderList(orders: listOf(j['orders'], OrderSummaryItem.fromJson), counts: parseOrderCounts(mapOrNull(j['counts'])));
